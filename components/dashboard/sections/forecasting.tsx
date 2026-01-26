@@ -191,27 +191,27 @@ export function ForecastingSection() {
   const avgLift = 12.5;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-2">
-        <h2 className="text-3xl font-bold tracking-tight">Fiyatlandırma ve Promosyon Analizi</h2>
-        <p className="text-muted-foreground">
+    <div className="space-y-2">
+      <div className="flex flex-col gap-1">
+        <h2 className="text-2xl font-bold tracking-tight">Fiyatlandırma ve Promosyon Analizi</h2>
+        <p className="text-sm text-muted-foreground">
           Promosyonların talep, ciro ve stok üzerindeki etkisini simüle edin.
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-12">
+      <div className="grid gap-3 lg:grid-cols-12">
         {/* Left Column: Inputs */}
         <Card className="lg:col-span-4 h-fit">
-          <CardHeader>
-            <CardTitle>Konfigürasyon</CardTitle>
+          <CardHeader className="py-3">
+            <CardTitle className="text-lg">Konfigürasyon</CardTitle>
             <CardDescription>Analiz parametrelerini giriniz</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-2.5 pb-3">
             
-            <div className="space-y-2">
-              <Label>Mağaza Kodu</Label>
+            <div className="space-y-1">
+              <Label className="text-xs">Mağaza Kodu</Label>
               <Select value={magazaKodu} onValueChange={setMagazaKodu}>
-                <SelectTrigger>
+                <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Mağaza Seçiniz" />
                 </SelectTrigger>
                 <SelectContent>
@@ -224,10 +224,10 @@ export function ForecastingSection() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>Ürün Kodu</Label>
+            <div className="space-y-1">
+              <Label className="text-xs">Ürün Kodu</Label>
               <Select value={urunKodu} onValueChange={setUrunKodu}>
-                <SelectTrigger>
+                <SelectTrigger className="h-8 text-sm">
                   <SelectValue placeholder="Ürün Seçiniz" />
                 </SelectTrigger>
                 <SelectContent>
@@ -240,27 +240,27 @@ export function ForecastingSection() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label>Tahminleme Tarih Aralığı</Label>
+            <div className="space-y-1">
+              <Label className="text-xs">Tahminleme Tarih Aralığı</Label>
               <div className="grid grid-cols-2 gap-2">
-                <DatePicker date={startDate} setDate={setStartDate} placeholder="Başlangıç" />
-                <DatePicker date={endDate} setDate={setEndDate} placeholder="Bitiş" />
+                <DatePicker date={startDate} setDate={setStartDate} placeholder="Başlangıç" className="h-8 text-sm" />
+                <DatePicker date={endDate} setDate={setEndDate} placeholder="Bitiş" className="h-8 text-sm" />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Promosyon Tarih Aralığı</Label>
+            <div className="space-y-1">
+              <Label className="text-xs">Promosyon Tarih Aralığı</Label>
               <div className="grid grid-cols-2 gap-2">
-                <DatePicker date={startPromosyon} setDate={setStartPromosyon} placeholder="Başlangıç" />
-                <DatePicker date={endPromosyon} setDate={setEndPromosyon} placeholder="Bitiş" />
+                <DatePicker date={startPromosyon} setDate={setStartPromosyon} placeholder="Başlangıç" className="h-8 text-sm" />
+                <DatePicker date={endPromosyon} setDate={setEndDate} placeholder="Bitiş" className="h-8 text-sm" />
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Promosyon Seçimi</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs">Promosyon Seçimi</Label>
                 <Select value={promosyon} onValueChange={setPromosyon}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-8 text-sm">
                     <SelectValue placeholder="Promo Seç" />
                   </SelectTrigger>
                   <SelectContent>
@@ -272,20 +272,20 @@ export function ForecastingSection() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>İndirim Oranı (%)</Label>
-                <Input type="number" value={promosyonIndirimOrani} onChange={(e) => setPromosyonIndirimOrani(e.target.value)} />
+              <div className="space-y-1">
+                <Label className="text-xs">İndirim Oranı (%)</Label>
+                <Input type="number" className="h-8 text-sm" value={promosyonIndirimOrani} onChange={(e) => setPromosyonIndirimOrani(e.target.value)} />
               </div>
             </div>
 
             <Button 
-              className="w-full mt-4" 
+              className="w-full mt-2 h-9" 
               onClick={handleAnalyze} 
               disabled={isLoading}
             >
               {isLoading ? (
                 <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  <Loader2 className="mr-2 h-3 w-3 animate-spin" />
                   Analiz Ediliyor...
                 </>
               ) : (
@@ -296,72 +296,73 @@ export function ForecastingSection() {
         </Card>
 
         {/* Right Column: Visualization */}
-        <div className="lg:col-span-8 space-y-6">
+        <div className="lg:col-span-8 space-y-2">
           {forecastData ? (
             <>
               {/* Summary Stats */}
-              <div className="grid gap-4 md:grid-cols-3">
+              <div className="grid gap-2 md:grid-cols-3">
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 py-3">
                     <CardTitle className="text-sm font-medium">Toplam Hacim</CardTitle>
                     <Package className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{totalForecast.toLocaleString()}</div>
-                    <p className="text-xs text-muted-foreground">Tahmini Satış Adedi</p>
+                  <CardContent className="pb-3">
+                    <div className="text-xl font-bold">{totalForecast.toLocaleString()}</div>
+                    <p className="text-[10px] text-muted-foreground">Tahmini Satış Adedi</p>
                   </CardContent>
                 </Card>
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 py-3">
                     <CardTitle className="text-sm font-medium">Toplam Ciro</CardTitle>
                     <DollarSign className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">₺{(totalRevenue / 1000).toFixed(1)}k</div>
-                    <p className="text-xs text-muted-foreground">Tahmini Gelir</p>
+                  <CardContent className="pb-3">
+                    <div className="text-xl font-bold">₺{(totalRevenue / 1000).toFixed(1)}k</div>
+                    <p className="text-[10px] text-muted-foreground">Tahmini Gelir</p>
                   </CardContent>
                 </Card>
                 <Card>
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1 py-3">
                     <CardTitle className="text-sm font-medium">Promosyon Artışı</CardTitle>
                     <TrendingUp className="h-4 w-4 text-muted-foreground" />
                   </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">+{avgLift}%</div>
-                    <p className="text-xs text-muted-foreground">Temel Satışa Göre</p>
+                  <CardContent className="pb-3">
+                    <div className="text-xl font-bold">+{avgLift}%</div>
+                    <p className="text-[10px] text-muted-foreground">Temel Satışa Göre</p>
                   </CardContent>
                 </Card>
               </div>
 
               {/* Main Chart */}
-              <Card>
-                <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-                  <div className="space-y-1">
-                    <CardTitle>Tahmin vs Temel Satış</CardTitle>
-                    <CardDescription>
+              <Card className="relative">
+                <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2 py-3">
+                  <div className="space-y-0.5">
+                    <CardTitle className="text-base">Tahmin vs Temel Satış</CardTitle>
+                    <CardDescription className="text-xs">
                       Temel satışlara kıyasla promosyon etkisi.
                     </CardDescription>
                   </div>
-                  {/* Custom Legend Box */}
-                  <div className="absolute top-0 right-6 border border-border bg-white/50 backdrop-blur-sm p-3 rounded-md shadow-sm z-10 text-xs space-y-1.5 min-w-[200px]">
-                    <div className="flex items-center justify-between">
+                </CardHeader>
+                <CardContent className="pl-0 pb-4 px-4 pt-2">
+                  
+                  {/* Custom Legend Box - Moved Inside Content */}
+                  <div className="absolute top-2 right-4 bg-white/80 backdrop-blur-sm p-2 rounded-md border border-border/50 shadow-sm z-10 text-[10px] space-y-1 min-w-[160px]">
+                    <div className="flex items-center justify-between gap-3">
                       <span className="text-[#FFB840] font-bold">Sarı:</span>
                       <span className="text-muted-foreground font-medium">Ciro Adedi</span>
                     </div>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-3">
                       <span className="text-[#0D1E3A] font-bold">Lacivert:</span>
                       <span className="text-muted-foreground font-medium">Temel Tahmini Ciro</span>
                     </div>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-3">
                       <span className="text-[#22c55e] font-bold">Yeşil:</span>
                       <span className="text-muted-foreground font-medium">Promosyon Dönemi Ciro</span>
                     </div>
                   </div>
-                </CardHeader>
-                <CardContent className="pl-0 pb-6 px-4">
-                  
-                  <ResponsiveContainer width="100%" height={450} className="w-full">
-                    <ComposedChart data={forecastData} margin={{ bottom: 30, top: 20 }}>
+
+                  <ResponsiveContainer width="100%" height={380} className="w-full">
+                    <ComposedChart data={forecastData} margin={{ bottom: 10, top: 10, right: 10, left: 0 }}>
                       <defs>
                         <linearGradient id="glowGreen" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#22c55e" stopOpacity={0.2} />
@@ -384,17 +385,17 @@ export function ForecastingSection() {
                       <XAxis 
                         dataKey="tarih" 
                         stroke="var(--muted-foreground)" 
-                        fontSize={12} 
+                        fontSize={10} 
                         tickLine={false} 
                         axisLine={false}
                         interval={0}
                         tick={<CustomizedAxisTick data={forecastData} />}
-                        height={60}
+                        height={50}
                       />
                       <YAxis 
                         stroke="var(--muted-foreground)" 
                         strokeWidth={0}
-                        fontSize={12} 
+                        fontSize={10} 
                         tickLine={false} 
                         axisLine={false} 
                         tickFormatter={(value) => `${value}`} 
@@ -449,12 +450,12 @@ export function ForecastingSection() {
               </Card>
             </>
           ) : (
-            <div className="h-[400px] flex items-center justify-center border-2 border-dashed rounded-lg text-muted-foreground p-12 text-center bg-muted/20">
-              <div className="space-y-4">
-                <BarChart3 className="mx-auto h-16 w-16 opacity-50" />
-                <div className="space-y-2">
-                  <h3 className="text-xl font-semibold">Analize Hazır</h3>
-                  <p>Tahmin oluşturmak için soldaki parametreleri ayarlayın ve "Analiz Et" butonuna tıklayın.</p>
+            <div className="h-[350px] flex items-center justify-center border-2 border-dashed rounded-lg text-muted-foreground p-12 text-center bg-muted/20">
+              <div className="space-y-3">
+                <BarChart3 className="mx-auto h-12 w-12 opacity-50" />
+                <div className="space-y-1">
+                  <h3 className="text-lg font-semibold">Analize Hazır</h3>
+                  <p className="text-sm">Tahmin oluşturmak için soldaki parametreleri ayarlayın ve "Analiz Et" butonuna tıklayın.</p>
                 </div>
               </div>
             </div>

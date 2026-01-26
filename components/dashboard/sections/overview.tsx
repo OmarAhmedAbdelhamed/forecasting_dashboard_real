@@ -1,70 +1,77 @@
 "use client";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
-import { RevenueChart } from "@/components/dashboard/charts/revenue-chart";
-import { PipelineOverview } from "@/components/dashboard/charts/pipeline-overview";
-import { RecentDeals } from "@/components/dashboard/recent-deals";
-import { TopPerformers } from "@/components/dashboard/top-performers";
-import { DollarSign, TrendingUp, Users, Target } from "lucide-react";
-import { CircleDollarSign } from "lucide-react"; // Added CircleDollarSign import
+import { RevenueTargetChart } from "@/components/dashboard/charts/revenue-target-chart";
+import { CategoryGrowthChart } from "@/components/dashboard/charts/category-growth-chart";
+import { UpcomingPromotions } from "@/components/dashboard/tables/upcoming-promotions";
+import { StockRiskTable } from "@/components/dashboard/tables/stock-risk-table";
+import { 
+    TrendingUp, 
+    Target, 
+    AlertTriangle, 
+    CalendarRange,
+    Tags
+} from "lucide-react";
 
 export function OverviewSection() {
   return (
-    <div className="space-y-6">
-      {/* Metric cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard
-          title="Tahmini Ciro" // Changed title
-          value="₺47.4k" // Changed value
-          subtext="Tahmini Gelir" // Added subtext
-          icon={CircleDollarSign} // Changed icon
-          delay={0}
-        />
-        <MetricCard
-          title="Conversion Rate"
-          value="24.8%"
-          change="+3.2%"
-          changeType="positive"
-          icon={TrendingUp}
-          delay={1}
-        />
-        <MetricCard
-          title="Active Deals"
-          value="147"
-          change="-5"
-          changeType="negative"
-          icon={Target}
-          delay={2}
-        />
-        <MetricCard
-          title="New Leads"
-          value="892"
-          change="+18.3%"
-          changeType="positive"
-          icon={Users}
-          delay={3}
-        />
-      </div>
-
-      <div className="flex flex-col gap-2">
-        <h2 className="text-3xl font-bold tracking-tight">Genel Bakış</h2>
-        <p className="text-muted-foreground">
-          Forecasting metriklerinize genel bir bakış.
+    <div className="space-y-4">
+      {/* 1. Page Header */}
+      <div className="flex flex-col gap-1">
+        <h2 className="text-2xl font-bold tracking-tight">Genel Bakış</h2>
+        <p className="text-sm text-muted-foreground">
+          Forecasting ve promosyon performansınıza genel bir bakış.
         </p>
       </div>
 
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <RevenueChart />
-        </div>
-        <PipelineOverview />
+      {/* 2. KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <MetricCard
+          title="Gelecek 30 Günlük Tahmin"
+          value="1.4M"
+          subtext="Adet Satış"
+          icon={TrendingUp}
+          change="+8.2%"
+          changeType="positive"
+          delay={0}
+        />
+        <MetricCard
+          title="Aktif Promosyonlar"
+          value="12"
+          subtext="Kampanya Yürürlükte"
+          icon={Tags}
+          delay={0.1}
+        />
+        <MetricCard
+          title="Model Doğruluğu (YTD)"
+          value="94.2%"
+          subtext="Ortalama Başarı"
+          icon={Target}
+          change="+1.5%"
+          changeType="positive"
+          delay={0.2}
+        />
+        <MetricCard
+          title="Kritik Stok Uyarısı"
+          value="3"
+          subtext="Ürün (Riskli)"
+          icon={AlertTriangle}
+          change="Acil Aksiyon"
+          changeType="negative"
+          delay={0.3}
+        />
       </div>
 
-      {/* Bottom row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <RecentDeals />
-        <TopPerformers />
+      {/* 3. Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <RevenueTargetChart />
+        <CategoryGrowthChart />
+      </div>
+
+      {/* 4. Tables Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <UpcomingPromotions />
+        <StockRiskTable />
       </div>
     </div>
   );

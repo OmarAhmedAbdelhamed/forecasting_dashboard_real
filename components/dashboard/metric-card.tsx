@@ -36,8 +36,8 @@ export function MetricCard({
           <span className="text-sm text-muted-foreground font-medium">
             {title}
           </span>
-          <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center group-hover:bg-accent/10 transition-colors duration-300">
-            <Icon className="w-4 h-4 text-muted-foreground group-hover:text-accent transition-colors duration-300" />
+          <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center transition-colors duration-300">
+            <Icon className="w-4 h-4 text-accent transition-colors duration-300" />
           </div>
         </div>
 

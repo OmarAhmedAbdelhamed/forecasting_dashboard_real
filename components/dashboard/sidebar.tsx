@@ -33,8 +33,6 @@ const navigation: { name: string; href: Section; icon: React.ElementType }[] = [
   { name: "Envanter Planlama", href: "inventory_planning", icon: Package },
   { name: "Fiyatlandırma & Promosyon", href: "pricing_promotion", icon: Tag },
   { name: "Sezonluk Planlama", href: "seasonal_planning", icon: CalendarRange },
-  { name: "Raporlar", href: "reports", icon: BarChart3 },
-  { name: "Ayarlar", href: "settings", icon: Settings },
 ];
 
 export function Sidebar({

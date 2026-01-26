@@ -4,19 +4,12 @@ import { useState } from "react";
 import { Sidebar } from "@/components/dashboard/sidebar";
 import { Header } from "@/components/dashboard/header";
 import { OverviewSection } from "@/components/dashboard/sections/overview";
-import { PipelineSection } from "@/components/dashboard/sections/pipeline";
-import { DealsSection } from "@/components/dashboard/sections/deals";
-import { CustomersSection } from "@/components/dashboard/sections/customers";
-import { TeamSection } from "@/components/dashboard/sections/team";
 import { ForecastingSection } from "@/components/dashboard/sections/forecasting";
-import { ReportsSection } from "@/components/dashboard/sections/reports";
-import { SettingsSection } from "@/components/dashboard/sections/settings";
-
-export type Section = "overview" | "demand_forecasting" | "inventory_planning" | "pricing_promotion" | "seasonal_planning" | "reports" | "settings";
-
 import { DemandForecastingSection } from "@/components/dashboard/sections/demand-forecasting";
 import { InventoryPlanningSection } from "@/components/dashboard/sections/inventory-planning";
 import { SeasonalPlanningSection } from "@/components/dashboard/sections/seasonal-planning";
+
+export type Section = "overview" | "demand_forecasting" | "inventory_planning" | "pricing_promotion" | "seasonal_planning";
 
 export default function Dashboard() {
   const [activeSection, setActiveSection] = useState<Section>("overview");
@@ -34,10 +27,6 @@ export default function Dashboard() {
         return <ForecastingSection />;
       case "seasonal_planning":
         return <SeasonalPlanningSection />;
-      case "reports":
-        return <ReportsSection />;
-      case "settings":
-        return <SettingsSection />;
       default:
         return <OverviewSection />;
     }

@@ -14,8 +14,6 @@ const sectionTitles: any = {
   inventory_planning: "Envanter Planlama",
   pricing_promotion: "Fiyatlandırma & Promosyon",
   seasonal_planning: "Sezonluk Planlama",
-  reports: "Raporlar",
-  settings: "Ayarlar",
 };
 
 export function Header({ activeSection }: HeaderProps) {
