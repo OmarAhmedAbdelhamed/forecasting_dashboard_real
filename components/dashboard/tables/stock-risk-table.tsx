@@ -40,7 +40,7 @@ const risks = [
 
 export function StockRiskTable() {
   return (
-    <Card className="border-red-200 bg-red-50/20">
+    <Card className="border-red-200 bg-red-50/20 h-full flex flex-col">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-red-600">
             <AlertCircle className="h-5 w-5" />
@@ -50,29 +50,29 @@ export function StockRiskTable() {
             7 günden az stoku kalan ürünler.
         </CardDescription>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1 overflow-auto">
         <Table>
           <TableHeader>
             <TableRow>
               <TableHead>Ürün Adı</TableHead>
-              <TableHead>Mevcut Stok</TableHead>
-              <TableHead>7 Günlük Tahmin</TableHead>
-              <TableHead>Kalan Gün</TableHead>
+              <TableHead>Stok</TableHead>
+              <TableHead>Kalan</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {risks.map((item) => (
-              <TableRow key={item.sku}>
-                <TableCell className="font-medium">
+              <TableRow key={item.sku} className="cursor-pointer hover:bg-red-100/50 transition-colors" onClick={() => console.log("Navigate to", item.sku)}>
+                <TableCell className="font-medium p-3">
                     <div className="flex flex-col">
-                        <span>{item.name}</span>
-                        <span className="text-xs text-muted-foreground">{item.sku}</span>
+                        <span className="text-sm">{item.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{item.sku}</span>
                     </div>
                 </TableCell>
-                <TableCell className="text-red-600 font-bold">{item.stock}</TableCell>
-                <TableCell>{item.forecast}</TableCell>
-                <TableCell>
-                    <span className="font-bold text-red-600">{item.days}</span>
+                <TableCell className="text-red-600 font-bold p-3">{item.stock}</TableCell>
+                <TableCell className="p-3">
+                    <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-bold bg-red-100 text-red-700">
+                        {item.days}
+                    </span>
                 </TableCell>
               </TableRow>
             ))}

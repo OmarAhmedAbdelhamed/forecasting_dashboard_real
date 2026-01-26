@@ -82,14 +82,25 @@ const CustomizedAxisTick = (props: any) => {
 
   return (
     <g transform={`translate(${x},${y})`}>
-      <text x={0} y={0} dy={16} textAnchor="middle" fill="#666" fontSize={12}>
-        {format(new Date(dateStr), "MMM dd")}
-      </text>
-      <foreignObject x={-8} y={20} width={16} height={16}>
+      {/* Weather Icon - Centered close to axis */}
+      <foreignObject x={-8} y={10} width={16} height={16}>
         <div className="flex items-center justify-center">
-          <Icon size={16} color={color} />
+          <Icon size={14} color={color} />
         </div>
       </foreignObject>
+      
+      {/* Date Text - Rotated Diagonally */}
+      <text 
+        x={0} 
+        y={0} 
+        dy={16} 
+        textAnchor="end" 
+        fill="#666" 
+        fontSize={10} 
+        transform="rotate(-45) translate(-10, 20)"
+      >
+        {format(new Date(dateStr), "dd MMM")}
+      </text>
     </g>
   );
 };
@@ -252,7 +263,7 @@ export function ForecastingSection() {
               <Label className="text-xs">Promosyon Tarih Aralığı</Label>
               <div className="grid grid-cols-2 gap-2">
                 <DatePicker date={startPromosyon} setDate={setStartPromosyon} placeholder="Başlangıç" className="h-8 text-sm" />
-                <DatePicker date={endPromosyon} setDate={setEndDate} placeholder="Bitiş" className="h-8 text-sm" />
+                <DatePicker date={endPromosyon} setDate={setEndPromosyon} placeholder="Bitiş" className="h-8 text-sm" />
               </div>
             </div>
 
@@ -362,7 +373,7 @@ export function ForecastingSection() {
                   </div>
 
                   <ResponsiveContainer width="100%" height={380} className="w-full">
-                    <ComposedChart data={forecastData} margin={{ bottom: 10, top: 10, right: 10, left: 0 }}>
+                    <ComposedChart data={forecastData} margin={{ bottom: 60, top: 10, right: 10, left: 0 }}>
                       <defs>
                         <linearGradient id="glowGreen" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#22c55e" stopOpacity={0.2} />
@@ -390,7 +401,7 @@ export function ForecastingSection() {
                         axisLine={false}
                         interval={0}
                         tick={<CustomizedAxisTick data={forecastData} />}
-                        height={50}
+                        height={80}
                       />
                       <YAxis 
                         stroke="var(--muted-foreground)" 

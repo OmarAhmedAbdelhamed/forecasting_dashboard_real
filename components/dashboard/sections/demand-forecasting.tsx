@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { 
   ArrowUpRight, ArrowDownRight, TrendingUp, Target, Calendar, RefreshCcw,
-  MoreHorizontal
+  MoreHorizontal, Info, HelpCircle
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -25,34 +25,27 @@ import {
   ReferenceLine,
   Cell
 } from "recharts";
-import { format, addWeeks, subWeeks, addDays, subDays, addMonths, subMonths, startOfWeek } from "date-fns";
+import { format, addWeeks, subWeeks, addDays, subDays, addMonths, subMonths } from "date-fns";
 import { tr } from "date-fns/locale";
-import { useEffect } from "react";
-
-// Mock Data for filters
-const STORES = [
-  { value: "1001", label: "1001 - Akasya AVM" },
-  { value: "1002", label: "1002 - Beylerbeyi Merkez" },
-  { value: "1003", label: "1003 - Güngören Köy İçi" },
-  { value: "1004", label: "1004 - Kadıköy Rıhtım" },
-  { value: "1005", label: "1005 - Üsküdar Meydan" },
-];
-
-const PRODUCTS = [
-  { value: "30000332", label: "30000332 - Yudum Ayçiçek Yağı 5L" },
-  { value: "30045925", label: "30045925 - Lipton Yellow Label 1kg" },
-  { value: "30431002", label: "30431002 - Solo Tuvalet Kağıdı 32li" },
-  { value: "30008788", label: "30008788 - Pınar Süt 1L" },
-  { value: "30047778", label: "30047778 - Nutella 750g" },
-];
+import { STORES, PRODUCTS } from "@/lib/constants";
+import { FilterBar } from "@/components/dashboard/filter-bar";
+import {
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 // Mock Data Generators
 const generateForecastData = (granularity: string, horizon: string) => {
   const data = [];
   const today = new Date();
   
-  // Parse horizon to get approximate weeks
-  const horizonWeeks = parseInt(horizon.split('_')[0]) || 12;
+  // Parse horizon
+  let horizonWeeks = 12;
+  if (horizon === "6_months") horizonWeeks = 26;
+  if (horizon === "1_year") horizonWeeks = 52;
+  if (horizon === "12_weeks") horizonWeeks = 12;
   
   let pointsHistory = 0;
   let pointsFuture = 0;
@@ -107,13 +100,61 @@ const generateForecastData = (granularity: string, horizon: string) => {
   return data;
 };
 
+// Waterfall Data
+// Logic: Start from Baseline, add/subtract components to reach Final Forecast
 const driversData = [
-  { name: "Organik Trend", value: 1540, fill: "#0f172a" },
-  { name: "Mevsimsellik", value: 850, fill: "#3b82f6" },
-  { name: "Promosyon Etkisi", value: 420, fill: "#eab308" },
-  { name: "Fiyat Değişimi", value: -120, fill: "#ef4444" },
-  { name: "Rakip Hareketi", value: -80, fill: "#f97316" },
+  { name: "Baz Satış", value: 1200, isTotal: true },
+  { name: "Mevsimsellik", value: 300, isTotal: false },
+  { name: "Trend", value: 150, isTotal: false },
+  { name: "Fiyat Etkisi", value: -100, isTotal: false },
+  { name: "Rakip Kamp.", value: -50, isTotal: false },
+  { name: "Final Tahmin", value: 1500, isTotal: true },
 ];
+
+const prepareWaterfallData = (data: any[]) => {
+  let currentTotal = 0;
+  return data.map((item, index) => {
+    // For the first item (Base), start is 0
+    if (index === 0) {
+        currentTotal = item.value;
+        return { ...item, uv: item.value, start: 0, fill: "#94a3b8" }; // Gray for Base
+    }
+    
+    // For the last item (Final), it should match the accumulated total
+    if (index === data.length - 1) {
+        return { ...item, uv: currentTotal, start: 0, fill: "#3b82f6" }; // Blue for Final
+    }
+
+    // For intermediate steps
+    const prevTotal = currentTotal;
+    currentTotal += item.value;
+    
+    // Determine start and height (uv) for floating bars
+    // If positive: start at prevTotal, height is value
+    // If negative: start at currentTotal (which is lower), height is abs(value)
+    
+    // Visual Fix: We want to show the bar extending FROM the previous level
+    let start, size;
+    let color;
+
+    if (item.value >= 0) {
+        start = prevTotal;
+        size = item.value;
+        color = "#22c55e"; // Green for increase
+    } else {
+        start = prevTotal + item.value; // e.g. 1500 + (-100) = 1400. Bar goes from 1400 to 1500? No.
+        // If we drop from 1500 to 1400: Start needs to be 1400, Size 100.
+        size = Math.abs(item.value);
+        start = prevTotal - size;
+        color = "#ef4444"; // Red for decrease
+    }
+
+    return { ...item, uv: size, start: start, fill: color };
+  });
+};
+
+const processedWaterfallData = prepareWaterfallData(driversData);
+
 
 const skuData = [
   { id: "SKU-001", name: "Yudum Ayçiçek Yağı 5L", forecast: 1250, trend: "+5%", acc: "96%" },
@@ -148,81 +189,41 @@ export function DemandForecastingSection() {
 
   return (
     <div className="space-y-6">
-      {/* 1. Header & Filters */}
-      <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
-        <div>
-          <h2 className="text-3xl font-bold tracking-tight">Talep Tahminleme</h2>
-          <p className="text-muted-foreground">
-            Gelecek dönem talep beklentileri ve geçmiş performans analizi.
-          </p>
-        </div>
-        
-        <div className="flex flex-wrap gap-2 items-center">
-            {/* Granularity Switch */}
-            <Tabs value={granularity} onValueChange={setGranularity} className="mr-2">
-                <TabsList>
-                    <TabsTrigger value="daily">Günlük</TabsTrigger>
-                    <TabsTrigger value="weekly">Haftalık</TabsTrigger>
-                    <TabsTrigger value="monthly">Aylık</TabsTrigger>
+      {/* 1. Filter Bar with Custom Horizon Controls */}
+      <FilterBar
+        selectedStore={selectedStore}
+        onStoreChange={setSelectedStore}
+        selectedProduct={selectedProduct}
+        onProductChange={setSelectedProduct}
+      >
+        <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground hidden lg:inline-block">Ufuk:</span>
+            <ToggleGroup type="single" value={timeHorizon} onValueChange={(v) => v && setTimeHorizon(v)}>
+                <ToggleGroupItem value="12_weeks" aria-label="12 Hafta" className="h-8 text-xs px-2">
+                    12 Hafta
+                </ToggleGroupItem>
+                <ToggleGroupItem value="6_months" aria-label="6 Ay" className="h-8 text-xs px-2">
+                    6 Ay
+                </ToggleGroupItem>
+                <ToggleGroupItem value="1_year" aria-label="1 Yıl" className="h-8 text-xs px-2">
+                    1 Yıl
+                </ToggleGroupItem>
+            </ToggleGroup>
+
+            <div className="h-6 w-px bg-border mx-2" />
+
+             {/* Granularity Switch */}
+             <Tabs value={granularity} onValueChange={setGranularity} className="w-auto">
+                <TabsList className="h-8">
+                    <TabsTrigger value="daily" className="text-xs px-2 h-6">Gün</TabsTrigger>
+                    <TabsTrigger value="weekly" className="text-xs px-2 h-6">Hafta</TabsTrigger>
+                    <TabsTrigger value="monthly" className="text-xs px-2 h-6">Ay</TabsTrigger>
                 </TabsList>
             </Tabs>
-
-            <Button variant="outline" size="icon" onClick={handleRefresh} className={cn(isRefreshing && "animate-spin")}>
-                <RefreshCcw className="h-4 w-4" />
-            </Button>
         </div>
-      </div>
+      </FilterBar>
 
-      {/* Filter Bar */}
-      <Card className="p-4">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="space-y-2">
-                <label className="text-sm font-medium">Mağaza Kodu</label>
-                <Select value={selectedStore} onValueChange={setSelectedStore}>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Mağaza Seçiniz" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {STORES.map((store) => (
-                            <SelectItem key={store.value} value={store.value}>{store.label}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="space-y-2">
-                <label className="text-sm font-medium">Ürün Kodu</label>
-                <Select value={selectedProduct} onValueChange={setSelectedProduct}>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Ürün Seçiniz" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        {PRODUCTS.map((prod) => (
-                            <SelectItem key={prod.value} value={prod.value}>{prod.label}</SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
-            </div>
-             <div className="space-y-2">
-                <label className="text-sm font-medium">Tahmin Ufku</label>
-                <Select value={timeHorizon} onValueChange={setTimeHorizon}>
-                    <SelectTrigger>
-                        <SelectValue placeholder="Dönem Seçiniz" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="4_weeks">Gelecek 4 Hafta</SelectItem>
-                        <SelectItem value="8_weeks">Gelecek 8 Hafta</SelectItem>
-                        <SelectItem value="12_weeks">Gelecek 12 Hafta</SelectItem>
-                        <SelectItem value="26_weeks">Gelecek 6 Ay</SelectItem>
-                    </SelectContent>
-                </Select>
-            </div>
-            <div className="flex items-end">
-                <Button className="w-full" onClick={handleRefresh}>Uygula</Button>
-            </div>
-        </div>
-      </Card>
-
-      {/* 2. KPI Cards */}
+      {/* 2. KPI Cards with Tooltips */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KPI_Card 
             title="Toplam Tahmin" 
@@ -230,7 +231,8 @@ export function DemandForecastingSection() {
             unit="Adet" 
             trend="+5.2%" 
             trendUp={true} 
-            icon={TrendingUp} 
+            icon={TrendingUp}
+            tooltip="Gelecek dönem için öngörülen toplam satış adedi."
         />
         <KPI_Card 
             title="Doğruluk Oranı (Accuracy)" 
@@ -239,6 +241,7 @@ export function DemandForecastingSection() {
             trend="+1.2%" 
             trendUp={true} 
             icon={Target} 
+            tooltip="Geçen ayın gerçekleşen verisi ile tahmin arasındaki sapma oranı. (1 - MAPE)"
         />
          <KPI_Card 
             title="Yıllık Büyüme (YoY)" 
@@ -247,6 +250,7 @@ export function DemandForecastingSection() {
             trend="-2.1%" 
             trendUp={false} 
             icon={Calendar} 
+            tooltip="Geçen yılın aynı dönemine göre büyüme oranı."
         />
          <KPI_Card 
             title="Bias (Sapma)" 
@@ -254,16 +258,27 @@ export function DemandForecastingSection() {
             unit="Over-forecast" 
             trend="Stabil" 
             trendUp={true} 
-            icon={RefreshCcw} 
+            icon={RefreshCcw}
+            tooltip="Pozitif değer: Tahmin > Gerçekleşen (Over-forecast). Negatif: Under-forecast."
         />
       </div>
 
-      {/* 3. Main Chart Placeholder */}
-        <div className="grid gap-4 md:grid-cols-3">
+      {/* 3. Main Chart & Waterfall */}
+      <div className="grid gap-4 md:grid-cols-3">
         {/* Main Chart */}
         <Card className="md:col-span-2 min-h-[450px]">
-            <CardHeader>
-                <CardTitle>Talep Trendi ve Tahmin (12 Hafta)</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle>Talep Trendi ve Tahmin</CardTitle>
+                <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <div className="w-2 h-2 rounded-full bg-slate-500" />
+                        Geçmiş
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                        <div className="w-2 h-2 rounded-full bg-blue-500" />
+                        Tahmin
+                    </div>
+                </div>
             </CardHeader>
             <CardContent className="h-[400px]">
                 <ResponsiveContainer width="100%" height="100%">
@@ -290,7 +305,6 @@ export function DemandForecastingSection() {
                         />
                         <Legend wrapperStyle={{ paddingTop: "20px" }} />
                         
-                        {/* Confidence Interval (Area) */}
                         <Area 
                             type="monotone" 
                             dataKey="confLow" 
@@ -298,7 +312,7 @@ export function DemandForecastingSection() {
                             fill="#93c5fd" 
                             fillOpacity={0.2} 
                             name="Güven Aralığı (Alt)" 
-                            legendType="none" // Hide from legend to keep clean
+                            legendType="none" 
                         />
                         <Area 
                             type="monotone" 
@@ -307,10 +321,9 @@ export function DemandForecastingSection() {
                             fill="#93c5fd" 
                             fillOpacity={0.2} 
                             name="Güven Aralığı (Üst)" 
-                            legendType="none" // Hide from legend to keep clean
+                            legendType="none" 
                         />
 
-                        {/* History Line */}
                         <Line 
                             type="monotone" 
                             dataKey="history" 
@@ -321,7 +334,6 @@ export function DemandForecastingSection() {
                             name="Geçmiş Satışlar"
                         />
                         
-                        {/* Forecast Line */}
                         <Line 
                             type="monotone" 
                             dataKey="forecast" 
@@ -330,7 +342,7 @@ export function DemandForecastingSection() {
                             dot={{ r: 3, fill: "#3b82f6" }} 
                             activeDot={{ r: 6 }} 
                             name="Yapay Zeka Tahmini"
-                            strokeDasharray="5 5" // Dashed for forecast usually implies prediction
+                            strokeDasharray="5 5" 
                         />
                         
                         <ReferenceLine x="May 10" stroke="red" label="Bugün" />
@@ -339,31 +351,56 @@ export function DemandForecastingSection() {
             </CardContent>
         </Card>
 
-        {/* 4. Drivers Analysis */}
+        {/* 4. Drivers Waterfall Chart */}
         <Card className="min-h-[450px]">
             <CardHeader>
-                <CardTitle>Etki Analizi (Drivers)</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                    Etki Analizi
+                    <TooltipProvider>
+                        <UITooltip>
+                            <TooltipTrigger><HelpCircle className="h-4 w-4 text-muted-foreground" /></TooltipTrigger>
+                            <TooltipContent>
+                                <p className="max-w-[200px]">Tahminin hangi bileşenlerden oluştuğunu gösteren şelale grafiği.</p>
+                            </TooltipContent>
+                        </UITooltip>
+                    </TooltipProvider>
+                </CardTitle>
+                <CardDescription>Tahmin Bileşenleri (Waterfall)</CardDescription>
             </CardHeader>
             <CardContent className="h-[400px]">
                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart layout="vertical" data={driversData} margin={{ top: 20, right: 30, left: 40, bottom: 10 }}>
-                        <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e5e7eb" />
-                        <XAxis type="number" hide />
-                        <YAxis 
+                    <BarChart data={processedWaterfallData}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                        <XAxis 
                             dataKey="name" 
-                            type="category" 
-                            width={100} 
-                            tick={{ fontSize: 11, fill: "#6b7280" }} 
+                            fontSize={10} 
+                            tickLine={false} 
                             axisLine={false}
-                            tickLine={false}
+                            interval={0}
+                            angle={-45}
+                            textAnchor="end"
+                            height={60}
+                        />
+                         <YAxis 
+                            stroke="#6b7280" 
+                            fontSize={12} 
+                            tickLine={false} 
+                            axisLine={false} 
                         />
                         <Tooltip 
                             cursor={{ fill: "transparent" }}
                             contentStyle={{ backgroundColor: "#fff", borderRadius: "8px", border: "1px solid #e5e7eb" }}
+                            formatter={(value: number, name, props) => {
+                                // We are using 'uv' for height, but we want to show the original 'value'
+                                // The original payload is available in props.payload
+                                const originalValue = props.payload.value;
+                                return [`${originalValue > 0 ? '+' : ''}${originalValue}`, "Etki"];
+                            }}
                         />
-                        <Legend />
-                        <Bar dataKey="value" name="Etki (Adet)" radius={[0, 4, 4, 0]} barSize={32}>
-                            {driversData.map((entry, index) => (
+                        {/* We use stacked bars to create the floating effect. StackId="a" */}
+                         <Bar dataKey="start" stackId="a" fill="transparent" />
+                         <Bar dataKey="uv" stackId="a" radius={[2, 2, 2, 2]}>
+                            {processedWaterfallData.map((entry, index) => (
                                 <Cell key={`cell-${index}`} fill={entry.fill} />
                             ))}
                         </Bar>
@@ -421,12 +458,26 @@ export function DemandForecastingSection() {
   );
 }
 
-// Simple Helper Component for KPIs
-function KPI_Card({ title, value, unit, trend, trendUp, icon: Icon }: any) {
+// Helper Component for KPIs with Tooltip
+function KPI_Card({ title, value, unit, trend, trendUp, icon: Icon, tooltip }: any) {
     return (
         <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{title}</CardTitle>
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                    {title}
+                    {tooltip && (
+                        <TooltipProvider>
+                            <UITooltip>
+                                <TooltipTrigger>
+                                    <Info className="h-3 w-3 text-muted-foreground cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                    <p className="max-w-[180px] text-xs">{tooltip}</p>
+                                </TooltipContent>
+                            </UITooltip>
+                        </TooltipProvider>
+                    )}
+                </CardTitle>
                 <Icon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>

@@ -4,11 +4,11 @@ import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Toolti
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 const data = [
-  { name: "Yağlar", growth: 12.5, color: "#22c55e" },
-  { name: "Süt Ürünleri", growth: 8.2, color: "#3b82f6" },
-  { name: "İçecekler", growth: 5.4, color: "#eab308" },
-  { name: "Atıştırmalık", growth: 3.1, color: "#f97316" },
-  { name: "Temizlik", growth: -1.2, color: "#ef4444" },
+  { name: "Yağlar", growth: 12.5, color: "#22c55e" }, // Green
+  { name: "Süt Ürünleri", growth: 8.2, color: "#e5e7eb" }, // Gray
+  { name: "İçecekler", growth: 5.4, color: "#e5e7eb" }, // Gray
+  { name: "Atıştırmalık", growth: 3.1, color: "#e5e7eb" }, // Gray
+  { name: "Temizlik", growth: -1.2, color: "#ef4444" }, // Red
 ];
 
 export function CategoryGrowthChart() {
