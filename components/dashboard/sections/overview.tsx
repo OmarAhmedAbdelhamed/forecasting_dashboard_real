@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { FilterBar } from "@/components/dashboard/filter-bar";
+import { AlertsBar } from "@/components/dashboard/alerts-bar";
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { RevenueTargetChart } from "@/components/dashboard/charts/revenue-target-chart";
 import { CategoryGrowthChart } from "@/components/dashboard/charts/category-growth-chart";
@@ -33,6 +34,9 @@ export function OverviewSection() {
         selectedStore={selectedStore} 
         onStoreChange={setSelectedStore} 
       />
+
+      {/* 3. Alerts Bar */}
+      <AlertsBar />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         {/* Left Column: KPIs (2x2 Grid) */}

@@ -7,11 +7,11 @@ export const STORES = [
 ];
 
 export const PRODUCTS = [
-  { value: "30000332", label: "30000332 - Yudum Ayçiçek Yağı 5L" },
-  { value: "30045925", label: "30045925 - Lipton Yellow Label 1kg" },
-  { value: "30431002", label: "30431002 - Solo Tuvalet Kağıdı 32li" },
-  { value: "30008788", label: "30008788 - Pınar Süt 1L" },
-  { value: "30047778", label: "30047778 - Nutella 750g" },
+  { value: "30000332", label: "332 - Ayçiçek Yağı 5L" },
+  { value: "30045925", label: "925 - Yellow Label 1kg" },
+  { value: "30431002", label: "002 - Tuvalet Kağıdı 32li" },
+  { value: "30008788", label: "788 - Süt 1L" },
+  { value: "30047778", label: "778 - Nutella 750g" },
 ];
 
 export const PROMOTIONS = [
