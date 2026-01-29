@@ -1,14 +1,15 @@
-"use client";
+'use client';
 
-import { cn } from "@/lib/utils";
-import { TrendingUp, TrendingDown } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { cn } from '@/lib/utils';
+import { TrendingUp, TrendingDown } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 interface MetricCardProps {
   title: string;
   value: string;
+  secondaryValue?: string;
   change?: string;
-  changeType?: "positive" | "negative" | "neutral";
+  changeType?: 'positive' | 'negative' | 'neutral';
   subtext?: string;
   icon: LucideIcon;
   delay?: number;
@@ -17,6 +18,7 @@ interface MetricCardProps {
 export function MetricCard({
   title,
   value,
+  secondaryValue,
   change,
   changeType,
   subtext,
@@ -25,46 +27,55 @@ export function MetricCard({
 }: MetricCardProps) {
   return (
     <div
-      className="group relative bg-card border border-border rounded-xl p-5 hover:border-accent/50 transition-all duration-300 overflow-hidden animate-in fade-in slide-in-from-bottom-4"
-      style={{ animationDelay: `${delay * 100}ms`, animationFillMode: "both" }}
+      className='group relative bg-card border border-border rounded-xl p-5 hover:border-accent/50 transition-all duration-300 overflow-hidden animate-in fade-in slide-in-from-bottom-4'
+      style={{ animationDelay: `${delay * 100}ms`, animationFillMode: 'both' }}
     >
       {/* Subtle gradient on hover */}
-      <div className="absolute inset-0 bg-gradient-to-br from-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+      <div className='absolute inset-0 bg-gradient-to-br from-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500' />
 
-      <div className="relative">
-        <div className="flex items-start justify-between mb-3">
-          <span className="text-sm text-muted-foreground font-medium">
+      <div className='relative'>
+        <div className='flex items-start justify-between mb-3'>
+          <span className='text-sm md:text-base font-medium text-muted-foreground'>
             {title}
           </span>
-          <div className="w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center transition-colors duration-300">
-            <Icon className="w-4 h-4 text-accent transition-colors duration-300" />
+          <div className='w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center transition-colors duration-300'>
+            <Icon className='w-4 h-4 text-accent transition-colors duration-300' />
           </div>
         </div>
 
-        <div className="flex flex-col">
-          <div className="flex items-end gap-3">
-            <span className="text-2xl lg:text-3xl font-bold text-foreground tracking-tight">
+        <div className='flex flex-col'>
+          <div className='flex items-end gap-3'>
+            <span className='text-2xl lg:text-3xl font-bold text-foreground tracking-tight'>
               {value}
             </span>
             {change && (
               <div
                 className={cn(
-                  "flex items-center gap-1 text-sm font-medium mb-1",
-                  changeType === "positive" && "text-success",
-                  changeType === "negative" && "text-destructive",
-                  changeType === "neutral" && "text-muted-foreground"
+                  'flex items-center gap-1 text-xs md:text-sm font-medium mb-1',
+                  changeType === 'positive' && 'text-success',
+                  changeType === 'negative' && 'text-destructive',
+                  changeType === 'neutral' && 'text-muted-foreground',
                 )}
               >
-                {changeType === "positive" && <TrendingUp className="w-3.5 h-3.5" />}
-                {changeType === "negative" && (
-                  <TrendingDown className="w-3.5 h-3.5" />
+                {changeType === 'positive' && (
+                  <TrendingUp className='w-3.5 h-3.5' />
+                )}
+                {changeType === 'negative' && (
+                  <TrendingDown className='w-3.5 h-3.5' />
                 )}
                 <span>{change}</span>
               </div>
             )}
           </div>
+          {secondaryValue && (
+            <p className='text-lg lg:text-xl font-semibold text-muted-foreground mt-0.5'>
+              {secondaryValue}
+            </p>
+          )}
           {subtext && (
-            <p className="text-xs text-muted-foreground mt-1">{subtext}</p>
+            <p className='text-xs md:text-sm text-muted-foreground mt-1'>
+              {subtext}
+            </p>
           )}
         </div>
       </div>

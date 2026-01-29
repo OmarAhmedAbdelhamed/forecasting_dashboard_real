@@ -45,7 +45,7 @@ export function Sidebar({
     <aside
       className={cn(
         "fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-out flex flex-col",
-        collapsed ? "w-[72px]" : "w-[260px] shadow-2xl"
+        collapsed ? "w-[72px]" : "w-[280px] lg:w-[300px] shadow-2xl"
       )}
       onMouseEnter={() => onCollapsedChange(false)}
       onMouseLeave={() => onCollapsedChange(true)}
@@ -53,12 +53,12 @@ export function Sidebar({
       {/* Logo */}
       <div className="h-16 flex items-center px-4 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0 bg-white overflow-hidden p-1">
+          <div className="w-9 h-9 lg:w-10 lg:h-10 rounded-lg flex items-center justify-center shrink-0 bg-white overflow-hidden p-1">
             <img src="/bee2_ai_logo.svg" alt="Bee2 AI" className="w-full h-full object-contain" />
           </div>
           <span
             className={cn(
-              "font-semibold text-lg text-sidebar-foreground whitespace-nowrap transition-all duration-300",
+              "font-semibold text-lg lg:text-xl text-sidebar-foreground whitespace-nowrap transition-all duration-300",
               collapsed ? "opacity-0 w-0" : "opacity-100 w-auto"
             )}
           >
@@ -78,7 +78,7 @@ export function Sidebar({
               key={item.href}
               onClick={() => onSectionChange(item.href)}
               className={cn(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-200 group relative",
+                "w-full flex items-center gap-3 px-3 py-2.5 lg:py-3 rounded-lg text-sm lg:text-base font-medium transition-all duration-200 group relative",
                 isActive
                   ? "bg-sidebar-accent text-sidebar-foreground"
                   : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
@@ -93,7 +93,7 @@ export function Sidebar({
               />
               <Icon
                 className={cn(
-                  "w-5 h-5 shrink-0 transition-transform duration-200",
+                  "w-5 h-5 lg:w-6 lg:h-6 shrink-0 transition-transform duration-200",
                   isActive ? "text-accent" : "group-hover:scale-110"
                 )}
               />
