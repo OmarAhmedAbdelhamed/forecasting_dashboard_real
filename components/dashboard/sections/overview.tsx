@@ -27,6 +27,11 @@ import {
   REGIONS,
   getStoresByRegions,
   getCategoriesByStores,
+  getMetrics,
+  getRevenueChartData,
+  getHistoricalChartData,
+  getPromotions,
+  getStockRisks,
 } from '@/data/mock-data';
 
 export function OverviewSection() {
@@ -48,6 +53,38 @@ export function OverviewSection() {
   const categoryOptions = useMemo(
     () => getCategoriesByStores(selectedStores),
     [selectedStores],
+  );
+
+  // --- Dynamic Data Calculation ---
+  const metrics = useMemo(
+    () => getMetrics(selectedRegions, selectedStores, selectedCategories),
+    [selectedRegions, selectedStores, selectedCategories],
+  );
+
+  const revenueData = useMemo(
+    () =>
+      getRevenueChartData(selectedRegions, selectedStores, selectedCategories),
+    [selectedRegions, selectedStores, selectedCategories],
+  );
+
+  const historicalData = useMemo(
+    () =>
+      getHistoricalChartData(
+        selectedRegions,
+        selectedStores,
+        selectedCategories,
+      ),
+    [selectedRegions, selectedStores, selectedCategories],
+  );
+
+  const promotions = useMemo(
+    () => getPromotions(selectedRegions, selectedStores, selectedCategories),
+    [selectedRegions, selectedStores, selectedCategories],
+  );
+
+  const stockRisks = useMemo(
+    () => getStockRisks(selectedRegions, selectedStores, selectedCategories),
+    [selectedRegions, selectedStores, selectedCategories],
   );
 
   // Reset child selections when parent changes
@@ -83,38 +120,38 @@ export function OverviewSection() {
         <div className='lg:col-span-8 grid grid-cols-1 md:grid-cols-2 gap-4'>
           <MetricCard
             title='Genel Model Doğruluğu'
-            value='94.2%'
+            value={`${metrics.accuracy.toFixed(1)}%`}
             subtext='Ortalama Başarı'
             icon={Target}
-            change='+1.5%'
-            changeType='positive'
+            change={`${metrics.accuracyChange > 0 ? '+' : ''}${metrics.accuracyChange.toFixed(1)}%`}
+            changeType={metrics.accuracyChange >= 0 ? 'positive' : 'negative'}
             delay={0}
           />
           <MetricCard
             title='Gelecek 30 Günlük Tahmin'
-            value='2.8M TL'
-            secondaryValue='142K Adet'
+            value={`${(metrics.forecastValue / 1000000).toFixed(1)}M TL`}
+            secondaryValue={`${(metrics.forecastUnit / 1000).toFixed(0)}K Adet`}
             icon={TrendingUp}
-            change='+8.2%'
-            changeType='positive'
+            change={`${metrics.forecastChange > 0 ? '+' : ''}${metrics.forecastChange.toFixed(1)}%`}
+            changeType={metrics.forecastChange >= 0 ? 'positive' : 'negative'}
             delay={0.1}
           />
           <MetricCard
             title='YTD Başarı Miktarı'
-            value='12.5M TL'
+            value={`${(metrics.ytdValue / 1000000).toFixed(1)}M TL`}
             subtext='Yılbaşından Bugüne'
             icon={CalendarRange}
-            change='+12%'
-            changeType='positive'
+            change={`${metrics.ytdChange > 0 ? '+' : ''}${metrics.ytdChange.toFixed(0)}%`}
+            changeType={metrics.ytdChange >= 0 ? 'positive' : 'negative'}
             delay={0.2}
           />
           <MetricCard
             title='Forecast Gap to Sales'
-            value='-2.3%'
+            value={`${metrics.gapToSales.toFixed(1)}%`}
             subtext='Tahmin Sapması'
             icon={AlertTriangle}
-            change='-0.5%'
-            changeType='negative'
+            change={`${metrics.gapToSalesChange > 0 ? '+' : ''}${metrics.gapToSalesChange.toFixed(1)}%`}
+            changeType={metrics.gapToSalesChange >= 0 ? 'positive' : 'negative'} // Negative gap change might be good or bad depending on context, assuming closer to 0 is better? Or just direction. Let's stick to standard logic.
             delay={0.3}
           />
         </div>
@@ -161,16 +198,19 @@ export function OverviewSection() {
 
         {/* Middle Row: Charts */}
         <div className='lg:col-span-6'>
-          <RevenueTargetChart />
+          <RevenueTargetChart data={revenueData} />
         </div>
         <div className='lg:col-span-6'>
-          <HistoricalUnitsChart />
+          <HistoricalUnitsChart data={historicalData} />
         </div>
 
         {/* Bottom Row: Tables */}
         <div className='lg:col-span-12'>
-          <UpcomingPromotions />
+          <UpcomingPromotions promotions={promotions} />
         </div>
+        {/* <div className='lg:col-span-12'>
+          <StockRiskTable risks={stockRisks} />
+        </div> */}
       </div>
     </div>
   );

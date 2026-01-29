@@ -17,34 +17,13 @@ import {
 } from '@/components/ui/shared/card';
 import { AlertCircle } from 'lucide-react';
 
-const risks = [
-  {
-    sku: '30000332',
-    name: 'Yudum Ayçiçek Yağı 5L',
-    stock: 120,
-    forecast: 450,
-    days: '2 Gün',
-    action: 'Acil Sipariş',
-  },
-  {
-    sku: '30045925',
-    name: 'Lipton Yellow Label 1kg',
-    stock: 85,
-    forecast: 150,
-    days: '4 Gün',
-    action: 'Transfer',
-  },
-  {
-    sku: '30431002',
-    name: 'Solo Tuvalet Kağıdı 32li',
-    stock: 200,
-    forecast: 240,
-    days: '6 Gün',
-    action: 'İzle',
-  },
-];
+import { StockRisk } from '@/data/mock-data';
 
-export function StockRiskTable() {
+interface StockRiskTableProps {
+  risks: StockRisk[];
+}
+
+export function StockRiskTable({ risks }: StockRiskTableProps) {
   return (
     <Card className='border-red-200 bg-red-50/20 h-full flex flex-col'>
       <CardHeader>

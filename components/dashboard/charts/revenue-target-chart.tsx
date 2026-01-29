@@ -19,23 +19,13 @@ import {
   CardTitle,
 } from '@/components/ui/shared/card';
 
-// Weekly data matching the "W/e" (Week ending) format
-const data = [
-  { week: '6 Oca', actual: 5800000, plan: 6200000 },
-  { week: '13 Oca', actual: 6100000, plan: 6400000 },
-  { week: '20 Oca', actual: 5500000, plan: 6100000 },
-  { week: '27 Oca', actual: 6800000, plan: 6500000 },
-  { week: '3 Şub', actual: 7200000, plan: 6800000 },
-  { week: '10 Şub', actual: 6400000, plan: 6600000 },
-  { week: '17 Şub', actual: 5900000, plan: 6300000 },
-  { week: '24 Şub', actual: 6600000, plan: 6700000 },
-  { week: '3 Mar', actual: 7100000, plan: 7000000 },
-  { week: '10 Mar', actual: 6300000, plan: 6500000 },
-  { week: '17 Mar', actual: 6900000, plan: 6800000 },
-  { week: '24 Mar', actual: 7400000, plan: 7200000 },
-];
+import { RevenueChartData } from '@/data/mock-data';
 
-export function RevenueTargetChart() {
+interface RevenueTargetChartProps {
+  data: RevenueChartData[];
+}
+
+export function RevenueTargetChart({ data }: RevenueTargetChartProps) {
   return (
     <Card className='col-span-2'>
       <CardHeader className='pb-2'>
@@ -75,7 +65,7 @@ export function RevenueTargetChart() {
               tickLine={false}
               axisLine={false}
               tickFormatter={(value) => `${(value / 1000000).toFixed(0)}M`}
-              domain={[0, 10000000]}
+              domain={[0, 'auto']}
               width={45}
             />
             <Tooltip

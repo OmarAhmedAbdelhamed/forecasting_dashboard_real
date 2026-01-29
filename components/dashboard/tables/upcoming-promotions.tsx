@@ -17,42 +17,13 @@ import {
 } from '@/components/ui/shared/card';
 import { Badge } from '@/components/ui/shared/badge';
 
-const promotions = [
-  {
-    id: 'PROMO-1024',
-    name: 'Yaz İndirimleri - Yudum Yağ',
-    type: 'Katalog',
-    startDate: '28 May',
-    discount: '%15',
-    status: 'Onaylandı',
-  },
-  {
-    id: 'PROMO-1025',
-    name: 'Çaykur Rize - Çoklu Alım',
-    type: 'VKA0',
-    startDate: '30 May',
-    discount: '3 Al 2 Öde',
-    status: 'Taslak',
-  },
-  {
-    id: 'PROMO-1026',
-    name: 'Temizlik Günleri - Solo',
-    type: 'Mağaza İçi',
-    startDate: '02 Haz',
-    discount: '%20',
-    status: 'Onaylandı',
-  },
-  {
-    id: 'PROMO-1027',
-    name: 'Kahvaltılık Fırsatları',
-    type: 'Katalog',
-    startDate: '05 Haz',
-    discount: '%10',
-    status: 'Beklemede',
-  },
-];
+import { Promotion } from '@/data/mock-data';
 
-export function UpcomingPromotions() {
+interface UpcomingPromotionsProps {
+  promotions: Promotion[];
+}
+
+export function UpcomingPromotions({ promotions }: UpcomingPromotionsProps) {
   return (
     <Card>
       <CardHeader>

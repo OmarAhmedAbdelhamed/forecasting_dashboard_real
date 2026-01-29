@@ -22,63 +22,13 @@ import {
 // Current date: 2026-01-28 = Week 4
 const CURRENT_WEEK = 4;
 
-// Weekly data with realistic variability - comparing 2024, 2025, and 2026 forecast
-const data = [
-  { week: 'Wk 1', y2024: 18200, y2025: 20100, y2026: 21800 },
-  { week: 'Wk 2', y2024: 19100, y2025: 21400, y2026: 22500 },
-  { week: 'Wk 3', y2024: 18700, y2025: 20800, y2026: 22100 },
-  { week: 'Wk 4', y2024: 19500, y2025: 22100, y2026: 22900 }, // Current week
-  { week: 'Wk 5', y2024: 20200, y2025: 21800, y2026: null },
-  { week: 'Wk 6', y2024: 19800, y2025: 22500, y2026: null },
-  { week: 'Wk 7', y2024: 21100, y2025: 23200, y2026: null },
-  { week: 'Wk 8', y2024: 20400, y2025: 22800, y2026: null },
-  { week: 'Wk 9', y2024: 21800, y2025: 24100, y2026: null },
-  { week: 'Wk 10', y2024: 22500, y2025: 23700, y2026: null },
-  { week: 'Wk 11', y2024: 21900, y2025: 24800, y2026: null },
-  { week: 'Wk 12', y2024: 23200, y2025: 25200, y2026: null },
-  { week: 'Wk 13', y2024: 22600, y2025: 24600, y2026: null },
-  { week: 'Wk 14', y2024: 24100, y2025: 26100, y2026: null },
-  { week: 'Wk 15', y2024: 23500, y2025: 25800, y2026: null },
-  { week: 'Wk 16', y2024: 24800, y2025: 27200, y2026: null },
-  { week: 'Wk 17', y2024: 25200, y2025: 26800, y2026: null },
-  { week: 'Wk 18', y2024: 24600, y2025: 28100, y2026: null },
-  { week: 'Wk 19', y2024: 26100, y2025: 27500, y2026: null },
-  { week: 'Wk 20', y2024: 25400, y2025: 28800, y2026: null },
-  { week: 'Wk 21', y2024: 26800, y2025: 29200, y2026: null },
-  { week: 'Wk 22', y2024: 25900, y2025: 28500, y2026: null },
-  { week: 'Wk 23', y2024: 24200, y2025: 27100, y2026: null },
-  { week: 'Wk 24', y2024: 23100, y2025: 25800, y2026: null },
-  { week: 'Wk 25', y2024: 22400, y2025: 24200, y2026: null },
-  { week: 'Wk 26', y2024: 21800, y2025: 23500, y2026: null },
-  { week: 'Wk 27', y2024: 21100, y2025: 22800, y2026: null },
-  { week: 'Wk 28', y2024: 20500, y2025: 22100, y2026: null },
-  { week: 'Wk 29', y2024: 19800, y2025: 21500, y2026: null },
-  { week: 'Wk 30', y2024: 20200, y2025: 20800, y2026: null },
-  { week: 'Wk 31', y2024: 19400, y2025: 21200, y2026: null },
-  { week: 'Wk 32', y2024: 18900, y2025: 20500, y2026: null },
-  { week: 'Wk 33', y2024: 19200, y2025: 19800, y2026: null },
-  { week: 'Wk 34', y2024: 18500, y2025: 20200, y2026: null },
-  { week: 'Wk 35', y2024: 17800, y2025: 19500, y2026: null },
-  { week: 'Wk 36', y2024: 18200, y2025: 18900, y2026: null },
-  { week: 'Wk 37', y2024: 17500, y2025: 19200, y2026: null },
-  { week: 'Wk 38', y2024: 17900, y2025: 18600, y2026: null },
-  { week: 'Wk 39', y2024: 18400, y2025: 19100, y2026: null },
-  { week: 'Wk 40', y2024: 17800, y2025: 18800, y2026: null },
-  { week: 'Wk 41', y2024: 18600, y2025: 19400, y2026: null },
-  { week: 'Wk 42', y2024: 19100, y2025: 20100, y2026: null },
-  { week: 'Wk 43', y2024: 18500, y2025: 19800, y2026: null },
-  { week: 'Wk 44', y2024: 19300, y2025: 20500, y2026: null },
-  { week: 'Wk 45', y2024: 18800, y2025: 19900, y2026: null },
-  { week: 'Wk 46', y2024: 19600, y2025: 20800, y2026: null },
-  { week: 'Wk 47', y2024: 20200, y2025: 21400, y2026: null },
-  { week: 'Wk 48', y2024: 19500, y2025: 20900, y2026: null },
-  { week: 'Wk 49', y2024: 18900, y2025: 20200, y2026: null },
-  { week: 'Wk 50', y2024: 19400, y2025: 19600, y2026: null },
-  { week: 'Wk 51', y2024: 18200, y2025: 19100, y2026: null },
-  { week: 'Wk 52', y2024: 17800, y2025: 18500, y2026: null },
-];
+import { HistoricalChartData } from '@/data/mock-data';
 
-export function HistoricalUnitsChart() {
+interface HistoricalUnitsChartProps {
+  data: HistoricalChartData[];
+}
+
+export function HistoricalUnitsChart({ data }: HistoricalUnitsChartProps) {
   return (
     <Card className='col-span-1'>
       <CardHeader className='pb-2'>
@@ -117,7 +67,7 @@ export function HistoricalUnitsChart() {
               axisLine={false}
               tickLine={false}
               tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
-              domain={[15000, 32000]}
+              domain={['auto', 'auto']}
               width={45}
             />
             <Tooltip

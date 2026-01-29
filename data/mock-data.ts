@@ -786,3 +786,297 @@ export function getProductsByCategories(
 export const STORES = getAllStores();
 export const CATEGORIES = getAllCategories();
 export const PRODUCTS = getAllProducts();
+
+// --- Dynamic Data Types ---
+
+export interface DashboardMetrics {
+  accuracy: number;
+  accuracyChange: number;
+  forecastValue: number;
+  forecastUnit: number;
+  forecastChange: number;
+  ytdValue: number;
+  ytdChange: number;
+  gapToSales: number;
+  gapToSalesChange: number;
+}
+
+export interface RevenueChartData {
+  week: string;
+  actual: number;
+  plan: number;
+}
+
+export interface HistoricalChartData {
+  week: string;
+  y2024: number;
+  y2025: number;
+  y2026: number | null;
+}
+
+export interface Promotion {
+  id: string;
+  name: string;
+  type: string;
+  startDate: string;
+  discount: string;
+  status: 'Onaylandı' | 'Taslak' | 'Beklemede';
+}
+
+export interface StockRisk {
+  sku: string;
+  name: string;
+  stock: number;
+  forecast: number;
+  days: string;
+  action: string;
+}
+
+// --- Helper Functions for Dynamic Data ---
+
+function filterProducts(
+  regions: string[],
+  stores: string[],
+  categories: string[],
+): Product[] {
+  let filtered = REGIONS;
+
+  if (regions.length > 0) {
+    filtered = filtered.filter((r) => regions.includes(r.value));
+  }
+
+  let filteredStores = filtered.flatMap((r) => r.stores);
+  if (stores.length > 0) {
+    filteredStores = filteredStores.filter((s) => stores.includes(s.value));
+  }
+
+  let filteredCategories = filteredStores.flatMap((s) => s.categories);
+  // Note: Category filtering in the UI is usually by "category value" (e.g. 'gida')
+  // but our mock data structure has categories nested.
+  // If the user selects "Gıda", we want all Gıda categories from selected stores.
+  if (categories.length > 0) {
+    // The UI passes "storeValue_categoryValue" or just "categoryValue"?
+    // Looking at getAllCategories, it returns value: `${store.value}_${category.value}`
+    // But usually filters might want to filter by generic category name (e.g. "Dairy" across all stores).
+    // Let's assume the passed `categories` are the specific IDs from the dropdown.
+    // If the dropdown uses composite keys, we check for inclusion.
+    filteredCategories = filteredCategories.filter((c) => {
+      // We need to reconstruct the key to match what's likely in the dropdown
+      // But here we don't have the parent store value easily accessible in this flat map without context.
+      // Let's rely on the fact that we are traversing.
+      // Actually, let's simplify: The `categories` arg contains unique identifiers.
+      // In `getAllCategories`, we created identifiers like `store_category`.
+      // So we need to match that.
+      // However, for a "simulation", exact matching might be too strict if we want to show *some* data.
+      // Let's assume for now we just return all products from the filtered stores if no category is selected,
+      // and if categories ARE selected, we try to match.
+      return true;
+    });
+  }
+
+  // To properly filter by specific category selections (which are store-specific in the current mock setup),
+  // we would need to pass the store context.
+  // For this mock simulation, let's gather ALL products from the filtered stores,
+  // and then if `categories` has entries, we filter products that belong to those selected category nodes.
+
+  const allProducts: Product[] = [];
+
+  filteredStores.forEach((store) => {
+    store.categories.forEach((cat) => {
+      const catKey = `${store.value}_${cat.value}`;
+      if (categories.length === 0 || categories.includes(catKey)) {
+        allProducts.push(...cat.products);
+      }
+    });
+  });
+
+  return allProducts;
+}
+
+// Deterministic pseudo-random number generator based on a seed string
+function seededRandom(seed: string) {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) {
+    const char = seed.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  const x = Math.sin(hash) * 10000;
+  return x - Math.floor(x);
+}
+
+export function getMetrics(
+  regions: string[],
+  stores: string[],
+  categories: string[],
+): DashboardMetrics {
+  // Generate metrics based on the selection "hash" to make it consistent but dynamic
+  const seed =
+    regions.join('') + stores.join('') + categories.join('') + 'metrics';
+  const rand = seededRandom(seed);
+
+  // Base values
+  const baseAccuracy = 92;
+  const baseForecastVal = 2500000;
+  const baseForecastUnit = 120000;
+
+  // Modifiers based on selection size (smaller selection = smaller absolute numbers)
+  // If no filters, we assume "All"
+  const scale =
+    regions.length === 0 && stores.length === 0
+      ? 1
+      : stores.length > 0
+        ? 0.1 * stores.length
+        : 0.3 * regions.length;
+
+  return {
+    accuracy: baseAccuracy + rand * 5, // 92% - 97%
+    accuracyChange: rand * 2 - 0.5, // -0.5% to +1.5%
+    forecastValue: baseForecastVal * scale * (0.8 + rand * 0.4),
+    forecastUnit: baseForecastUnit * scale * (0.8 + rand * 0.4),
+    forecastChange: rand * 10, // 0% - 10%
+    ytdValue: baseForecastVal * scale * 5 * (0.9 + rand * 0.2),
+    ytdChange: 10 + rand * 5,
+    gapToSales: -1 - rand * 2, // -1% to -3%
+    gapToSalesChange: -0.5 + rand * 1,
+  };
+}
+
+export function getRevenueChartData(
+  regions: string[],
+  stores: string[],
+  categories: string[],
+): RevenueChartData[] {
+  const seed =
+    regions.join('') + stores.join('') + categories.join('') + 'revenue';
+  const scale =
+    regions.length === 0 && stores.length === 0
+      ? 1
+      : stores.length > 0
+        ? 0.1 * stores.length
+        : 0.3 * regions.length;
+
+  const weeks = [
+    '6 Oca',
+    '13 Oca',
+    '20 Oca',
+    '27 Oca',
+    '3 Şub',
+    '10 Şub',
+    '17 Şub',
+    '24 Şub',
+    '3 Mar',
+    '10 Mar',
+    '17 Mar',
+    '24 Mar',
+  ];
+
+  return weeks.map((week, index) => {
+    const weekRand = seededRandom(seed + week);
+    const baseVal = 6000000 * scale;
+    // Trend: slightly up
+    const trend = 1 + index * 0.02;
+
+    const actual = baseVal * trend * (0.9 + weekRand * 0.2);
+    const plan = baseVal * trend * (0.95 + weekRand * 0.1); // Plan is smoother
+
+    return {
+      week,
+      actual: Math.round(actual),
+      plan: Math.round(plan),
+    };
+  });
+}
+
+export function getHistoricalChartData(
+  regions: string[],
+  stores: string[],
+  categories: string[],
+): HistoricalChartData[] {
+  const seed =
+    regions.join('') + stores.join('') + categories.join('') + 'history';
+  const scale =
+    regions.length === 0 && stores.length === 0
+      ? 1
+      : stores.length > 0
+        ? 0.1 * stores.length
+        : 0.3 * regions.length;
+
+  const data: HistoricalChartData[] = [];
+  for (let i = 1; i <= 52; i++) {
+    const weekRand = seededRandom(seed + `wk${i}`);
+    const seasonalFactor = 1 + Math.sin((i / 52) * Math.PI * 2) * 0.2; // Seasonal wave
+    const baseUnits = 20000 * scale * seasonalFactor;
+
+    data.push({
+      week: `Wk ${i}`,
+      y2024: Math.round(baseUnits * (0.9 + weekRand * 0.2)),
+      y2025: Math.round(baseUnits * 1.1 * (0.9 + weekRand * 0.2)),
+      y2026:
+        i <= 4 ? Math.round(baseUnits * 1.2 * (0.9 + weekRand * 0.2)) : null, // Only first 4 weeks for 2026
+    });
+  }
+  return data;
+}
+
+export function getPromotions(
+  regions: string[],
+  stores: string[],
+  categories: string[],
+): Promotion[] {
+  // Return a static list but maybe filter slightly or just return same for now
+  // In a real app, promotions would be linked to products/stores.
+  return [
+    {
+      id: 'PROMO-1024',
+      name: 'Yaz İndirimleri - Yudum Yağ',
+      type: 'Katalog',
+      startDate: '28 May',
+      discount: '%15',
+      status: 'Onaylandı',
+    },
+    {
+      id: 'PROMO-1025',
+      name: 'Çaykur Rize - Çoklu Alım',
+      type: 'VKA0',
+      startDate: '30 May',
+      discount: '3 Al 2 Öde',
+      status: 'Taslak',
+    },
+    {
+      id: 'PROMO-1026',
+      name: 'Temizlik Günleri - Solo',
+      type: 'Mağaza İçi',
+      startDate: '02 Haz',
+      discount: '%20',
+      status: 'Onaylandı',
+    },
+    {
+      id: 'PROMO-1027',
+      name: 'Kahvaltılık Fırsatları',
+      type: 'Katalog',
+      startDate: '05 Haz',
+      discount: '%10',
+      status: 'Beklemede',
+    },
+  ];
+}
+
+export function getStockRisks(
+  regions: string[],
+  stores: string[],
+  categories: string[],
+): StockRisk[] {
+  // Generate some risks based on the products in the filtered scope
+  const products = filterProducts(regions, stores, categories);
+
+  // Take top 5 products and pretend they are at risk
+  return products.slice(0, 5).map((p) => ({
+    sku: `SKU-${p.value.toUpperCase()}`,
+    name: p.label,
+    stock: p.currentStock || 0,
+    forecast: p.forecastDemand || 0,
+    days: `${Math.floor(Math.random() * 5) + 1} Gün`,
+    action: Math.random() > 0.5 ? 'Acil Sipariş' : 'Transfer',
+  }));
+}

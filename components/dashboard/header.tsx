@@ -1,8 +1,16 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import type { Section } from '@/app/page';
-import { Bell } from 'lucide-react';
+import type { Section } from '@/types/types';
+import { Bell, User, Settings, LogOut } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/shared/dropdown-menu';
 
 interface HeaderProps {
   activeSection: Section;
@@ -17,15 +25,19 @@ const sectionTitles: any = {
 };
 
 export function Header({ activeSection }: HeaderProps) {
+  const router = useRouter();
+
+  const handleLogout = () => {
+    // Clear any auth state here if needed
+    router.push('/auth/login');
+  };
+
   return (
     <header className='h-16 border-b border-border bg-background/80 backdrop-blur-sm sticky top-0 z-30 flex items-center justify-between px-6'>
       <div className='flex items-center gap-6'>
         <h1 className='text-xl font-semibold text-foreground'>
           Forecasting Dashboard
         </h1>
-        {/* <p className="text-sm text-muted-foreground">
-          Forecasting ve promosyon performansınıza genel bir bakış.
-        </p> */}
       </div>
 
       <div className='flex items-center gap-4'>
@@ -35,12 +47,34 @@ export function Header({ activeSection }: HeaderProps) {
           <span className='absolute top-1.5 right-1.5 w-2 h-2 bg-accent rounded-full animate-pulse' />
         </button>
 
-        {/* User avatar */}
-        <button className='w-9 h-9 rounded-lg overflow-hidden bg-secondary ring-2 ring-transparent hover:ring-accent/50 transition-all duration-200'>
-          <div className='w-full h-full bg-gradient-to-br from-accent/80 to-chart-1 flex items-center justify-center text-xs font-semibold text-accent-foreground'>
-            JD
-          </div>
-        </button>
+        {/* User avatar with dropdown */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className='w-9 h-9 rounded-lg overflow-hidden bg-secondary ring-2 ring-transparent hover:ring-accent/50 transition-all duration-200 focus:outline-none focus:ring-accent/50'>
+              <div className='w-full h-full bg-gradient-to-br from-accent/80 to-chart-1 flex items-center justify-center text-xs font-semibold text-accent-foreground'>
+                JD
+              </div>
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align='end' className='w-48'>
+            <DropdownMenuItem className='cursor-pointer'>
+              <User className='mr-2 h-4 w-4' />
+              <span>Profil</span>
+            </DropdownMenuItem>
+            <DropdownMenuItem className='cursor-pointer'>
+              <Settings className='mr-2 h-4 w-4' />
+              <span>Ayarlar</span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className='cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50'
+              onClick={handleLogout}
+            >
+              <LogOut className='mr-2 h-4 w-4' />
+              <span>Çıkış Yap</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </header>
   );

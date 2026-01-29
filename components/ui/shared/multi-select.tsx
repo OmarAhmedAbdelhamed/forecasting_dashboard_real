@@ -151,6 +151,48 @@ export function MultiSelect({
 
           {/* Options List */}
           <ul className='max-h-60 overflow-auto p-1 space-y-1'>
+            {filteredOptions.length > 0 && (
+              <li
+                onClick={() => {
+                  const allFilteredSelected = filteredOptions.every((option) =>
+                    selected.includes(option.value),
+                  );
+                  if (allFilteredSelected) {
+                    // Deselect all filtered options
+                    const newSelected = selected.filter(
+                      (s) => !filteredOptions.some((o) => o.value === s),
+                    );
+                    onChange(newSelected);
+                  } else {
+                    // Select all filtered options
+                    const newSelected = [
+                      ...selected,
+                      ...filteredOptions
+                        .filter((o) => !selected.includes(o.value))
+                        .map((o) => o.value),
+                    ];
+                    onChange(newSelected);
+                  }
+                }}
+                className={cn(
+                  'flex items-center justify-between px-3 py-2 text-sm md:text-base rounded-sm cursor-pointer font-semibold border-b mb-1',
+                  filteredOptions.every((option) =>
+                    selected.includes(option.value),
+                  )
+                    ? 'bg-accent text-accent-foreground'
+                    : 'hover:bg-muted',
+                )}
+              >
+                {filteredOptions.every((option) =>
+                  selected.includes(option.value),
+                )
+                  ? 'Seçimi Kaldır'
+                  : 'Tümünü Seç'}
+                {filteredOptions.every((option) =>
+                  selected.includes(option.value),
+                ) && <Check className='h-4 w-4 text-primary' />}
+              </li>
+            )}
             {filteredOptions.length === 0 ? (
               <li className='px-3 py-2 text-sm text-muted-foreground text-center'>
                 No results found
