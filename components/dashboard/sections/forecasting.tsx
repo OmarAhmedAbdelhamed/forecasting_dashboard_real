@@ -34,13 +34,19 @@ import {
 import {
   Loader2,
   TrendingUp,
-  DollarSign,
   Package,
   BarChart3,
   Sun,
   Cloud,
   CloudRain,
+  Info,
+  TurkishLira,
 } from 'lucide-react';
+import {
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/shared/tooltip';
 import { format, addDays, differenceInDays } from 'date-fns';
 
 // Data type based on user's JSON + Weather
@@ -473,7 +479,7 @@ export function ForecastingSection() {
 
         {/* Right Column: Visualization & Stats */}
         <div className='lg:col-span-8 space-y-3 2xl:space-y-4'>
-          {forecastData ? (
+          {forecastData && (
             <>
               {/* Summary Stats */}
               <div className='grid gap-2 2xl:gap-4 md:grid-cols-3'>
@@ -498,7 +504,7 @@ export function ForecastingSection() {
                     <CardTitle className='text-sm 2xl:text-base font-medium'>
                       Toplam Ciro
                     </CardTitle>
-                    <DollarSign className='h-4 w-4 text-muted-foreground' />
+                    <TurkishLira className='h-4 w-4 text-muted-foreground' />
                   </CardHeader>
                   <CardContent className='pb-3 2xl:pb-4'>
                     <div className='text-xl 2xl:text-2xl font-bold'>
@@ -701,21 +707,8 @@ export function ForecastingSection() {
                   </div>
                 </CardContent>
               </Card>
-            </>
-          ) : (
-            <div className='h-[350px] flex items-center justify-center border-2 border-dashed rounded-lg text-muted-foreground p-12 text-center bg-muted/20'>
-              <div className='space-y-3'>
-                <BarChart3 className='mx-auto h-12 w-12 opacity-50' />
-                <div className='space-y-1'>
-                  <h3 className='text-lg font-semibold'>Analize Hazır</h3>
-                  <p className='text-sm'>
-                    Tahmin oluşturmak için soldaki parametreleri ayarlayın ve
-                    "Analiz Et" butonuna tıklayın.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
+
+
 
           {/* NEW: Advanced Analytics Module (Decision Support) */}
           <div className='flex flex-col gap-4 2xl:gap-6'>
@@ -1105,6 +1098,8 @@ export function ForecastingSection() {
               </CardContent>
             </Card>
           </div>
+          </>
+          )}
         </div>
       </div>
     </div>
