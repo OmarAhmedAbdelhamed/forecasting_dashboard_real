@@ -73,7 +73,10 @@ import {
   PROMOTIONS,
   REGIONS_FLAT as REGIONS,
   CATEGORIES,
+  PROMOTION_HISTORY_DATA,
 } from '@/data/mock-data';
+import { ExportPromotionModal } from '@/components/dashboard/modals/export-promotion-modal';
+import { HardDriveDownload } from 'lucide-react'; // Import Icon
 
 // Custom X-Axis Tick Component for Weather
 const CustomizedAxisTick = (props: any) => {
@@ -146,6 +149,7 @@ export function ForecastingSection() {
 
   // Screen size detection for responsive charts
   const [is2xl, setIs2xl] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -247,12 +251,26 @@ export function ForecastingSection() {
   return (
     <div className='space-y-2 2xl:space-y-4'>
       <div className='flex flex-col gap-1'>
-        <h2 className='text-2xl 2xl:text-3xl font-bold tracking-tight'>
-          Fiyatlandırma ve Promosyon Analizi
-        </h2>
-        <p className='text-sm 2xl:text-base text-muted-foreground'>
-          Promosyonların talep, ciro ve stok üzerindeki etkisini simüle edin.
-        </p>
+        <div className="flex items-center justify-between">
+           <div>
+            <h2 className='text-2xl 2xl:text-3xl font-bold tracking-tight'>
+            Fiyatlandırma ve Promosyon Analizi
+            </h2>
+            <p className='text-sm 2xl:text-base text-muted-foreground'>
+            Promosyonların talep, ciro ve stok üzerindeki etkisini simüle edin.
+            </p>
+           </div>
+           
+           <Button
+            variant='outline'
+            size='icon'
+            onClick={() => setIsExportModalOpen(true)}
+            className='h-10 w-10 2xl:h-12 2xl:w-12 border-[#FFB840] bg-[#FFB840]/10 text-[#0D1E3A] hover:bg-[#FFB840] hover:text-[#0D1E3A] transition-all duration-200'
+            title='Verileri Dışa Aktar'
+          >
+            <HardDriveDownload className='h-5 w-5 2xl:h-6 2xl:w-6' />
+          </Button>
+        </div>
       </div>
 
       <div className='grid gap-3 2xl:gap-4 lg:grid-cols-12'>
@@ -939,22 +957,7 @@ export function ForecastingSection() {
                     Finansal ve operasyonel metrikler
                   </CardDescription>
                 </div>
-                <div className='flex gap-2'>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    className='h-7 2xl:h-9 text-xs 2xl:text-sm'
-                  >
-                    Filtrele
-                  </Button>
-                  <Button
-                    variant='outline'
-                    size='sm'
-                    className='h-7 2xl:h-9 text-xs 2xl:text-sm'
-                  >
-                    Dışa Aktar
-                  </Button>
-                </div>
+
               </CardHeader>
               <CardContent className='p-0 2xl:p-1'>
                 <div className='border-t'>
@@ -977,52 +980,8 @@ export function ForecastingSection() {
                       </tr>
                     </thead>
                     <tbody className='divide-y'>
-                      {[
-                        {
-                          date: '12-19 Mayıs 2025',
-                          name: 'Bahar Temizliği',
-                          type: 'KATALOG',
-                          uplift: '+42%',
-                          upliftVal: '₺12.4k',
-                          profit: '+₺3.2k',
-                          roi: 142,
-                          stock: 'OK',
-                          forecast: '92%',
-                        },
-                        {
-                          date: '05-12 Nisan 2025',
-                          name: 'Ramazan Paketi',
-                          type: 'ZKAE',
-                          uplift: '+55%',
-                          upliftVal: '₺18.1k',
-                          profit: '-₺1.2k',
-                          roi: -15,
-                          stock: 'OOS',
-                          forecast: '65%',
-                        },
-                        {
-                          date: '10-14 Şubat 2025',
-                          name: 'Sevgililer Günü',
-                          type: 'VKA0',
-                          uplift: '+18%',
-                          upliftVal: '₺4.5k',
-                          profit: '+₺0.8k',
-                          roi: 45,
-                          stock: 'Over',
-                          forecast: '88%',
-                        },
-                        {
-                          date: '15-20 Ocak 2025',
-                          name: 'Kış İndirimi',
-                          type: 'GAZETE',
-                          uplift: '+30%',
-                          upliftVal: '₺9.2k',
-                          profit: '+₺1.5k',
-                          roi: 85,
-                          stock: 'OK',
-                          forecast: '95%',
-                        },
-                      ].map((row, i) => (
+
+                      {PROMOTION_HISTORY_DATA.map((row, i) => (
                         <tr
                           key={i}
                           className='group hover:bg-muted/30 transition-colors cursor-pointer'
@@ -1102,6 +1061,11 @@ export function ForecastingSection() {
           )}
         </div>
       </div>
+      <ExportPromotionModal 
+        open={isExportModalOpen} 
+        onOpenChange={setIsExportModalOpen}
+        initialData={PROMOTION_HISTORY_DATA} // Optionally pass simulated data here if you extended the modal to accept it
+      />
     </div>
   );
 }
