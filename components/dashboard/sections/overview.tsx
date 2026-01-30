@@ -15,6 +15,11 @@ import {
   CardTitle,
 } from '@/components/ui/shared/card';
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/shared/tooltip';
+import {
   TrendingUp,
   Target,
   AlertTriangle,
@@ -22,6 +27,7 @@ import {
   Tags,
   ArrowUpRight,
   ArrowDownRight,
+  Info,
 } from 'lucide-react';
 import {
   REGIONS,
@@ -166,30 +172,94 @@ export function OverviewSection() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className='flex flex-wrap justify-center gap-4 h-auto'>
-                <div className='bg-card border rounded-lg p-4 flex flex-col items-center justify-center text-center shadow-md hover:shadow-md transition-shadow cursor-pointer w-40 h-40'>
-                  <span className='text-lg font-medium text-muted-foreground mb-1'>
+              <div className='grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3'>
+                <div className='bg-card border rounded-lg p-4 2xl:p-6 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer aspect-square max-w-[180px] mx-auto w-full relative group'>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className='absolute top-2 right-2 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
+                        <Info className='h-4 w-4 2xl:h-5 2xl:w-5' />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side='top'
+                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                    >
+                      Düşük büyüme gösteren ürün kategorileri. Pazarlama
+                      stratejisi gözden geçirilmeli.
+                    </TooltipContent>
+                  </Tooltip>
+                  <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-1'>
                     Low Growth
                   </span>
-                  <span className='text-3xl font-bold text-red-600'>4</span>
+                  <span className='text-3xl 2xl:text-4xl font-bold text-red-600'>
+                    4
+                  </span>
                 </div>
-                <div className='bg-card border rounded-lg p-4 flex flex-col items-center justify-center text-center shadow-md hover:shadow-md transition-shadow cursor-pointer w-40 h-40'>
-                  <span className='text-lg font-medium text-muted-foreground mb-1'>
+                <div className='bg-card border rounded-lg p-4 2xl:p-6 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer aspect-square max-w-[180px] mx-auto w-full relative group'>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className='absolute top-2 right-2 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
+                        <Info className='h-4 w-4 2xl:h-5 2xl:w-5' />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side='top'
+                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                    >
+                      Yüksek büyüme gösteren ürün kategorileri. Stok ve tedarik
+                      planlaması öncelikli.
+                    </TooltipContent>
+                  </Tooltip>
+                  <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-1'>
                     High Growth
                   </span>
-                  <span className='text-3xl font-bold text-green-600'>12</span>
+                  <span className='text-3xl 2xl:text-4xl font-bold text-green-600'>
+                    12
+                  </span>
                 </div>
-                <div className='bg-card border rounded-lg p-4 flex flex-col items-center justify-center text-center shadow-md hover:shadow-md transition-shadow cursor-pointer w-40 h-40'>
-                  <span className='text-lg font-medium text-muted-foreground mb-1'>
+                <div className='bg-card border rounded-lg p-4 2xl:p-6 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer aspect-square max-w-[180px] mx-auto w-full relative group'>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className='absolute top-2 right-2 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
+                        <Info className='h-4 w-4 2xl:h-5 2xl:w-5' />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side='top'
+                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                    >
+                      Tahmin doğruluğu düşük olan ürünler. Model iyileştirmesi
+                      gerekebilir.
+                    </TooltipContent>
+                  </Tooltip>
+                  <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-1'>
                     Forecast Hatalar
                   </span>
-                  <span className='text-3xl font-bold text-orange-600'>7</span>
+                  <span className='text-3xl 2xl:text-4xl font-bold text-orange-600'>
+                    7
+                  </span>
                 </div>
-                <div className='bg-card border rounded-lg p-4 flex flex-col items-center justify-center text-center shadow-md hover:shadow-md transition-shadow cursor-pointer w-40 h-40'>
-                  <span className='text-lg font-medium text-muted-foreground mb-1'>
+                <div className='bg-card border rounded-lg p-4 2xl:p-6 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer aspect-square max-w-[180px] mx-auto w-full relative group'>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className='absolute top-2 right-2 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
+                        <Info className='h-4 w-4 2xl:h-5 2xl:w-5' />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side='top'
+                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                    >
+                      Kritik stok seviyesinde olan ürünler. Acil tedarik
+                      aksiyonu gerekli.
+                    </TooltipContent>
+                  </Tooltip>
+                  <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-1'>
                     Kritik Stok
                   </span>
-                  <span className='text-3xl font-bold text-red-600'>3</span>
+                  <span className='text-3xl 2xl:text-4xl font-bold text-red-600'>
+                    3
+                  </span>
                 </div>
               </div>
             </CardContent>

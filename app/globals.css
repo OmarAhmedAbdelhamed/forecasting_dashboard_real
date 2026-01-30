@@ -41,11 +41,16 @@
   --ring: #FFB840;
 
   /* Chart Colors */
-  --chart-1: #0D1E3A; /* Lacivert */
-  --chart-2: #628BB1; /* Mavi */
-  --chart-3: #FFB840; /* Hardal */
-  --chart-4: #22c55e; /* Green */
-  --chart-5: #2D3748; /* Dark Grey */
+  --chart-1: #0D1E3A;
+  /* Lacivert */
+  --chart-2: #628BB1;
+  /* Mavi */
+  --chart-3: #FFB840;
+  /* Hardal */
+  --chart-4: #22c55e;
+  /* Green */
+  --chart-5: #2D3748;
+  /* Dark Grey */
 
   --radius: 0.5rem;
 
@@ -148,7 +153,27 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Responsive scaling for high-resolution displays */
+@media (min-width: 1920px) {
+  html {
+    font-size: 17px;
+  }
+}
+
+@media (min-width: 2560px) {
+  html {
+    font-size: 18px;
+  }
+}
+
+@media (min-width: 3840px) {
+  html {
+    font-size: 20px;
   }
 }

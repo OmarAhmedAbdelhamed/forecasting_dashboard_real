@@ -90,123 +90,152 @@ export default function LoginPage() {
   };
 
   return (
-    <Card className='w-full max-w-md mx-auto mt-20 shadow-xl'>
-      <CardHeader className='space-y-1'>
-        <CardTitle className='text-2xl font-bold'>Giriş Yap</CardTitle>
-        <CardDescription>
-          Hesabınıza erişmek için bilgilerinizi girin.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleLogin} className='space-y-4'>
-          <div className='space-y-2'>
-            <Label htmlFor='email'>E-posta</Label>
-            <Input
-              id='email'
-              type='email'
-              placeholder='ornek@sirket.com'
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onBlur={() => handleBlur('email')}
-              className={`bg-white border-slate-200 focus:border-primary focus:ring-primary/20 ${
-                touched.email && errors.email
-                  ? 'border-red-500 focus:border-red-500'
-                  : ''
-              }`}
-            />
-            {touched.email && errors.email && (
-              <p className='text-sm text-red-500'>{errors.email}</p>
-            )}
-          </div>
-          <div className='space-y-2'>
-            <div className='flex items-center justify-between'>
-              <Label htmlFor='password'>Şifre</Label>
-              <Link
-                href='#'
-                className='text-sm font-medium text-primary hover:underline'
-              >
-                Şifremi unuttum?
-              </Link>
-            </div>
-            <div className='relative'>
+    <div className='w-full max-w-md 2xl:max-w-lg mx-auto mt-12 2xl:mt-16'>
+      {/* Logo Section */}
+      <div className='flex flex-col items-center mb-8 2xl:mb-10'>
+        <div className='w-20 h-20 2xl:w-24 2xl:h-24 rounded-2xl bg-white shadow-lg flex items-center justify-center p-2 mb-4'>
+          <img
+            src='/bee2_ai_logo.svg'
+            alt='Bee2 AI'
+            className='w-full h-full object-contain'
+          />
+        </div>
+        <h1 className='text-2xl 2xl:text-3xl font-bold text-foreground'>
+          Bee2 AI Forecasting
+        </h1>
+        <p className='text-sm 2xl:text-base text-muted-foreground mt-1'>
+          Tahminleme ve Planlama Platformu
+        </p>
+      </div>
+
+      <Card className='shadow-xl'>
+        <CardHeader className='space-y-1 2xl:space-y-2'>
+          <CardTitle className='text-2xl 2xl:text-3xl font-bold'>
+            Giriş Yap
+          </CardTitle>
+          <CardDescription className='2xl:text-base'>
+            Hesabınıza erişmek için bilgilerinizi girin.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleLogin} className='space-y-4 2xl:space-y-5'>
+            <div className='space-y-2'>
+              <Label htmlFor='email' className='2xl:text-base'>
+                E-posta
+              </Label>
               <Input
-                id='password'
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onBlur={() => handleBlur('password')}
-                className={`bg-white border-slate-200 focus:border-primary focus:ring-primary/20 pr-10 ${
-                  touched.password && errors.password
+                id='email'
+                type='email'
+                placeholder='ornek@sirket.com'
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => handleBlur('email')}
+                className={`bg-white border-slate-200 focus:border-primary focus:ring-primary/20 2xl:h-12 2xl:text-base ${
+                  touched.email && errors.email
                     ? 'border-red-500 focus:border-red-500'
                     : ''
                 }`}
               />
-              <button
-                type='button'
-                onClick={() => setShowPassword(!showPassword)}
-                className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none'
-              >
-                {showPassword ? (
-                  <EyeOff className='h-4 w-4' />
-                ) : (
-                  <Eye className='h-4 w-4' />
-                )}
-              </button>
+              {touched.email && errors.email && (
+                <p className='text-sm 2xl:text-base text-red-500'>
+                  {errors.email}
+                </p>
+              )}
             </div>
-            {touched.password && errors.password && (
-              <p className='text-sm text-red-500'>{errors.password}</p>
-            )}
-          </div>
-          <div className='flex items-center space-x-2'>
-            <Checkbox
-              id='remember'
-              className='border-slate-200 bg-white data-[state=checked]:bg-primary data-[state=checked]:border-primary'
-            />
-            <Label
-              htmlFor='remember'
-              className='text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer'
+            <div className='space-y-2'>
+              <div className='flex items-center justify-between'>
+                <Label htmlFor='password' className='2xl:text-base'>
+                  Şifre
+                </Label>
+                <Link
+                  href='#'
+                  className='text-sm 2xl:text-base font-medium text-primary hover:underline'
+                >
+                  Şifremi unuttum?
+                </Link>
+              </div>
+              <div className='relative'>
+                <Input
+                  id='password'
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onBlur={() => handleBlur('password')}
+                  className={`bg-white border-slate-200 focus:border-primary focus:ring-primary/20 pr-10 2xl:h-12 2xl:text-base ${
+                    touched.password && errors.password
+                      ? 'border-red-500 focus:border-red-500'
+                      : ''
+                  }`}
+                />
+                <button
+                  type='button'
+                  onClick={() => setShowPassword(!showPassword)}
+                  className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none'
+                >
+                  {showPassword ? (
+                    <EyeOff className='h-4 w-4 2xl:h-5 2xl:w-5' />
+                  ) : (
+                    <Eye className='h-4 w-4 2xl:h-5 2xl:w-5' />
+                  )}
+                </button>
+              </div>
+              {touched.password && errors.password && (
+                <p className='text-sm 2xl:text-base text-red-500'>
+                  {errors.password}
+                </p>
+              )}
+            </div>
+            <div className='flex items-center space-x-2'>
+              <Checkbox
+                id='remember'
+                className='border-slate-200 bg-white data-[state=checked]:bg-primary data-[state=checked]:border-primary 2xl:h-5 2xl:w-5'
+              />
+              <Label
+                htmlFor='remember'
+                className='text-sm 2xl:text-base font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer'
+              >
+                Beni hatırla
+              </Label>
+            </div>
+            <Button
+              type='submit'
+              className='w-full font-semibold shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] 2xl:h-12 2xl:text-base'
+              disabled={isLoading}
             >
-              Beni hatırla
-            </Label>
+              {isLoading ? (
+                <>
+                  <Loader2 className='mr-2 h-4 w-4 2xl:h-5 2xl:w-5 animate-spin' />
+                  Giriş Yapılıyor...
+                </>
+              ) : (
+                <>
+                  Giriş Yap
+                  <ArrowRight className='ml-2 h-4 w-4 2xl:h-5 2xl:w-5' />
+                </>
+              )}
+            </Button>
+          </form>
+        </CardContent>
+        <CardFooter className='flex flex-col space-y-4 text-center text-sm 2xl:text-base text-muted-foreground'>
+          <div className='relative w-full'>
+            <div className='absolute inset-0 flex items-center'>
+              <span className='w-full border-t border-slate-200' />
+            </div>
+            <div className='relative flex justify-center text-xs 2xl:text-sm uppercase'>
+              <span className='bg-white px-2 text-muted-foreground'>Veya</span>
+            </div>
           </div>
-          <Button
-            type='submit'
-            className='w-full font-semibold shadow-lg shadow-primary/20 transition-all hover:scale-[1.02]'
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                Giriş Yapılıyor...
-              </>
-            ) : (
-              <>
-                Giriş Yap
-                <ArrowRight className='ml-2 h-4 w-4' />
-              </>
-            )}
-          </Button>
-        </form>
-      </CardContent>
-      <CardFooter className='flex flex-col space-y-4 text-center text-sm text-muted-foreground'>
-        <div className='relative w-full'>
-          <div className='absolute inset-0 flex items-center'>
-            <span className='w-full border-t border-slate-200' />
+          <div className='text-center'>
+            Hesabınız yok mu?{' '}
+            <Link
+              href='/auth/register'
+              className='font-semibold text-primary hover:underline'
+            >
+              Kayıt Ol
+            </Link>
           </div>
-          <div className='relative flex justify-center text-xs uppercase'>
-            <span className='bg-white px-2 text-muted-foreground'>Veya</span>
-          </div>
-        </div>
-        <div className='text-center'>
-          Hesabınız yok mu?{' '}
-          <Link
-            href='/auth/register'
-            className='font-semibold text-primary hover:underline'
-          >
-            Kayıt Ol
-          </Link>
-        </div>
-      </CardFooter>
-    </Card>
+        </CardFooter>
+      </Card>
+    </div>
   );
 }

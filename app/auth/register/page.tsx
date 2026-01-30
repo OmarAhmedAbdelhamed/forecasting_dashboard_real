@@ -154,193 +154,234 @@ export default function RegisterPage() {
   };
 
   return (
-    <Card className='w-full max-w-md mx-auto mt-12 shadow-xl'>
-      <CardHeader className='space-y-1'>
-        <CardTitle className='text-2xl font-bold'>Kayıt Ol</CardTitle>
-        <CardDescription>
-          Yeni bir hesap oluşturmak için bilgilerinizi girin.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleRegister} className='space-y-4'>
-          <div className='grid grid-cols-2 gap-4'>
-            <div className='space-y-2'>
-              <Label htmlFor='name'>Ad</Label>
-              <Input
-                id='name'
-                placeholder='Ahmet'
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onBlur={() => handleBlur('name')}
-                className={getInputClassName('name')}
-              />
-              {touched.name && errors.name && (
-                <p className='text-xs text-red-500'>{errors.name}</p>
-              )}
-            </div>
-            <div className='space-y-2'>
-              <Label htmlFor='surname'>Soyad</Label>
-              <Input
-                id='surname'
-                placeholder='Yılmaz'
-                value={surname}
-                onChange={(e) => setSurname(e.target.value)}
-                onBlur={() => handleBlur('surname')}
-                className={getInputClassName('surname')}
-              />
-              {touched.surname && errors.surname && (
-                <p className='text-xs text-red-500'>{errors.surname}</p>
-              )}
-            </div>
-          </div>
+    <div className='w-full max-w-md 2xl:max-w-lg mx-auto mt-8 2xl:mt-12'>
+      {/* Logo Section */}
+      <div className='flex flex-col items-center mb-6 2xl:mb-8'>
+        <div className='w-16 h-16 2xl:w-20 2xl:h-20 rounded-xl bg-white shadow-lg flex items-center justify-center p-2 mb-3'>
+          <img
+            src='/bee2_ai_logo.svg'
+            alt='Bee2 AI'
+            className='w-full h-full object-contain'
+          />
+        </div>
+        <h1 className='text-xl 2xl:text-2xl font-bold text-foreground'>
+          Bee2 AI Forecasting
+        </h1>
+        <p className='text-xs 2xl:text-sm text-muted-foreground mt-1'>
+          Tahminleme ve Planlama Platformu
+        </p>
+      </div>
 
-          <div className='space-y-2'>
-            <Label htmlFor='email'>E-posta</Label>
-            <Input
-              id='email'
-              type='email'
-              placeholder='ornek@sirket.com'
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              onBlur={() => handleBlur('email')}
-              className={getInputClassName('email')}
-            />
-            {touched.email && errors.email && (
-              <p className='text-sm text-red-500'>{errors.email}</p>
-            )}
-          </div>
-
-          <div className='space-y-2'>
-            <Label htmlFor='password'>Şifre</Label>
-            <div className='relative'>
-              <Input
-                id='password'
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onBlur={() => handleBlur('password')}
-                className={`${getInputClassName('password')} pr-10`}
-              />
-              <button
-                type='button'
-                onClick={() => setShowPassword(!showPassword)}
-                className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none'
-              >
-                {showPassword ? (
-                  <EyeOff className='h-4 w-4' />
-                ) : (
-                  <Eye className='h-4 w-4' />
-                )}
-              </button>
-            </div>
-            {touched.password && errors.password && (
-              <p className='text-sm text-red-500'>{errors.password}</p>
-            )}
-
-            {/* Password strength indicator */}
-            {password && (
+      <Card className='shadow-xl'>
+        <CardHeader className='space-y-1 2xl:space-y-2'>
+          <CardTitle className='text-2xl 2xl:text-3xl font-bold'>
+            Kayıt Ol
+          </CardTitle>
+          <CardDescription className='2xl:text-base'>
+            Yeni bir hesap oluşturmak için bilgilerinizi girin.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleRegister} className='space-y-4 2xl:space-y-5'>
+            <div className='grid grid-cols-2 gap-4'>
               <div className='space-y-2'>
-                <div className='flex items-center gap-2'>
-                  <div className='flex-1 h-1.5 bg-gray-200 rounded-full overflow-hidden'>
-                    <div
-                      className={`h-full transition-all duration-300 ${passwordStrength.color}`}
-                      style={{
-                        width: `${(passwordStrength.score / 5) * 100}%`,
-                      }}
-                    />
-                  </div>
-                  <span className='text-xs font-medium text-gray-600'>
-                    {passwordStrength.label}
-                  </span>
-                </div>
-                <div className='grid grid-cols-2 gap-1'>
-                  {passwordRequirements.map((req, index) => (
-                    <div
-                      key={index}
-                      className={`flex items-center gap-1 text-xs ${
-                        req.met ? 'text-green-600' : 'text-gray-400'
-                      }`}
-                    >
-                      {req.met ? (
-                        <Check className='h-3 w-3' />
-                      ) : (
-                        <X className='h-3 w-3' />
-                      )}
-                      {req.label}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className='space-y-2'>
-            <Label htmlFor='confirmPassword'>Şifre Tekrarı</Label>
-            <div className='relative'>
-              <Input
-                id='confirmPassword'
-                type={showConfirmPassword ? 'text' : 'password'}
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                onBlur={() => handleBlur('confirmPassword')}
-                className={`${getInputClassName('confirmPassword')} pr-10`}
-              />
-              <button
-                type='button'
-                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none'
-              >
-                {showConfirmPassword ? (
-                  <EyeOff className='h-4 w-4' />
-                ) : (
-                  <Eye className='h-4 w-4' />
+                <Label htmlFor='name' className='2xl:text-base'>
+                  Ad
+                </Label>
+                <Input
+                  id='name'
+                  placeholder='Ahmet'
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onBlur={() => handleBlur('name')}
+                  className={`${getInputClassName('name')} 2xl:h-12 2xl:text-base`}
+                />
+                {touched.name && errors.name && (
+                  <p className='text-xs 2xl:text-sm text-red-500'>
+                    {errors.name}
+                  </p>
                 )}
-              </button>
+              </div>
+              <div className='space-y-2'>
+                <Label htmlFor='surname' className='2xl:text-base'>
+                  Soyad
+                </Label>
+                <Input
+                  id='surname'
+                  placeholder='Yılmaz'
+                  value={surname}
+                  onChange={(e) => setSurname(e.target.value)}
+                  onBlur={() => handleBlur('surname')}
+                  className={`${getInputClassName('surname')} 2xl:h-12 2xl:text-base`}
+                />
+                {touched.surname && errors.surname && (
+                  <p className='text-xs 2xl:text-sm text-red-500'>
+                    {errors.surname}
+                  </p>
+                )}
+              </div>
             </div>
-            {touched.confirmPassword && errors.confirmPassword && (
-              <p className='text-sm text-red-500'>{errors.confirmPassword}</p>
-            )}
-          </div>
 
-          <Button
-            type='submit'
-            className='w-full font-semibold shadow-lg shadow-primary/20 transition-all hover:scale-[1.02]'
-            disabled={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className='mr-2 h-4 w-4 animate-spin' />
-                Kayıt Olunuyor...
-              </>
-            ) : (
-              <>
-                Kayıt Ol
-                <ArrowRight className='ml-2 h-4 w-4' />
-              </>
-            )}
-          </Button>
-        </form>
-      </CardContent>
-      <CardFooter className='flex flex-col space-y-4 text-center text-sm text-muted-foreground'>
-        <div className='relative w-full'>
-          <div className='absolute inset-0 flex items-center'>
-            <span className='w-full border-t border-slate-200' />
+            <div className='space-y-2'>
+              <Label htmlFor='email' className='2xl:text-base'>
+                E-posta
+              </Label>
+              <Input
+                id='email'
+                type='email'
+                placeholder='ornek@sirket.com'
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                onBlur={() => handleBlur('email')}
+                className={`${getInputClassName('email')} 2xl:h-12 2xl:text-base`}
+              />
+              {touched.email && errors.email && (
+                <p className='text-sm 2xl:text-base text-red-500'>
+                  {errors.email}
+                </p>
+              )}
+            </div>
+
+            <div className='space-y-2'>
+              <Label htmlFor='password' className='2xl:text-base'>
+                Şifre
+              </Label>
+              <div className='relative'>
+                <Input
+                  id='password'
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onBlur={() => handleBlur('password')}
+                  className={`${getInputClassName('password')} pr-10 2xl:h-12 2xl:text-base`}
+                />
+                <button
+                  type='button'
+                  onClick={() => setShowPassword(!showPassword)}
+                  className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none'
+                >
+                  {showPassword ? (
+                    <EyeOff className='h-4 w-4 2xl:h-5 2xl:w-5' />
+                  ) : (
+                    <Eye className='h-4 w-4 2xl:h-5 2xl:w-5' />
+                  )}
+                </button>
+              </div>
+              {touched.password && errors.password && (
+                <p className='text-sm 2xl:text-base text-red-500'>
+                  {errors.password}
+                </p>
+              )}
+
+              {/* Password strength indicator */}
+              {password && (
+                <div className='space-y-2'>
+                  <div className='flex items-center gap-2'>
+                    <div className='flex-1 h-1.5 2xl:h-2 bg-gray-200 rounded-full overflow-hidden'>
+                      <div
+                        className={`h-full transition-all duration-300 ${passwordStrength.color}`}
+                        style={{
+                          width: `${(passwordStrength.score / 5) * 100}%`,
+                        }}
+                      />
+                    </div>
+                    <span className='text-xs 2xl:text-sm font-medium text-gray-600'>
+                      {passwordStrength.label}
+                    </span>
+                  </div>
+                  <div className='grid grid-cols-2 gap-1'>
+                    {passwordRequirements.map((req, index) => (
+                      <div
+                        key={index}
+                        className={`flex items-center gap-1 text-xs 2xl:text-sm ${
+                          req.met ? 'text-green-600' : 'text-gray-400'
+                        }`}
+                      >
+                        {req.met ? (
+                          <Check className='h-3 w-3 2xl:h-4 2xl:w-4' />
+                        ) : (
+                          <X className='h-3 w-3 2xl:h-4 2xl:w-4' />
+                        )}
+                        {req.label}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className='space-y-2'>
+              <Label htmlFor='confirmPassword' className='2xl:text-base'>
+                Şifre Tekrarı
+              </Label>
+              <div className='relative'>
+                <Input
+                  id='confirmPassword'
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onBlur={() => handleBlur('confirmPassword')}
+                  className={`${getInputClassName('confirmPassword')} pr-10 2xl:h-12 2xl:text-base`}
+                />
+                <button
+                  type='button'
+                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none'
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className='h-4 w-4 2xl:h-5 2xl:w-5' />
+                  ) : (
+                    <Eye className='h-4 w-4 2xl:h-5 2xl:w-5' />
+                  )}
+                </button>
+              </div>
+              {touched.confirmPassword && errors.confirmPassword && (
+                <p className='text-sm 2xl:text-base text-red-500'>
+                  {errors.confirmPassword}
+                </p>
+              )}
+            </div>
+
+            <Button
+              type='submit'
+              className='w-full font-semibold shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] 2xl:h-12 2xl:text-base'
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <>
+                  <Loader2 className='mr-2 h-4 w-4 2xl:h-5 2xl:w-5 animate-spin' />
+                  Kayıt Olunuyor...
+                </>
+              ) : (
+                <>
+                  Kayıt Ol
+                  <ArrowRight className='ml-2 h-4 w-4 2xl:h-5 2xl:w-5' />
+                </>
+              )}
+            </Button>
+          </form>
+        </CardContent>
+        <CardFooter className='flex flex-col space-y-4 text-center text-sm 2xl:text-base text-muted-foreground'>
+          <div className='relative w-full'>
+            <div className='absolute inset-0 flex items-center'>
+              <span className='w-full border-t border-slate-200' />
+            </div>
+            <div className='relative flex justify-center text-xs 2xl:text-sm uppercase'>
+              <span className='bg-white px-2 text-muted-foreground'>
+                Zaten hesabınız var mı?
+              </span>
+            </div>
           </div>
-          <div className='relative flex justify-center text-xs uppercase'>
-            <span className='bg-white px-2 text-muted-foreground'>
-              Zaten hesabınız var mı?
-            </span>
+          <div className='text-center'>
+            <Link
+              href='/auth/login'
+              className='font-semibold text-primary hover:underline'
+            >
+              Giriş Yap
+            </Link>
           </div>
-        </div>
-        <div className='text-center'>
-          <Link
-            href='/auth/login'
-            className='font-semibold text-primary hover:underline'
-          >
-            Giriş Yap
-          </Link>
-        </div>
-      </CardFooter>
-    </Card>
+        </CardFooter>
+      </Card>
+    </div>
   );
 }

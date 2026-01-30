@@ -37,3 +37,14 @@ export const PROMOTIONS = [
   { value: 'GAZETE', label: 'GAZETE İLANI' },
   { value: '50TL_OP', label: '50 TL üzeri Operasyon' },
 ];
+
+export const REYONLAR = [
+  { value: 'kasap', label: 'Kasap' },
+  { value: 'manav', label: 'Manav' },
+  { value: 'sut_urunleri', label: 'Süt Ürünleri' },
+  { value: 'atistirmalik', label: 'Atıştırmalık' },
+  { value: 'icecekler', label: 'İçecekler' },
+  { value: 'temizlik', label: 'Temizlik' },
+  { value: 'dondurma', label: 'Dondurma' },
+  { value: 'unlu_mamuller', label: 'Unlu Mamuller' },
+];

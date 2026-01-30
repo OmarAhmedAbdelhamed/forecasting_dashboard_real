@@ -1,22 +1,14 @@
 'use client';
 
 import React from 'react';
-import LucideCircleDollarSignIcon from 'lucide-react'; // Import the missing icon component
 
 import { cn } from '@/lib/utils';
 import type { Section } from '@/types/types';
 import {
   LayoutDashboard,
-  BarChart3,
-  ChevronLeft,
-  ChevronRight,
-  CircleDollarSign,
-  Settings,
-  LineChart,
+  TrendingUp,
   Package,
   Tag,
-  Calendar,
-  TrendingUp,
   CalendarRange,
 } from 'lucide-react';
 
@@ -44,35 +36,37 @@ export function Sidebar({
   return (
     <aside
       className={cn(
-        'fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-out flex flex-col',
-        collapsed ? 'w-[72px]' : 'w-[280px] lg:w-[300px] shadow-2xl',
+        'fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-out flex flex-col overflow-hidden',
+        collapsed ? 'w-[72px]' : 'w-[280px] lg:w-[340px] shadow-2xl',
       )}
       onMouseEnter={() => onCollapsedChange(false)}
       onMouseLeave={() => onCollapsedChange(true)}
     >
       {/* Logo */}
-      <div className='h-16 flex items-center px-4 border-b border-sidebar-border'>
-        <div className='flex items-center gap-3'>
-          <div className='w-9 h-9 lg:w-10 lg:h-10 rounded-lg flex items-center justify-center shrink-0 bg-white overflow-hidden p-1'>
+      <div className='h-16 flex items-center border-b border-sidebar-border overflow-hidden'>
+        {/* Fixed-width logo container for centering when collapsed */}
+        <div className='w-[72px] shrink-0 flex items-center justify-center'>
+          <div className='w-10 h-10 rounded-lg flex items-center justify-center bg-white overflow-hidden p-1'>
             <img
               src='/bee2_ai_logo.svg'
               alt='Bee2 AI'
               className='w-full h-full object-contain'
             />
           </div>
-          <span
-            className={cn(
-              'font-semibold text-lg lg:text-xl text-sidebar-foreground whitespace-nowrap transition-all duration-300',
-              collapsed ? 'opacity-0 w-0' : 'opacity-100 w-auto',
-            )}
-          >
-            Bee2 AI Forecasting
-          </span>
         </div>
+        {/* Text that fades out - positioned after the fixed container */}
+        <span
+          className={cn(
+            'font-semibold text-lg lg:text-xl text-sidebar-foreground whitespace-nowrap transition-opacity duration-300',
+            collapsed ? 'opacity-0' : 'opacity-100',
+          )}
+        >
+          Bee2 AI Forecasting
+        </span>
       </div>
 
       {/* Navigation */}
-      <nav className='flex-1 px-3 py-4 space-y-1 overflow-hidden'>
+      <nav className='flex-1 py-4 px-1 space-y-1 overflow-hidden'>
         {navigation.map((item) => {
           const Icon = item.icon;
           const isActive = activeSection === item.href;
@@ -82,7 +76,7 @@ export function Sidebar({
               key={item.href}
               onClick={() => onSectionChange(item.href)}
               className={cn(
-                'w-full flex items-center gap-3 px-3 py-2.5 lg:py-3 rounded-lg text-sm lg:text-base font-medium transition-all duration-200 group relative',
+                'w-full flex items-center py-2.5 lg:py-3 rounded-lg text-sm lg:text-base font-medium transition-colors duration-200 group relative',
                 isActive
                   ? 'bg-sidebar-accent text-sidebar-foreground'
                   : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50',
@@ -91,20 +85,24 @@ export function Sidebar({
               {/* Active indicator */}
               <span
                 className={cn(
-                  'absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full bg-accent transition-all duration-300',
+                  'absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full bg-accent transition-opacity duration-300',
                   isActive ? 'opacity-100' : 'opacity-0',
                 )}
               />
-              <Icon
-                className={cn(
-                  'w-5 h-5 lg:w-6 lg:h-6 shrink-0 transition-transform duration-200',
-                  isActive ? 'text-accent' : 'group-hover:scale-110',
-                )}
-              />
+              {/* Fixed-width icon container for centering */}
+              <div className='w-14 shrink-0 flex items-center justify-center'>
+                <Icon
+                  className={cn(
+                    'w-5 h-5 lg:w-6 lg:h-6 transition-transform duration-200',
+                    isActive ? 'text-accent' : 'group-hover:scale-110',
+                  )}
+                />
+              </div>
+              {/* Text with opacity transition */}
               <span
                 className={cn(
-                  'whitespace-nowrap transition-all duration-300',
-                  collapsed ? 'opacity-0 w-0 overflow-hidden' : 'opacity-100',
+                  'whitespace-nowrap transition-opacity duration-300',
+                  collapsed ? 'opacity-0' : 'opacity-100',
                 )}
               >
                 {item.name}

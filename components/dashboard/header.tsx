@@ -50,28 +50,28 @@ export function Header({ activeSection }: HeaderProps) {
         {/* User avatar with dropdown */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className='w-9 h-9 rounded-lg overflow-hidden bg-secondary ring-2 ring-transparent hover:ring-accent/50 transition-all duration-200 focus:outline-none focus:ring-accent/50'>
-              <div className='w-full h-full bg-gradient-to-br from-accent/80 to-chart-1 flex items-center justify-center text-xs font-semibold text-accent-foreground'>
+            <button className='w-9 h-9 2xl:w-11 2xl:h-11 rounded-lg overflow-hidden bg-secondary ring-2 ring-transparent hover:ring-accent/50 transition-all duration-200 focus:outline-none focus:ring-accent/50'>
+              <div className='w-full h-full bg-gradient-to-br from-accent/80 to-chart-1 flex items-center justify-center text-xs 2xl:text-sm font-semibold text-accent-foreground'>
                 JD
               </div>
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align='end' className='w-48'>
-            <DropdownMenuItem className='cursor-pointer'>
-              <User className='mr-2 h-4 w-4' />
-              <span>Profil</span>
+          <DropdownMenuContent align='end' className='w-48 2xl:w-56'>
+            <DropdownMenuItem className='cursor-pointer 2xl:py-3'>
+              <User className='mr-2 h-4 w-4 2xl:h-5 2xl:w-5' />
+              <span className='2xl:text-base'>Profil</span>
             </DropdownMenuItem>
-            <DropdownMenuItem className='cursor-pointer'>
-              <Settings className='mr-2 h-4 w-4' />
-              <span>Ayarlar</span>
+            <DropdownMenuItem className='cursor-pointer 2xl:py-3'>
+              <Settings className='mr-2 h-4 w-4 2xl:h-5 2xl:w-5' />
+              <span className='2xl:text-base'>Ayarlar</span>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              className='cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50'
+              className='cursor-pointer text-red-600 focus:text-red-600 focus:bg-red-50 2xl:py-3'
               onClick={handleLogout}
             >
-              <LogOut className='mr-2 h-4 w-4' />
-              <span>Çıkış Yap</span>
+              <LogOut className='mr-2 h-4 w-4 2xl:h-5 2xl:w-5' />
+              <span className='2xl:text-base'>Çıkış Yap</span>
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

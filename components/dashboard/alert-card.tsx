@@ -33,7 +33,7 @@ export function AlertCard({
       )}
     >
       {/* Hover Gradient */}
-      <div className='absolute inset-0 bg-gradient-to-br from-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500' />
+      <div className='absolute inset-0 bg-linear-to-br from-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500' />
 
       {/* Header */}
       <div className='relative flex items-center justify-between mb-2'>

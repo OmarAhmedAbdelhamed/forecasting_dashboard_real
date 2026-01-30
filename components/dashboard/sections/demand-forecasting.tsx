@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import {
   Card,
   CardContent,
@@ -8,394 +8,842 @@ import {
   CardTitle,
   CardDescription,
 } from '@/components/ui/shared/card';
-import { Button } from '@/components/ui/shared/button';
+import { Input } from '@/components/ui/shared/input';
+import { MultiSelect } from '@/components/ui/shared/multi-select';
 import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-} from '@/components/ui/demand-forecasting/tabs';
-import {
-  ToggleGroup,
-  ToggleGroupItem,
-} from '@/components/ui/demand-forecasting/toggle-group';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/shared/select';
 import {
   ArrowUpRight,
   ArrowDownRight,
   TrendingUp,
+  TrendingDown,
   Target,
   Calendar,
-  RefreshCcw,
-  MoreHorizontal,
+  AlertTriangle,
+  Search,
   Info,
-  HelpCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   ResponsiveContainer,
   ComposedChart,
+  LineChart,
   Line,
   Area,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   Legend,
   ReferenceLine,
-  Cell,
+  ReferenceArea,
 } from 'recharts';
-import {
-  format,
-  addWeeks,
-  subWeeks,
-  addDays,
-  subDays,
-  addMonths,
-  subMonths,
-} from 'date-fns';
-import { tr } from 'date-fns/locale';
-import { STORES, PRODUCTS, REGIONS, CATEGORIES } from '@/lib/constants';
-import { FilterBar } from '@/components/dashboard/filter-bar';
+import { STORES, PRODUCTS, REGIONS, REYONLAR } from '@/lib/constants';
 import {
   Tooltip as UITooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/shared/tooltip';
 
-// Mock Data Generators
-const generateForecastData = (granularity: string, horizon: string) => {
+// Responsive chart config for different screen sizes
+const getChartConfig = (is2xl: boolean) => ({
+  axisFontSize: is2xl ? 14 : 11,
+  tooltipFontSize: is2xl ? '15px' : '12px',
+  legendFontSize: is2xl ? '14px' : '11px',
+  dotRadius: is2xl ? 4 : 2,
+  activeDotRadius: is2xl ? 6 : 4,
+  strokeWidth: is2xl ? 3 : 2,
+  yAxisWidth: is2xl ? 50 : 40,
+});
+
+// ============ MOCK DATA ============
+
+// Monthly Bias Data - per store/product
+const generateMonthlyBiasData = (storeId?: string, productId?: string) => {
+  // Base data - slightly modified based on selection
+  const seed = (storeId?.charCodeAt(0) || 0) + (productId?.charCodeAt(0) || 0);
+  const modifier = (seed % 10) - 5;
+
+  return [
+    { month: 'Oca', bias: -3 + modifier },
+    { month: 'Şub', bias: 0 + modifier },
+    { month: 'Mar', bias: 2 + modifier },
+    { month: 'Nis', bias: 8 + modifier },
+    { month: 'May', bias: 22 + modifier },
+    { month: 'Haz', bias: 23 + modifier },
+    { month: 'Tem', bias: 25 + modifier },
+    { month: 'Ağu', bias: 30 + modifier },
+    { month: 'Eyl', bias: 12 + modifier },
+    { month: 'Eki', bias: 5 + modifier },
+    { month: 'Kas', bias: 4 + modifier },
+    { month: 'Ara', bias: 0 + modifier },
+  ];
+};
+
+// Trend Forecast Data - reactive to filters with realistic patterns
+// Trend Forecast Data - reactive to filters with realistic patterns
+const generateTrendForecastData = (
+  storeId?: string,
+  productId?: string,
+  filterSeed: number = 0,
+  granularity: 'daily' | 'weekly' | 'monthly' = 'weekly',
+) => {
   const data = [];
-  const today = new Date();
+  const startYear = 2023;
+  const endYear = 2026;
+  const baseSeed =
+    (storeId?.charCodeAt(0) || 0) +
+    (productId?.charCodeAt(0) || 0) +
+    filterSeed;
+  const multiplier = 0.7 + (baseSeed % 8) * 0.1;
 
-  // Parse horizon
-  let horizonWeeks = 12;
-  if (horizon === '6_months') horizonWeeks = 26;
-  if (horizon === '1_year') horizonWeeks = 52;
-  if (horizon === '12_weeks') horizonWeeks = 12;
+  // Seasonal pattern factors (peaks in summer for most products)
+  const getSeasonalFactor = (week: number) => {
+    // Winter low, spring rising, summer peak, fall declining
+    return Math.sin(((week - 13) * Math.PI) / 26) * 0.3 + 1;
+  };
 
-  let pointsHistory = 0;
-  let pointsFuture = 0;
-  let addFn: any = addWeeks;
-  let subFn: any = subWeeks;
-  let dateFormat = 'd MMM';
+  // Noise generator
+  const getVariation = (index: number, seed: number) => {
+    const pseudoRandom = Math.sin(index * 12.9898 + seed * 78.233) * 43758.5453;
+    return (pseudoRandom - Math.floor(pseudoRandom)) * 400 - 200;
+  };
 
-  // Configuration based on granularity
+  // Current date context: 2026-01-29
+  const currentYear = 2026;
+  const currentMonth = 0; // Jan
+  const currentDay = 29;
+  const currentWeek = 5;
+
   if (granularity === 'daily') {
-    pointsHistory = horizonWeeks * 7;
-    pointsFuture = horizonWeeks * 7;
-    addFn = addDays;
-    subFn = subDays;
-    dateFormat = 'd MMM';
+    for (let year = startYear; year <= endYear; year++) {
+      const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+      const daysInYear = isLeap ? 366 : 365;
+
+      for (let day = 1; day <= daysInYear; day++) {
+        const date = new Date(year, 0, day); // Start from Jan 1st
+        const month = date.getMonth();
+        const dayOfMonth = date.getDate();
+
+        // Forecast cutoff: After Jan 29, 2026
+        const isForecast =
+          year > currentYear ||
+          (year === currentYear && month > currentMonth) ||
+          (year === currentYear &&
+            month === currentMonth &&
+            dayOfMonth > currentDay);
+
+        const weekNum = Math.ceil(day / 7); // Approx week for seasonality
+        const seasonal = getSeasonalFactor(weekNum);
+        const yearGrowth = (year - startYear) * 150;
+        const baseValue = (1800 + yearGrowth) * multiplier;
+        const dailyNoise = getVariation(day + year * 365, baseSeed);
+        const dayOfWeek = date.getDay();
+        const weekendBoost =
+          dayOfWeek === 0 || dayOfWeek === 6 ? baseValue * 0.15 : 0;
+
+        let value = (baseValue * seasonal + dailyNoise + weekendBoost) / 7; // Daily volume is ~1/7th of weekly
+        if (isForecast) value *= 1.08; // Growth
+
+        const trendValue =
+          ((1600 + (year - startYear) * 200 + weekNum * 3) * multiplier) / 7;
+
+        const dateStr = date.toLocaleDateString('tr-TR', {
+          day: '2-digit',
+          month: 'short',
+          year: '2-digit',
+        });
+
+        data.push({
+          date: dateStr,
+          history: isForecast ? null : Math.round(value),
+          forecast: isForecast ? Math.round(value) : null,
+          trendline: Math.round(trendValue),
+        });
+      }
+    }
   } else if (granularity === 'monthly') {
-    pointsHistory = Math.ceil(horizonWeeks / 4) + 2;
-    pointsFuture = Math.ceil(horizonWeeks / 4) + 2;
-    addFn = addMonths;
-    subFn = subMonths;
-    dateFormat = 'MMM yy';
+    for (let year = startYear; year <= endYear; year++) {
+      for (let month = 0; month < 12; month++) {
+        const isForecast =
+          year > currentYear || (year === currentYear && month > currentMonth);
+
+        const weekNum = (month + 1) * 4.3;
+        const seasonal = getSeasonalFactor(weekNum);
+        const yearGrowth = (year - startYear) * 150;
+        const baseValue = (1800 + yearGrowth) * multiplier * 4.3; // Monthly volume
+        const noise = getVariation(month + year * 12, baseSeed) * 5;
+
+        let value = baseValue * seasonal + noise;
+        if (isForecast) value *= 1.08;
+
+        const trendValue =
+          (1600 + (year - startYear) * 200 + weekNum * 3) * multiplier * 4.3;
+
+        const date = new Date(year, month, 1);
+        const dateStr = date.toLocaleDateString('tr-TR', {
+          month: 'short',
+          year: '2-digit',
+        });
+
+        data.push({
+          date: dateStr,
+          history: isForecast ? null : Math.round(value),
+          forecast: isForecast ? Math.round(value) : null,
+          trendline: Math.round(trendValue),
+        });
+      }
+    }
   } else {
-    // weekly
-    pointsHistory = horizonWeeks;
-    pointsFuture = horizonWeeks;
-    addFn = addWeeks;
-    subFn = subWeeks;
-    dateFormat = 'd MMM';
+    // Weekly (Default)
+    for (let year = startYear; year <= endYear; year++) {
+      for (let week = 1; week <= 52; week++) {
+        const isForecast = year === 2026 && week > currentWeek;
+        const yearGrowth = (year - startYear) * 150;
+        const baseValue = (1800 + yearGrowth) * multiplier;
+        const seasonal = getSeasonalFactor(week);
+        const weeklyNoise = getVariation(week + year * 52, baseSeed);
+        const hasPromo = (week * 7 + baseSeed) % 17 === 0;
+        const promoBoost = hasPromo ? baseValue * 0.25 : 0;
+
+        let value = baseValue * seasonal + weeklyNoise + promoBoost;
+        if (isForecast) {
+          const lastYearSameWeekValue =
+            (1800 + (year - 1 - startYear) * 150) *
+            multiplier *
+            getSeasonalFactor(week);
+          value =
+            lastYearSameWeekValue * 1.08 +
+            getVariation(week, baseSeed + 1000) * 0.3;
+        }
+
+        const trendValue =
+          (1600 + (year - startYear) * 200 + week * 3) * multiplier;
+
+        data.push({
+          date: `H${week} ${year.toString().slice(-2)}`,
+          history: isForecast ? null : Math.round(value),
+          forecast: isForecast ? Math.round(value) : null,
+          trendline: Math.round(trendValue),
+        });
+      }
+    }
   }
+  return data;
+};
 
-  const start = subFn(today, pointsHistory);
-  const totalPoints = pointsHistory + pointsFuture;
+// Year Comparison Data - 3 years (2024, 2025, 2026)
+const generateYearComparisonData = (storeId?: string, productId?: string) => {
+  const data = [];
+  const seed = (storeId?.charCodeAt(0) || 0) + (productId?.charCodeAt(0) || 0);
+  const multiplier = 0.8 + (seed % 5) * 0.1;
+  const currentWeek = 4; // Current date: 2026-01-29 = Week 4
 
-  // Generate points
-  for (let i = 0; i < totalPoints; i++) {
-    const date = addFn(start, i);
-    const isFuture = i >= pointsHistory;
-
-    // Create meaningful noise based on granularity
-    const i_factor = granularity === 'daily' ? i / 7 : i;
-    const baseVal = 1000 + Math.sin(i_factor / 2) * 200 + i_factor * 10;
-
+  for (let week = 1; week <= 52; week++) {
+    const baseValue = (8000 + Math.sin(week / 6) * 2000) * multiplier;
     data.push({
-      date: format(date, dateFormat, { locale: tr }),
-      fullDate: date,
-      history: isFuture ? null : Math.round(baseVal + Math.random() * 100),
-      forecast: isFuture ? Math.round(baseVal) : null,
-      // Connect the lines at the transition point
-      ...(i === pointsHistory - 1
-        ? { forecast: Math.round(baseVal + Math.random() * 100) }
-        : {}),
-      confLow: isFuture ? Math.round(baseVal * 0.9) : null,
-      confHigh: isFuture ? Math.round(baseVal * 1.1) : null,
+      week: `H${week}`,
+      y2024: Math.round(baseValue + Math.random() * 500),
+      y2025: Math.round(baseValue * 1.08 + Math.random() * 500),
+      y2026:
+        week <= currentWeek
+          ? Math.round(baseValue * 1.15 + Math.random() * 500)
+          : null,
     });
   }
   return data;
 };
 
-// Waterfall Data
-// Logic: Start from Baseline, add/subtract components to reach Final Forecast
-const driversData = [
-  { name: 'Baz Satış', value: 1200, isTotal: true },
-  { name: 'Mevsimsellik', value: 300, isTotal: false },
-  { name: 'Trend', value: 150, isTotal: false },
-  { name: 'Fiyat Etkisi', value: -100, isTotal: false },
-  { name: 'Rakip Kamp.', value: -50, isTotal: false },
-  { name: 'Final Tahmin', value: 1500, isTotal: true },
-];
-
-const prepareWaterfallData = (data: any[]) => {
-  let currentTotal = 0;
-  return data.map((item, index) => {
-    // For the first item (Base), start is 0
-    if (index === 0) {
-      currentTotal = item.value;
-      return { ...item, uv: item.value, start: 0, fill: '#94a3b8' }; // Gray for Base
-    }
-
-    // For the last item (Final), it should match the accumulated total
-    if (index === data.length - 1) {
-      return { ...item, uv: currentTotal, start: 0, fill: '#3b82f6' }; // Blue for Final
-    }
-
-    // For intermediate steps
-    const prevTotal = currentTotal;
-    currentTotal += item.value;
-
-    // Determine start and height (uv) for floating bars
-    // If positive: start at prevTotal, height is value
-    // If negative: start at currentTotal (which is lower), height is abs(value)
-
-    // Visual Fix: We want to show the bar extending FROM the previous level
-    let start, size;
-    let color;
-
-    if (item.value >= 0) {
-      start = prevTotal;
-      size = item.value;
-      color = '#22c55e'; // Green for increase
-    } else {
-      start = prevTotal + item.value; // e.g. 1500 + (-100) = 1400. Bar goes from 1400 to 1500? No.
-      // If we drop from 1500 to 1400: Start needs to be 1400, Size 100.
-      size = Math.abs(item.value);
-      start = prevTotal - size;
-      color = '#ef4444'; // Red for decrease
-    }
-
-    return { ...item, uv: size, start: start, fill: color };
-  });
-};
-
-const processedWaterfallData = prepareWaterfallData(driversData);
-
-const skuData = [
+// Growth Products Data - Enhanced with actual sales
+const growthProductsData = [
   {
     id: 'SKU-001',
     name: 'Yudum Ayçiçek Yağı 5L',
-    forecast: 1250,
-    trend: '+5%',
-    acc: '96%',
+    growth: 18.5,
+    type: 'high',
+    category: 'Gıda',
+    forecast: 2450,
+    actualSales: 2890,
+    lastMonthSales: 2440,
+    trend: 'up',
+    store: '1001',
   },
   {
     id: 'SKU-002',
-    name: 'Çaykur Rize Turist 1kg',
-    forecast: 980,
-    trend: '+2%',
-    acc: '94%',
+    name: 'Beypazarı Soda 6lı',
+    growth: 15.2,
+    type: 'high',
+    category: 'İçecek',
+    forecast: 1890,
+    actualSales: 2180,
+    lastMonthSales: 1890,
+    trend: 'up',
+    store: '1002',
   },
   {
     id: 'SKU-003',
-    name: 'Erikli Su 5L',
-    forecast: 850,
-    trend: '-1%',
-    acc: '98%',
+    name: 'Nutella 750g',
+    growth: 12.8,
+    type: 'high',
+    category: 'Gıda',
+    forecast: 980,
+    actualSales: 1105,
+    lastMonthSales: 980,
+    trend: 'up',
+    store: '1001',
   },
   {
     id: 'SKU-004',
-    name: "Beypazarı Soda 6'lı",
-    forecast: 720,
-    trend: '+12%',
-    acc: '91%',
+    name: 'Erikli Su 5L',
+    growth: 10.4,
+    type: 'high',
+    category: 'İçecek',
+    forecast: 3200,
+    actualSales: 3533,
+    lastMonthSales: 3200,
+    trend: 'up',
+    store: '1003',
   },
   {
     id: 'SKU-005',
-    name: "Solo Tuvalet Kağıdı 32'li",
-    forecast: 640,
-    trend: '0%',
-    acc: '95%',
+    name: 'Coca Cola 2.5L',
+    growth: 8.7,
+    type: 'high',
+    category: 'İçecek',
+    forecast: 2100,
+    actualSales: 2283,
+    lastMonthSales: 2100,
+    trend: 'up',
+    store: '1001',
+  },
+  {
+    id: 'SKU-006',
+    name: 'Çaykur Rize 1kg',
+    growth: -8.2,
+    type: 'low',
+    category: 'İçecek',
+    forecast: 650,
+    actualSales: 597,
+    lastMonthSales: 650,
+    trend: 'down',
+    store: '1002',
+  },
+  {
+    id: 'SKU-007',
+    name: 'Solo Tuvalet Kağıdı',
+    growth: -6.5,
+    type: 'low',
+    category: 'Temizlik',
+    forecast: 820,
+    actualSales: 767,
+    lastMonthSales: 820,
+    trend: 'down',
+    store: '1004',
+  },
+  {
+    id: 'SKU-008',
+    name: 'Algida Magnum',
+    growth: -5.1,
+    type: 'low',
+    category: 'Gıda',
+    forecast: 340,
+    actualSales: 323,
+    lastMonthSales: 340,
+    trend: 'down',
+    store: '1005',
+  },
+  {
+    id: 'SKU-009',
+    name: 'Selpak Mendil 150li',
+    growth: -3.8,
+    type: 'low',
+    category: 'Temizlik',
+    forecast: 560,
+    actualSales: 539,
+    lastMonthSales: 560,
+    trend: 'down',
+    store: '1003',
   },
 ];
 
-export function DemandForecastingSection() {
-  // Multi-select state for filters (arrays for multi-selection)
-  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
-  const [selectedStores, setSelectedStores] = useState<string[]>([]);
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [timeHorizon, setTimeHorizon] = useState('12_weeks');
-  const [granularity, setGranularity] = useState('weekly');
-  const [data, setData] = useState<any[]>([]);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+// Forecast Error Products Data - Enhanced with more metrics
+const forecastErrorData = [
+  {
+    id: 'SKU-010',
+    name: 'Omo Matik 6kg',
+    error: 18.5,
+    accuracy: 81.5,
+    forecast: 450,
+    actual: 534,
+    mape: 18.5,
+    bias: 'under',
+    action: 'Model güncelle',
+    store: '1001',
+    severity: 'critical',
+  },
+  {
+    id: 'SKU-011',
+    name: 'Eti Çikolatalı Gofret',
+    error: 15.2,
+    accuracy: 84.8,
+    forecast: 890,
+    actual: 1025,
+    mape: 15.2,
+    bias: 'under',
+    action: 'Parametre ayarla',
+    store: '1002',
+    severity: 'high',
+  },
+  {
+    id: 'SKU-012',
+    name: 'Ülker Çokoprens',
+    error: 12.8,
+    accuracy: 87.2,
+    forecast: 1200,
+    actual: 1354,
+    mape: 12.8,
+    bias: 'under',
+    action: 'İnceleme gerekli',
+    store: '1001',
+    severity: 'high',
+  },
+  {
+    id: 'SKU-013',
+    name: 'Torku Banada',
+    error: 9.4,
+    accuracy: 90.6,
+    forecast: 670,
+    actual: 733,
+    mape: 9.4,
+    bias: 'under',
+    action: 'İzle',
+    store: '1003',
+    severity: 'medium',
+  },
+  {
+    id: 'SKU-014',
+    name: 'Pepsi 1L',
+    error: 8.1,
+    accuracy: 91.9,
+    forecast: 1450,
+    actual: 1333,
+    mape: 8.1,
+    bias: 'over',
+    action: 'İzle',
+    store: '1004',
+    severity: 'medium',
+  },
+  {
+    id: 'SKU-015',
+    name: 'Fanta 1L',
+    error: 6.5,
+    accuracy: 93.5,
+    forecast: 980,
+    actual: 916,
+    mape: 6.5,
+    bias: 'over',
+    action: 'Kabul edilir',
+    store: '1005',
+    severity: 'low',
+  },
+  {
+    id: 'SKU-016',
+    name: 'Sprite 1L',
+    error: 4.2,
+    accuracy: 95.8,
+    forecast: 760,
+    actual: 792,
+    mape: 4.2,
+    bias: 'under',
+    action: 'İyi',
+    store: '1001',
+    severity: 'ok',
+  },
+  {
+    id: 'SKU-017',
+    name: 'Schweppes 1L',
+    error: 2.8,
+    accuracy: 97.2,
+    forecast: 340,
+    actual: 349,
+    mape: 2.8,
+    bias: 'under',
+    action: 'Mükemmel',
+    store: '1002',
+    severity: 'ok',
+  },
+];
 
-  // Update data when parameters change
-  useEffect(() => {
-    setData(generateForecastData(granularity, timeHorizon));
-  }, [
-    granularity,
-    timeHorizon,
-    selectedRegions,
-    selectedStores,
-    selectedCategories,
-  ]);
+// KPI values generator - reactive to filters
+const generateKPIValues = (stores: string[], products: string[]) => {
+  const hasFilters = stores.length > 0 || products.length > 0;
+  const modifier = hasFilters ? 0.7 + Math.random() * 0.3 : 1;
 
-  // Mock refresh action
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    // Simulate data fetch
-    setTimeout(() => {
-      setData(generateForecastData(granularity, timeHorizon));
-      setIsRefreshing(false);
-    }, 800);
+  return {
+    totalForecast: hasFilters
+      ? `${(2.8 * modifier).toFixed(1)}M TL`
+      : '2.8M TL',
+    totalUnits: hasFilters
+      ? `${Math.round(142 * modifier)}K Adet`
+      : '142K Adet',
+    accuracy: hasFilters
+      ? `${(94.8 * (0.95 + Math.random() * 0.1)).toFixed(1)}%`
+      : '94.8%',
+    yoyGrowth: hasFilters ? `${(12.4 * modifier).toFixed(1)}%` : '12.4%',
+    bias: hasFilters ? `+${(2.3 * modifier).toFixed(1)}%` : '+2.3%',
+    lowGrowth: hasFilters ? Math.ceil(4 * modifier) : 4,
+    highGrowth: hasFilters ? Math.ceil(12 * modifier) : 12,
   };
+};
+
+// ============ MAIN COMPONENT ============
+
+export function DemandForecastingSection() {
+  // Filter states
+  const [selectedStores, setSelectedStores] = useState<string[]>([]);
+  const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
+  const [selectedReyonlar, setSelectedReyonlar] = useState<string[]>([]);
+  const [periodValue, setPeriodValue] = useState('30');
+  const [periodUnit, setPeriodUnit] = useState('gun');
+
+  // Table search/filter states
+  const [growthSearch, setGrowthSearch] = useState('');
+  const [growthFilter, setGrowthFilter] = useState('all');
+  const [errorSearch, setErrorSearch] = useState('');
+  const [errorFilter, setErrorFilter] = useState('all');
+
+  // Screen size detection for responsive charts
+  const [is2xl, setIs2xl] = useState(false);
+
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIs2xl(window.innerWidth >= 1536); // 2xl breakpoint
+    };
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
+
+  // Clamp period value when unit changes
+  useEffect(() => {
+    const val = parseInt(periodValue) || 0;
+    let max = 365;
+    if (periodUnit === 'ay') max = 12;
+    if (periodUnit === 'hafta') max = 52;
+    if (periodUnit === 'yil') max = 1;
+
+    if (val > max) {
+      setPeriodValue(max.toString());
+    }
+  }, [periodUnit, periodValue]);
+
+  const chartConfig = getChartConfig(is2xl);
+
+  // Period calculation with 1 year max cap
+  const periodInDays = useMemo(() => {
+    const value = parseInt(periodValue) || 30;
+    let days: number;
+
+    switch (periodUnit) {
+      case 'hafta':
+        days = Math.min(value * 7, 365); // Max 52 weeks = 364 days
+        break;
+      case 'ay':
+        days = Math.min(value * 30, 365); // Max 12 months = 360 days
+        break;
+      case 'yil':
+        days = 365; // Always 1 year max
+        break;
+      default: // gun
+        days = Math.min(value, 365);
+    }
+
+    return days;
+  }, [periodValue, periodUnit]);
+
+  // Convert period to weeks for data slicing (data is in weekly format)
+  const periodInWeeks = useMemo(() => {
+    return Math.max(1, Math.ceil(periodInDays / 7));
+  }, [periodInDays]);
+
+  // Combine all filter selections into a seed for data generation
+  const filterSeed = useMemo(() => {
+    const storeChar = selectedStores[0]?.charCodeAt(0) || 0;
+    const productChar = selectedProducts[0]?.charCodeAt(0) || 0;
+    const regionChar = selectedRegions[0]?.charCodeAt(0) || 0;
+    const reyonChar = selectedReyonlar[0]?.charCodeAt(0) || 0;
+    return storeChar + productChar + regionChar + reyonChar;
+  }, [selectedStores, selectedProducts, selectedRegions, selectedReyonlar]);
+
+  // Determine granularity based on period unit
+  const granularity = useMemo<'daily' | 'weekly' | 'monthly'>(() => {
+    if (periodUnit === 'yil') return 'monthly';
+    if (periodUnit === 'ay') return 'weekly';
+    return 'daily';
+  }, [periodUnit]);
+
+  // Reactive data based on filters
+  const trendData = useMemo(() => {
+    const fullData = generateTrendForecastData(
+      selectedStores[0],
+      selectedProducts[0],
+      filterSeed,
+      granularity,
+    );
+
+    // Split into history and forecast
+    // History points have forecast as null
+    const historyData = fullData.filter((d) => d.forecast === null);
+    const forecastData = fullData.filter((d) => d.history === null);
+
+    // Slice forecast based on period
+    let sliceCount = 0;
+    if (granularity === 'daily') {
+      sliceCount = periodInDays;
+    } else if (granularity === 'weekly') {
+      sliceCount = Math.ceil(periodInDays / 7);
+    } else {
+      // Monthly
+      sliceCount = Math.ceil(periodInDays / 30);
+      // Ensure 1 year forecast shows 12 months exactly
+      if (periodUnit === 'yil') {
+        sliceCount = 12 * (parseInt(periodValue) || 1);
+      }
+    }
+
+    // Ensure at least 1 point
+    sliceCount = Math.max(1, sliceCount);
+
+    const slicedForecast = forecastData.slice(0, sliceCount);
+
+    // Bridge the gap: Ensure the last history point also starts the forecast area
+    if (historyData.length > 0 && slicedForecast.length > 0) {
+      const lastHistoryIndex = historyData.length - 1;
+      const lastHistory = historyData[lastHistoryIndex];
+
+      // Update the last history point to also have a forecast value (equal to history)
+      historyData[lastHistoryIndex] = {
+        ...lastHistory,
+        forecast: lastHistory.history,
+      };
+    }
+
+    // For daily granularity, cap history to last 365 days to ensure readability
+    // For monthly granularity (1 year forecast), cap history to last 2 years (24 months)
+    let finalHistory = historyData;
+    if (granularity === 'daily' && historyData.length > 365) {
+      finalHistory = historyData.slice(-365);
+    } else if (granularity === 'monthly' && historyData.length > 24) {
+      finalHistory = historyData.slice(-24);
+    }
+
+    // Combine: All history + Selected Forecast period
+    return [...finalHistory, ...slicedForecast];
+  }, [selectedStores, selectedProducts, filterSeed, periodInWeeks]);
+
+  const biasData = useMemo(
+    () => generateMonthlyBiasData(selectedStores[0], selectedProducts[0]),
+    [selectedStores, selectedProducts],
+  );
+
+  const yearData = useMemo(
+    () => generateYearComparisonData(selectedStores[0], selectedProducts[0]),
+    [selectedStores, selectedProducts],
+  );
+
+  const kpiValues = useMemo(
+    () => generateKPIValues(selectedStores, selectedProducts),
+    [selectedStores, selectedProducts],
+  );
+
+  // Filtered table data
+  const filteredGrowthProducts = useMemo(() => {
+    return growthProductsData.filter((product) => {
+      const matchesSearch =
+        product.name.toLowerCase().includes(growthSearch.toLowerCase()) ||
+        product.id.toLowerCase().includes(growthSearch.toLowerCase());
+      const matchesFilter =
+        growthFilter === 'all' || product.type === growthFilter;
+      const matchesStore =
+        selectedStores.length === 0 || selectedStores.includes(product.store);
+      return matchesSearch && matchesFilter && matchesStore;
+    });
+  }, [growthSearch, growthFilter, selectedStores]);
+
+  const filteredErrorProducts = useMemo(() => {
+    return forecastErrorData.filter((product) => {
+      const matchesSearch =
+        product.name.toLowerCase().includes(errorSearch.toLowerCase()) ||
+        product.id.toLowerCase().includes(errorSearch.toLowerCase());
+      const matchesFilter =
+        errorFilter === 'all' ||
+        (errorFilter === 'high' && product.error > 10) ||
+        (errorFilter === 'medium' &&
+          product.error >= 5 &&
+          product.error <= 10) ||
+        (errorFilter === 'low' && product.error < 5);
+      const matchesStore =
+        selectedStores.length === 0 || selectedStores.includes(product.store);
+      return matchesSearch && matchesFilter && matchesStore;
+    });
+  }, [errorSearch, errorFilter, selectedStores]);
 
   return (
-    <div className='space-y-6'>
-      {/* 1. Filter Bar with Custom Horizon Controls */}
-      <FilterBar
-        title='Talep Tahminleme'
-        selectedRegions={selectedRegions}
-        onRegionChange={setSelectedRegions}
-        regionOptions={REGIONS}
-        selectedStores={selectedStores}
-        onStoreChange={setSelectedStores}
-        storeOptions={STORES}
-        selectedCategories={selectedCategories}
-        onCategoryChange={setSelectedCategories}
-        categoryOptions={CATEGORIES}
-      >
-        <div className='flex items-center gap-2'>
-          <span className='text-xs font-medium text-muted-foreground hidden lg:inline-block'>
-            Ufuk:
-          </span>
-          <ToggleGroup
-            type='single'
-            value={timeHorizon}
-            onValueChange={(v) => v && setTimeHorizon(v)}
-          >
-            <ToggleGroupItem
-              value='12_weeks'
-              aria-label='12 Hafta'
-              className='h-8 text-xs px-2'
-            >
-              12 Hafta
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value='6_months'
-              aria-label='6 Ay'
-              className='h-8 text-xs px-2'
-            >
-              6 Ay
-            </ToggleGroupItem>
-            <ToggleGroupItem
-              value='1_year'
-              aria-label='1 Yıl'
-              className='h-8 text-xs px-2'
-            >
-              1 Yıl
-            </ToggleGroupItem>
-          </ToggleGroup>
+    <div className='space-y-4 2xl:space-y-6'>
+      {/* Header with Filters */}
+      <div className='w-full bg-card border border-border rounded-lg p-3 2xl:p-4 shadow-sm flex flex-col lg:flex-row gap-4 items-end lg:items-center justify-between'>
+        <h2 className='text-lg md:text-xl lg:text-2xl 2xl:text-3xl font-bold tracking-tight text-foreground'>
+          Talep Tahminleme
+        </h2>
 
-          <div className='h-6 w-px bg-border mx-2' />
+        <div className='flex flex-col md:flex-row flex-wrap gap-3 items-end md:items-center'>
+          {/* Period Selector */}
+          <div className='flex items-center gap-2'>
+            <Input
+              type='number'
+              min='1'
+              max={
+                periodUnit === 'yil'
+                  ? 1
+                  : periodUnit === 'ay'
+                    ? 12
+                    : periodUnit === 'hafta'
+                      ? 52
+                      : 365
+              }
+              value={periodValue}
+              onChange={(e) => setPeriodValue(e.target.value)}
+              className='w-16 2xl:w-20 h-9 2xl:h-11 text-center text-sm 2xl:text-base'
+              disabled={periodUnit === 'yil'}
+            />
+            <Select value={periodUnit} onValueChange={setPeriodUnit}>
+              <SelectTrigger className='w-20 2xl:w-24 h-9 2xl:h-11 text-sm 2xl:text-base'>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='gun'>gün</SelectItem>
+                <SelectItem value='hafta'>hafta</SelectItem>
+                <SelectItem value='ay'>ay</SelectItem>
+                <SelectItem value='yil'>yıl</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-          {/* Granularity Switch */}
-          <Tabs
-            value={granularity}
-            onValueChange={setGranularity}
-            className='w-auto'
-          >
-            <TabsList className='h-8'>
-              <TabsTrigger value='daily' className='text-xs px-2 h-6'>
-                Gün
-              </TabsTrigger>
-              <TabsTrigger value='weekly' className='text-xs px-2 h-6'>
-                Hafta
-              </TabsTrigger>
-              <TabsTrigger value='monthly' className='text-xs px-2 h-6'>
-                Ay
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
+          {/* Store Filter */}
+          <div className='min-w-32 2xl:min-w-40'>
+            <MultiSelect
+              options={STORES}
+              selected={selectedStores}
+              onChange={setSelectedStores}
+              placeholder='Mağaza'
+            />
+          </div>
+
+          {/* Reyon Filter */}
+          <div className='min-w-32 2xl:min-w-40'>
+            <MultiSelect
+              options={REYONLAR}
+              selected={selectedReyonlar}
+              onChange={setSelectedReyonlar}
+              placeholder='Reyon'
+            />
+          </div>
+
+          {/* Product Filter */}
+          <div className='min-w-32 2xl:min-w-40'>
+            <MultiSelect
+              options={PRODUCTS}
+              selected={selectedProducts}
+              onChange={setSelectedProducts}
+              placeholder='Ürün'
+            />
+          </div>
         </div>
-      </FilterBar>
+      </div>
 
-      {/* 2. KPI Cards with Tooltips */}
-      <div className='grid gap-4 md:grid-cols-2 lg:grid-cols-5'>
-        <KPI_Card
-          title='Gelecek 30 Gün Tahmini'
-          value='2.8M TL'
-          secondaryValue='142K Adet'
+      {/* KPI Cards - 6 in a row with better padding */}
+      <div className='grid gap-3 2xl:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6'>
+        <KPICard
+          title='Toplam Tahmin'
+          value={kpiValues.totalForecast}
+          subValue={kpiValues.totalUnits}
           trend='+8.5%'
           trendUp={true}
           icon={TrendingUp}
-          tooltip='Gelecek 30 gün için öngörülen toplam satış tutarı ve adet.'
+          tooltip='Seçilen dönem için AI modelinin öngördüğü toplam satış tutarı ve adet.'
         />
-        <KPI_Card
-          title='Toplam Tahmin'
-          value='1.2M'
-          unit='Adet'
-          trend='+5.2%'
-          trendUp={true}
-          icon={TrendingUp}
-          tooltip='Gelecek dönem için öngörülen toplam satış adedi.'
-        />
-        <KPI_Card
-          title='Doğruluk Oranı (Accuracy)'
-          value='94.8%'
-          unit='Geçen Ay'
+        <KPICard
+          title='Doğruluk Oranı'
+          value={kpiValues.accuracy}
+          subValue='Geçen Ay'
           trend='+1.2%'
           trendUp={true}
           icon={Target}
-          tooltip='Geçen ayın gerçekleşen verisi ile tahmin arasındaki sapma oranı. (1 - MAPE)'
+          tooltip='Model doğruluğu (1 - MAPE). Tahmin ile gerçekleşen arasındaki tutarlılık.'
         />
-        <KPI_Card
-          title='Yıllık Büyüme (YoY)'
-          value='12.4%'
-          unit='Geçen Yıl'
+        <KPICard
+          title='Yıllık Büyüme'
+          value={kpiValues.yoyGrowth}
+          subValue='vs. Geçen Yıl'
           trend='-2.1%'
           trendUp={false}
           icon={Calendar}
-          tooltip='Geçen yılın aynı dönemine göre büyüme oranı.'
+          tooltip='Geçen yılın aynı dönemine kıyasla satışlardaki büyüme oranı (YoY).'
         />
-        <KPI_Card
+        <KPICard
           title='Bias (Sapma)'
-          value='+2.3%'
-          unit='Over-forecast'
+          value={kpiValues.bias}
+          subValue='Over-forecast'
           trend='Stabil'
           trendUp={true}
-          icon={RefreshCcw}
-          tooltip='Pozitif değer: Tahmin > Gerçekleşen (Over-forecast). Negatif: Under-forecast.'
+          icon={AlertTriangle}
+          tooltip='Pozitif: Tahmin > Gerçek (Over). Negatif: Tahmin < Gerçek (Under).'
+        />
+        <KPICard
+          title='Low Growth'
+          value={String(kpiValues.lowGrowth)}
+          subValue='Ürün'
+          trend=''
+          trendUp={false}
+          icon={TrendingDown}
+          accentColor='red'
+          tooltip='Düşük büyüme gösteren ürün sayısı. Pazarlama stratejisi gözden geçirilmeli.'
+        />
+        <KPICard
+          title='High Growth'
+          value={String(kpiValues.highGrowth)}
+          subValue='Ürün'
+          trend=''
+          trendUp={true}
+          icon={TrendingUp}
+          accentColor='green'
+          tooltip='Yüksek büyüme gösteren ürün sayısı. Stok ve tedarik planlaması öncelikli.'
         />
       </div>
 
-      {/* 3. Main Chart & Waterfall */}
-      <div className='grid gap-4 md:grid-cols-3'>
-        {/* Main Chart */}
-        <Card className='md:col-span-2 min-h-[450px]'>
-          <CardHeader className='flex flex-row items-center justify-between pb-2'>
-            <CardTitle>Talep Trendi ve Tahmin</CardTitle>
-            <div className='flex items-center gap-2'>
-              <div className='flex items-center gap-1.5 text-xs text-muted-foreground'>
-                <div className='w-2 h-2 rounded-full bg-slate-500' />
-                Geçmiş
-              </div>
-              <div className='flex items-center gap-1.5 text-xs text-muted-foreground'>
-                <div className='w-2 h-2 rounded-full bg-blue-500' />
-                Tahmin
-              </div>
-            </div>
+      {/* Charts Row 1: Trend + Bias */}
+      <div className='grid gap-3 2xl:gap-4 lg:grid-cols-5'>
+        {/* Trend Forecast Chart */}
+        <Card className='lg:col-span-3'>
+          <CardHeader className='pb-2 2xl:pb-4'>
+            <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-2xl'>
+              Talep Trendi ve Tahmin
+            </CardTitle>
+            <CardDescription className='text-xs md:text-sm 2xl:text-lg'>
+              Geçmiş satışlar, AI tahmini ve trend çizgisi
+            </CardDescription>
           </CardHeader>
-          <CardContent className='h-[400px]'>
-            <ResponsiveContainer width='100%' height='100%'>
+          <CardContent className='h-75 2xl:h-[450px]'>
+            <ResponsiveContainer width='100%' height='100%' key={granularity}>
               <ComposedChart
-                data={data}
-                margin={{ top: 20, right: 30, left: 10, bottom: 10 }}
+                data={trendData}
+                margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
               >
                 <CartesianGrid
                   strokeDasharray='3 3'
@@ -404,299 +852,575 @@ export function DemandForecastingSection() {
                 />
                 <XAxis
                   dataKey='date'
-                  stroke='#6b7280'
-                  fontSize={12}
+                  fontSize={chartConfig.axisFontSize}
                   tickLine={false}
                   axisLine={false}
+                  interval={
+                    granularity === 'daily'
+                      ? 'preserveStartEnd'
+                      : granularity === 'monthly'
+                        ? 0
+                        : is2xl
+                          ? 10
+                          : 15
+                  }
+                  minTickGap={40}
+                  angle={granularity === 'monthly' ? -45 : 0}
+                  textAnchor={granularity === 'monthly' ? 'end' : 'middle'}
+                  height={granularity === 'monthly' ? 60 : 30}
                 />
                 <YAxis
-                  stroke='#6b7280'
-                  fontSize={12}
+                  fontSize={chartConfig.axisFontSize}
                   tickLine={false}
                   axisLine={false}
-                  tickFormatter={(value) => `${(value / 1000).toFixed(1)}k`}
+                  tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`}
+                  width={chartConfig.yAxisWidth}
                 />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: '#fff',
                     borderRadius: '8px',
                     border: '1px solid #e5e7eb',
-                    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                    fontSize: chartConfig.tooltipFontSize,
                   }}
-                  itemStyle={{ fontSize: '12px', padding: '2px 0' }}
-                  labelStyle={{
-                    fontWeight: 'bold',
-                    marginBottom: '4px',
-                    color: '#111827',
-                  }}
+                  formatter={(value: number, name: string) => [
+                    value?.toLocaleString() || '—',
+                    name,
+                  ]}
                 />
-                <Legend wrapperStyle={{ paddingTop: '20px' }} />
-
-                <Area
-                  type='monotone'
-                  dataKey='confLow'
-                  stroke='none'
-                  fill='#93c5fd'
-                  fillOpacity={0.2}
-                  name='Güven Aralığı (Alt)'
-                  legendType='none'
+                <Legend
+                  wrapperStyle={{
+                    fontSize: chartConfig.legendFontSize,
+                    paddingTop: '10px',
+                  }}
                 />
                 <Area
-                  type='monotone'
-                  dataKey='confHigh'
-                  stroke='none'
-                  fill='#93c5fd'
-                  fillOpacity={0.2}
-                  name='Güven Aralığı (Üst)'
-                  legendType='none'
-                />
-
-                <Line
                   type='monotone'
                   dataKey='history'
-                  stroke='#64748b'
-                  strokeWidth={2}
-                  dot={{ r: 3, fill: '#64748b' }}
-                  activeDot={{ r: 5 }}
-                  name='Geçmiş Satışlar'
+                  fill='#64748b'
+                  fillOpacity={0.6}
+                  stroke='#475569'
+                  strokeWidth={is2xl ? 2 : 1}
+                  name='Geçmiş'
                 />
-
-                <Line
+                <Area
                   type='monotone'
                   dataKey='forecast'
+                  fill='#93c5fd'
+                  fillOpacity={0.6}
                   stroke='#3b82f6'
-                  strokeWidth={3}
-                  dot={{ r: 3, fill: '#3b82f6' }}
-                  activeDot={{ r: 6 }}
-                  name='Yapay Zeka Tahmini'
+                  strokeWidth={chartConfig.strokeWidth}
                   strokeDasharray='5 5'
+                  name='Tahmin'
                 />
-
-                <ReferenceLine x='May 10' stroke='red' label='Bugün' />
+                <Line
+                  type='monotone'
+                  dataKey='trendline'
+                  stroke='#1f2937'
+                  strokeWidth={chartConfig.strokeWidth}
+                  dot={false}
+                  name='Trend'
+                />
               </ComposedChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
 
-        {/* 4. Drivers Waterfall Chart */}
-        <Card className='min-h-[450px]'>
-          <CardHeader>
-            <CardTitle className='flex items-center gap-2'>
-              Etki Analizi
-              <TooltipProvider>
-                <UITooltip>
-                  <TooltipTrigger>
-                    <HelpCircle className='h-4 w-4 text-muted-foreground' />
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    <p className='max-w-[200px]'>
-                      Tahminin hangi bileşenlerden oluştuğunu gösteren şelale
-                      grafiği.
-                    </p>
-                  </TooltipContent>
-                </UITooltip>
-              </TooltipProvider>
+        {/* Bias Risk Chart */}
+        <Card className='lg:col-span-2'>
+          <CardHeader className='pb-2 2xl:pb-4'>
+            <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-2xl flex items-center gap-2'>
+              Aylık Tahmin Sapma Riski
+              <UITooltip>
+                <TooltipTrigger>
+                  <Info className='h-3.5 w-3.5 2xl:h-5 2xl:w-5 text-muted-foreground' />
+                </TooltipTrigger>
+                <TooltipContent className='max-w-[320px] text-xs 2xl:text-base p-3 2xl:p-4'>
+                  <p className='font-semibold mb-1'>Risk Bölgeleri:</p>
+                  <p>
+                    <span className='text-green-600 font-medium'>
+                      Yeşil (±5%):
+                    </span>{' '}
+                    Güvenli - Aksiyon gerekmez
+                  </p>
+                  <p>
+                    <span className='text-orange-500 font-medium'>
+                      Turuncu (&gt;+5%):
+                    </span>{' '}
+                    Stok tükenme riski
+                  </p>
+                  <p>
+                    <span className='text-blue-500 font-medium'>
+                      Mavi (&lt;-5%):
+                    </span>{' '}
+                    Fazla stok riski
+                  </p>
+                </TooltipContent>
+              </UITooltip>
             </CardTitle>
-            <CardDescription>Tahmin Bileşenleri (Waterfall)</CardDescription>
           </CardHeader>
-          <CardContent className='h-[400px]'>
+          <CardContent className='h-75 2xl:h-[450px]'>
             <ResponsiveContainer width='100%' height='100%'>
-              <BarChart data={processedWaterfallData}>
+              <ComposedChart
+                data={biasData}
+                margin={{ top: 20, right: 15, left: 0, bottom: 10 }}
+              >
                 <CartesianGrid
                   strokeDasharray='3 3'
                   vertical={false}
                   stroke='#e5e7eb'
                 />
                 <XAxis
-                  dataKey='name'
-                  fontSize={10}
+                  dataKey='month'
+                  fontSize={chartConfig.axisFontSize}
                   tickLine={false}
                   axisLine={false}
-                  interval={0}
-                  angle={-45}
-                  textAnchor='end'
-                  height={60}
                 />
                 <YAxis
-                  stroke='#6b7280'
-                  fontSize={12}
+                  domain={[-30, 40]}
+                  fontSize={chartConfig.axisFontSize}
                   tickLine={false}
                   axisLine={false}
+                  tickFormatter={(v) => `${v}%`}
+                  width={chartConfig.yAxisWidth}
                 />
                 <Tooltip
-                  cursor={{ fill: 'transparent' }}
-                  contentStyle={{
-                    backgroundColor: '#fff',
-                    borderRadius: '8px',
-                    border: '1px solid #e5e7eb',
-                  }}
-                  formatter={(value: number, name, props) => {
-                    // We are using 'uv' for height, but we want to show the original 'value'
-                    // The original payload is available in props.payload
-                    const originalValue = props.payload.value;
-                    return [
-                      `${originalValue > 0 ? '+' : ''}${originalValue}`,
-                      'Etki',
-                    ];
-                  }}
+                  formatter={(value: number) => [`${value}%`, 'Sapma']}
+                  contentStyle={{ fontSize: chartConfig.tooltipFontSize }}
                 />
-                {/* We use stacked bars to create the floating effect. StackId="a" */}
-                <Bar dataKey='start' stackId='a' fill='transparent' />
-                <Bar dataKey='uv' stackId='a' radius={[2, 2, 2, 2]}>
-                  {processedWaterfallData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.fill} />
-                  ))}
-                </Bar>
-              </BarChart>
+
+                {/* Colored zones */}
+                <ReferenceArea
+                  y1={-30}
+                  y2={-5}
+                  fill='#3b82f6'
+                  fillOpacity={0.15}
+                />
+                <ReferenceArea
+                  y1={-5}
+                  y2={5}
+                  fill='#22c55e'
+                  fillOpacity={0.2}
+                />
+                <ReferenceArea
+                  y1={5}
+                  y2={40}
+                  fill='#f97316'
+                  fillOpacity={0.15}
+                />
+
+                <ReferenceLine y={0} stroke='#22c55e' strokeDasharray='3 3' />
+
+                <Line
+                  type='monotone'
+                  dataKey='bias'
+                  stroke='#1f2937'
+                  strokeWidth={chartConfig.strokeWidth}
+                  dot={{ fill: '#1f2937', r: chartConfig.dotRadius }}
+                  activeDot={{ r: chartConfig.activeDotRadius }}
+                />
+              </ComposedChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
 
-      {/* 5. SKU Table */}
+      {/* Year Comparison Chart*/}
       <Card>
-        <CardHeader className='flex flex-row items-center justify-between'>
-          <CardTitle>Detaylı Ürün Bazlı Tahmin (Top 5)</CardTitle>
-          <Button variant='ghost' size='sm' className='text-muted-foreground'>
-            Tümünü Gör <MoreHorizontal className='ml-2 h-4 w-4' />
-          </Button>
+        <CardHeader className='pb-2 2xl:pb-4'>
+          <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-2xl'>
+            Yıllık Karşılaştırma
+          </CardTitle>
+          <CardDescription className='text-xs md:text-sm 2xl:text-lg'>
+            Mevcut yıl ile geçmiş 2 yıl satış karşılaştırması (Haftalık) - H4
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className='relative w-full overflow-auto'>
-            <table className='w-full caption-bottom text-sm text-left'>
-              <thead className='[&_tr]:border-b'>
-                <tr className='border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted'>
-                  <th className='h-10 px-4 align-middle font-medium text-muted-foreground'>
-                    SKU Kodu
-                  </th>
-                  <th className='h-10 px-4 align-middle font-medium text-muted-foreground'>
-                    Ürün Adı
-                  </th>
-                  <th className='h-10 px-4 align-middle font-medium text-muted-foreground'>
-                    Gelecek 4 Hafta
-                  </th>
-                  <th className='h-10 px-4 align-middle font-medium text-muted-foreground'>
-                    Trend
-                  </th>
-                  <th className='h-10 px-4 align-middle font-medium text-muted-foreground'>
-                    Model Doğruluğu
-                  </th>
-                </tr>
-              </thead>
-              <tbody className='[&_tr:last-child]:border-0'>
-                {skuData.map((sku) => (
-                  <tr
-                    key={sku.id}
-                    className='border-b transition-colors hover:bg-muted/50'
-                  >
-                    <td className='p-4 align-middle font-medium'>{sku.id}</td>
-                    <td className='p-4 align-middle'>{sku.name}</td>
-                    <td className='p-4 align-middle font-bold'>
-                      {sku.forecast}
-                    </td>
-                    <td
-                      className={cn(
-                        'p-4 align-middle',
-                        sku.trend.startsWith('+')
-                          ? 'text-green-600'
-                          : sku.trend === '0%'
-                            ? 'text-muted-foreground'
-                            : 'text-red-500',
-                      )}
-                    >
-                      {sku.trend}
-                    </td>
-                    <td className='p-4 align-middle'>
-                      <div className='flex items-center gap-2'>
-                        <div className='h-2 w-16 bg-secondary rounded-full overflow-hidden'>
-                          <div
-                            className='h-full bg-blue-500'
-                            style={{ width: sku.acc }}
-                          />
-                        </div>
-                        <span className='text-xs text-muted-foreground'>
-                          {sku.acc}
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <CardContent className='h-87.5 2xl:h-[550px]'>
+          <ResponsiveContainer width='100%' height='100%'>
+            <LineChart
+              data={yearData}
+              margin={{ top: 10, right: 30, left: 0, bottom: 10 }}
+            >
+              <CartesianGrid
+                strokeDasharray='3 3'
+                vertical={false}
+                stroke='#e5e7eb'
+              />
+              <XAxis
+                dataKey='week'
+                fontSize={chartConfig.axisFontSize}
+                tickLine={false}
+                axisLine={false}
+                interval={is2xl ? 2 : 3}
+              />
+              <YAxis
+                fontSize={chartConfig.axisFontSize}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
+                width={chartConfig.yAxisWidth}
+              />
+              <Tooltip
+                formatter={(value: number, name: string) => {
+                  if (value === null) return ['—', ''];
+                  const year =
+                    name === 'y2024'
+                      ? '2024'
+                      : name === 'y2025'
+                        ? '2025'
+                        : '2026';
+                  return [value?.toLocaleString(), year];
+                }}
+                contentStyle={{ fontSize: chartConfig.tooltipFontSize }}
+              />
+              <Legend
+                formatter={(value) =>
+                  value === 'y2024'
+                    ? '2024'
+                    : value === 'y2025'
+                      ? '2025'
+                      : '2026'
+                }
+                wrapperStyle={{
+                  fontSize: chartConfig.legendFontSize,
+                  paddingTop: '10px',
+                }}
+              />
+              <Line
+                type='monotone'
+                dataKey='y2024'
+                stroke='#9ca3af'
+                strokeWidth={chartConfig.strokeWidth}
+                dot={{ r: chartConfig.dotRadius }}
+                activeDot={{ r: chartConfig.activeDotRadius }}
+                name='y2024'
+                connectNulls
+              />
+              <Line
+                type='monotone'
+                dataKey='y2025'
+                stroke='#374151'
+                strokeWidth={chartConfig.strokeWidth}
+                dot={{ r: chartConfig.dotRadius }}
+                activeDot={{ r: chartConfig.activeDotRadius }}
+                name='y2025'
+                connectNulls
+              />
+              <Line
+                type='monotone'
+                dataKey='y2026'
+                stroke='#3b82f6'
+                strokeWidth={is2xl ? 4 : 2.5}
+                dot={{ r: is2xl ? 5 : 3 }}
+                activeDot={{ r: is2xl ? 7 : 5 }}
+                name='y2026'
+                connectNulls
+              />
+            </LineChart>
+          </ResponsiveContainer>
         </CardContent>
       </Card>
+
+      {/* Tables Row */}
+      <div className='grid gap-3 2xl:gap-4 lg:grid-cols-2'>
+        {/* Growth Products Table - Enhanced */}
+        <Card>
+          <CardHeader className='pb-2 2xl:pb-4'>
+            <div className='flex items-center gap-2'>
+              <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-2xl'>
+                Büyüme Analizi
+              </CardTitle>
+              <UITooltip>
+                <TooltipTrigger>
+                  <Info className='h-3.5 w-3.5 2xl:h-5 2xl:w-5 text-muted-foreground' />
+                </TooltipTrigger>
+                <TooltipContent className='max-w-[320px] text-xs 2xl:text-base'>
+                  <p>
+                    <strong>Tahmin:</strong> AI modelinin öngördüğü satış adedi
+                  </p>
+                  <p>
+                    <strong>Satış:</strong> Gerçekleşen satış adedi
+                  </p>
+                  <p>
+                    <strong>Büyüme:</strong> Geçen aya göre % değişim
+                  </p>
+                </TooltipContent>
+              </UITooltip>
+            </div>
+            <div className='flex flex-col sm:flex-row gap-2 mt-2'>
+              <div className='relative flex-1'>
+                <Search className='absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 2xl:h-5 2xl:w-5 text-muted-foreground' />
+                <Input
+                  placeholder='Ara...'
+                  value={growthSearch}
+                  onChange={(e) => setGrowthSearch(e.target.value)}
+                  className='pl-9 h-8 2xl:h-12 text-xs 2xl:text-base'
+                />
+              </div>
+              <Select value={growthFilter} onValueChange={setGrowthFilter}>
+                <SelectTrigger className='w-28 2xl:w-36 h-8 2xl:h-12 text-xs 2xl:text-base'>
+                  <SelectValue placeholder='Filtre' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='all'>Tümü</SelectItem>
+                  <SelectItem value='high'>Yüksek</SelectItem>
+                  <SelectItem value='low'>Düşük</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          <CardContent className='pt-0'>
+            <div className='overflow-auto max-h-70 2xl:max-h-100'>
+              <table className='w-full text-xs 2xl:text-base'>
+                <thead className='sticky top-0 bg-card'>
+                  <tr className='border-b'>
+                    <th className='text-left p-2 font-medium text-muted-foreground'>
+                      SKU
+                    </th>
+                    <th className='text-left p-2 font-medium text-muted-foreground'>
+                      Ürün
+                    </th>
+                    <th className='text-right p-2 font-medium text-muted-foreground'>
+                      Büyüme
+                    </th>
+                    <th className='text-right p-2 font-medium text-muted-foreground'>
+                      Tahmin
+                    </th>
+                    <th className='text-right p-2 font-medium text-muted-foreground'>
+                      Satış
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredGrowthProducts.map((product) => (
+                    <tr key={product.id} className='border-b hover:bg-muted/50'>
+                      <td className='p-2 font-mono text-[10px] 2xl:text-xs'>
+                        {product.id}
+                      </td>
+                      <td className='p-2 truncate max-w-30 2xl:max-w-45'>
+                        {product.name}
+                      </td>
+                      <td
+                        className={cn(
+                          'p-2 text-right font-semibold',
+                          product.growth > 0
+                            ? 'text-green-600'
+                            : 'text-red-600',
+                        )}
+                      >
+                        {product.growth > 0 ? '+' : ''}
+                        {product.growth}%
+                      </td>
+                      <td className='p-2 text-right text-muted-foreground'>
+                        {product.forecast.toLocaleString()}
+                      </td>
+                      <td className='p-2 text-right font-medium'>
+                        {product.actualSales.toLocaleString()}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Forecast Error Table - Enhanced */}
+        <Card>
+          <CardHeader className='pb-2 2xl:pb-4'>
+            <div className='flex items-center gap-2'>
+              <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-2xl'>
+                Tahmin Hataları
+              </CardTitle>
+              <UITooltip>
+                <TooltipTrigger>
+                  <Info className='h-3.5 w-3.5 2xl:h-5 2xl:w-5 text-muted-foreground' />
+                </TooltipTrigger>
+                <TooltipContent className='max-w-[320px] text-xs 2xl:text-base'>
+                  <p>
+                    <strong>Hata (Bias):</strong> Tahmin ile gerçek arasındaki %
+                    sapma
+                  </p>
+                  <p>
+                    <strong>Aksiyon:</strong> Önerilen düzeltme adımı
+                  </p>
+                </TooltipContent>
+              </UITooltip>
+            </div>
+            <div className='flex flex-col sm:flex-row gap-2 mt-2'>
+              <div className='relative flex-1'>
+                <Search className='absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 2xl:h-5 2xl:w-5 text-muted-foreground' />
+                <Input
+                  placeholder='Ara...'
+                  value={errorSearch}
+                  onChange={(e) => setErrorSearch(e.target.value)}
+                  className='pl-9 h-8 2xl:h-12 text-xs 2xl:text-base'
+                />
+              </div>
+              <Select value={errorFilter} onValueChange={setErrorFilter}>
+                <SelectTrigger className='w-28 2xl:w-36 h-8 2xl:h-12 text-xs 2xl:text-base'>
+                  <SelectValue placeholder='Filtre' />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value='all'>Tümü</SelectItem>
+                  <SelectItem value='high'>&gt;10%</SelectItem>
+                  <SelectItem value='medium'>5-10%</SelectItem>
+                  <SelectItem value='low'>&lt;5%</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardHeader>
+          <CardContent className='pt-0'>
+            <div className='overflow-auto max-h-70 2xl:max-h-100'>
+              <table className='w-full text-xs 2xl:text-base'>
+                <thead className='sticky top-0 bg-card'>
+                  <tr className='border-b'>
+                    <th className='text-left p-2 font-medium text-muted-foreground'>
+                      SKU
+                    </th>
+                    <th className='text-left p-2 font-medium text-muted-foreground'>
+                      Ürün
+                    </th>
+                    <th className='text-right p-2 font-medium text-muted-foreground'>
+                      Hata
+                    </th>
+                    <th className='text-left p-2 font-medium text-muted-foreground'>
+                      Aksiyon
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredErrorProducts.map((product) => (
+                    <tr key={product.id} className='border-b hover:bg-muted/50'>
+                      <td className='p-2 font-mono text-[10px] 2xl:text-xs'>
+                        {product.id}
+                      </td>
+                      <td className='p-2 truncate max-w-[120px] 2xl:max-w-[180px]'>
+                        {product.name}
+                      </td>
+                      <td
+                        className={cn(
+                          'p-2 text-right font-semibold',
+                          product.error > 10
+                            ? 'text-red-600'
+                            : product.error > 5
+                              ? 'text-orange-500'
+                              : 'text-green-600',
+                        )}
+                      >
+                        {product.error}%
+                      </td>
+                      <td className='p-2'>
+                        <span
+                          className={cn(
+                            'px-1.5 py-0.5 rounded text-[10px] 2xl:text-xs font-medium whitespace-nowrap',
+                            product.error > 10
+                              ? 'bg-red-100 text-red-700'
+                              : product.error > 5
+                                ? 'bg-orange-100 text-orange-700'
+                                : 'bg-green-100 text-green-700',
+                          )}
+                        >
+                          {product.action}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }
 
-// Helper Component for KPIs with Tooltip
-function KPI_Card({
+// ============ KPI Card Component - Enhanced ============
+
+function KPICard({
   title,
   value,
-  secondaryValue,
-  unit,
+  subValue,
   trend,
   trendUp,
   icon: Icon,
+  accentColor,
   tooltip,
 }: {
   title: string;
   value: string;
-  secondaryValue?: string;
-  unit?: string;
+  subValue?: string;
   trend: string;
   trendUp: boolean;
   icon: any;
-  tooltip: string;
+  accentColor?: 'green' | 'red';
+  tooltip?: string;
 }) {
+  const iconBgColor =
+    accentColor === 'green'
+      ? 'bg-green-100'
+      : accentColor === 'red'
+        ? 'bg-red-100'
+        : 'bg-accent/10';
+  const iconColor =
+    accentColor === 'green'
+      ? 'text-green-600'
+      : accentColor === 'red'
+        ? 'text-red-600'
+        : 'text-accent';
+
   return (
-    <Card>
-      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
-        <CardTitle className='text-sm md:text-base font-medium flex items-center gap-2'>
+    <Card className='overflow-hidden'>
+      <CardHeader className='flex flex-row items-center justify-between pb-1 pt-2 2xl:pt-4 px-2 2xl:px-5'>
+        <CardTitle className='text-[10px] md:text-xs 2xl:text-base font-medium text-muted-foreground truncate flex items-center gap-1'>
           {title}
           {tooltip && (
-            <TooltipProvider>
-              <UITooltip>
-                <TooltipTrigger>
-                  <Info className='h-3 w-3 text-muted-foreground cursor-help' />
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className='max-w-[180px] text-xs md:text-sm'>{tooltip}</p>
-                </TooltipContent>
-              </UITooltip>
-            </TooltipProvider>
+            <UITooltip>
+              <TooltipTrigger>
+                <Info className='h-3 w-3 2xl:h-4 2xl:w-4 text-muted-foreground/60' />
+              </TooltipTrigger>
+              <TooltipContent className='max-w-[250px] text-xs 2xl:text-sm'>
+                {tooltip}
+              </TooltipContent>
+            </UITooltip>
           )}
         </CardTitle>
-        <div className='w-9 h-9 rounded-lg bg-accent/10 flex items-center justify-center'>
-          <Icon className='h-4 w-4 text-accent' />
+        <div
+          className={cn(
+            'w-6 h-6 2xl:w-10 2xl:h-10 rounded-md flex items-center justify-center shrink-0',
+            iconBgColor,
+          )}
+        >
+          <Icon className={cn('h-3 w-3 2xl:h-5 2xl:w-5', iconColor)} />
         </div>
       </CardHeader>
-      <CardContent>
-        <div className='text-2xl lg:text-3xl font-bold tracking-tight'>
+      <CardContent className='px-2 2xl:px-5 pb-2 2xl:pb-4'>
+        <div className='text-lg md:text-xl 2xl:text-3xl font-bold tracking-tight'>
           {value}
         </div>
-        {secondaryValue && (
-          <div className='text-lg lg:text-xl font-semibold text-muted-foreground mt-0.5'>
-            {secondaryValue}
+        {subValue && (
+          <div className='text-[10px] md:text-xs 2xl:text-base text-muted-foreground'>
+            {subValue}
           </div>
         )}
-        <div className='flex items-center text-xs md:text-sm text-muted-foreground mt-1'>
-          <span
-            className={cn(
-              'flex items-center mr-1',
-              trendUp ? 'text-green-600' : 'text-red-500',
-            )}
-          >
-            {trendUp ? (
-              <ArrowUpRight className='h-3.5 w-3.5 mr-0.5' />
-            ) : (
-              <ArrowDownRight className='h-3.5 w-3.5 mr-0.5' />
-            )}
-            {trend}
-          </span>
-          {unit}
-        </div>
+        {trend && (
+          <div className='flex items-center mt-0.5 2xl:mt-1'>
+            <span
+              className={cn(
+                'flex items-center text-[10px] 2xl:text-sm font-medium',
+                trendUp ? 'text-green-600' : 'text-red-500',
+              )}
+            >
+              {trendUp ? (
+                <ArrowUpRight className='h-2.5 w-2.5 2xl:h-4 2xl:w-4 mr-0.5' />
+              ) : (
+                <ArrowDownRight className='h-2.5 w-2.5 2xl:h-4 2xl:w-4 mr-0.5' />
+              )}
+              {trend}
+            </span>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
