@@ -80,7 +80,7 @@ export function MultiSelect({
     <div ref={containerRef} className={cn('relative w-full', className)}>
       {/* Input Area */}
       <div
-        className='flex items-center justify-between min-h-9 w-full rounded-lg border border-border/50 bg-card px-3 py-2 text-sm 2xl:text-base shadow-sm cursor-pointer transition-all hover:border-primary/30 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20'
+        className='flex items-center justify-between min-h-8 w-full rounded-lg border border-border/50 bg-card px-2 py-1.5 text-xs shadow-sm cursor-pointer transition-all hover:border-primary/30 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20'
         onClick={() => {
           setIsOpen(!isOpen);
           inputRef.current?.focus();
@@ -88,7 +88,7 @@ export function MultiSelect({
       >
         <div className='flex items-center gap-2 flex-1 min-w-0'>
           {/* Placeholder / Label */}
-          <span className='text-muted-foreground truncate text-sm 2xl:text-base'>
+          <span className='text-muted-foreground truncate text-xs'>
             {placeholder}
           </span>
 
@@ -121,7 +121,7 @@ export function MultiSelect({
               onChange={(e) => setSearchValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder='Search...'
-              className='w-full bg-transparent outline-none placeholder:text-muted-foreground text-sm 2xl:text-base'
+              className='w-full bg-transparent outline-none placeholder:text-muted-foreground text-xs'
             />
           </div>
 
@@ -133,7 +133,7 @@ export function MultiSelect({
                 return (
                   <span
                     key={value}
-                    className='inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-0.5 text-xs 2xl:text-sm font-medium text-secondary-foreground'
+                    className='inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground'
                   >
                     {option?.label}
                     <button
@@ -175,7 +175,7 @@ export function MultiSelect({
                   }
                 }}
                 className={cn(
-                  'flex items-center justify-between px-3 py-2 text-sm 2xl:text-base rounded-sm cursor-pointer font-semibold border-b mb-1',
+                  'flex items-center justify-between px-2 py-1.5 text-xs rounded-sm cursor-pointer font-semibold border-b mb-1',
                   filteredOptions.every((option) =>
                     selected.includes(option.value),
                   )
@@ -205,7 +205,7 @@ export function MultiSelect({
                     key={option.value}
                     onClick={() => toggleOption(option.value)}
                     className={cn(
-                      'flex items-center justify-between px-3 py-2 text-sm 2xl:text-base rounded-sm cursor-pointer',
+                      'flex items-center justify-between px-2 py-1.5 text-xs rounded-sm cursor-pointer',
                       isSelected
                         ? 'bg-accent text-accent-foreground'
                         : 'hover:bg-muted',

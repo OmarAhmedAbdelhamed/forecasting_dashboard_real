@@ -61,8 +61,8 @@ import {
 // Responsive chart config for different screen sizes
 const getChartConfig = (is2xl: boolean) => ({
   axisFontSize: is2xl ? 14 : 11,
-  tooltipFontSize: is2xl ? '15px' : '12px',
-  legendFontSize: is2xl ? '14px' : '11px',
+  tooltipFontSize: is2xl ? '13px' : '11px',
+  legendFontSize: is2xl ? '12px' : '10px',
   dotRadius: is2xl ? 4 : 2,
   activeDotRadius: is2xl ? 6 : 4,
   strokeWidth: is2xl ? 3 : 2,
@@ -708,9 +708,9 @@ export function DemandForecastingSection() {
   return (
     <div className='space-y-4 2xl:space-y-6'>
       {/* Header with Filters */}
-      <div className='w-full bg-card border border-border rounded-lg p-3 2xl:p-4 shadow-sm flex flex-col lg:flex-row gap-4 items-end lg:items-center justify-between'>
-        <div className='flex items-center gap-4'>
-          <h2 className='text-lg md:text-xl lg:text-2xl 2xl:text-2xl font-semibold tracking-tight text-foreground'>
+      <div className='w-full bg-card border border-border rounded-lg p-2 2xl:p-3 shadow-sm flex flex-col lg:flex-row gap-3 items-end lg:items-center justify-between'>
+        <div className='flex items-center gap-3'>
+          <h2 className='text-base md:text-lg lg:text-xl 2xl:text-xl font-semibold tracking-tight text-foreground'>
             Talep Tahminleme
           </h2>
           <Button
@@ -741,11 +741,11 @@ export function DemandForecastingSection() {
               }
               value={periodValue}
               onChange={(e) => setPeriodValue(e.target.value)}
-              className='w-16 2xl:w-20 h-9 2xl:h-11 text-center text-sm 2xl:text-base'
+              className='w-14 2xl:w-16 h-8 2xl:h-9 text-center text-xs 2xl:text-sm'
               disabled={periodUnit === 'yil'}
             />
             <Select value={periodUnit} onValueChange={setPeriodUnit}>
-              <SelectTrigger className='w-20 2xl:w-24 h-9 2xl:h-11 text-sm 2xl:text-base'>
+              <SelectTrigger className='w-16 2xl:w-20 h-8 2xl:h-9 text-xs 2xl:text-sm'>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -795,358 +795,367 @@ export function DemandForecastingSection() {
       />
 
       {/* KPI Cards - 6 in a row with better padding */}
-      <div className='grid gap-3 2xl:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6'>
-        <KPICard
-          title='Toplam Tahmin'
-          value={kpiValues.totalForecast}
-          subValue={kpiValues.totalUnits}
-          trend='+8.5%'
-          trendUp={true}
-          icon={TrendingUp}
-          tooltip='Seçilen dönem için AI modelinin öngördüğü toplam satış tutarı ve adet.'
-        />
-        <KPICard
-          title='Doğruluk Oranı'
-          value={kpiValues.accuracy}
-          subValue='Geçen Ay'
-          trend='+1.2%'
-          trendUp={true}
-          icon={Target}
-          tooltip='Model doğruluğu (1 - MAPE). Tahmin ile gerçekleşen arasındaki tutarlılık.'
-        />
-        <KPICard
-          title='Yıllık Büyüme'
-          value={kpiValues.yoyGrowth}
-          subValue='vs. Geçen Yıl'
-          trend='-2.1%'
-          trendUp={false}
-          icon={Calendar}
-          tooltip='Geçen yılın aynı dönemine kıyasla satışlardaki büyüme oranı (YoY).'
-        />
-        <KPICard
-          title='Bias (Sapma)'
-          value={kpiValues.bias}
-          subValue='Over-forecast'
-          trend='Stabil'
-          trendUp={true}
-          icon={AlertTriangle}
-          tooltip='Pozitif: Tahmin > Gerçek (Over). Negatif: Tahmin < Gerçek (Under).'
-        />
-        <KPICard
-          title='Low Growth'
-          value={String(kpiValues.lowGrowth)}
-          subValue='Ürün'
-          trend=''
-          trendUp={false}
-          icon={TrendingDown}
-          accentColor='red'
-          tooltip='Düşük büyüme gösteren ürün sayısı. Pazarlama stratejisi gözden geçirilmeli.'
-        />
-        <KPICard
-          title='High Growth'
-          value={String(kpiValues.highGrowth)}
-          subValue='Ürün'
-          trend=''
-          trendUp={true}
-          icon={TrendingUp}
-          accentColor='green'
-          tooltip='Yüksek büyüme gösteren ürün sayısı. Stok ve tedarik planlaması öncelikli.'
-        />
+      <div className='grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4'>
+        {/* Top Left: KPIs (2 cols x 3 rows) */}
+        <div className='lg:col-span-4 grid grid-cols-2 gap-2 2xl:gap-3'>
+          <KPICard
+            title='Toplam Tahmin'
+            value={kpiValues.totalForecast}
+            subValue={kpiValues.totalUnits}
+            trend='+8.5%'
+            trendUp={true}
+            icon={TrendingUp}
+            tooltip='Seçilen dönem için AI modelinin öngördüğü toplam satış tutarı ve adet.'
+          />
+          <KPICard
+            title='Doğruluk Oranı'
+            value={kpiValues.accuracy}
+            subValue='Geçen Ay'
+            trend='+1.2%'
+            trendUp={true}
+            icon={Target}
+            tooltip='Model doğruluğu (1 - MAPE). Tahmin ile gerçekleşen arasındaki tutarlılık.'
+          />
+          <KPICard
+            title='Yıllık Büyüme'
+            value={kpiValues.yoyGrowth}
+            subValue='vs. Geçen Yıl'
+            trend='-2.1%'
+            trendUp={false}
+            icon={Calendar}
+            tooltip='Geçen yılın aynı dönemine kıyasla satışlardaki büyüme oranı (YoY).'
+          />
+          <KPICard
+            title='Bias (Sapma)'
+            value={kpiValues.bias}
+            subValue='Over-forecast'
+            trend='Stabil'
+            trendUp={true}
+            icon={AlertTriangle}
+            tooltip='Pozitif: Tahmin > Gerçek (Over). Negatif: Tahmin < Gerçek (Under).'
+          />
+          <KPICard
+            title='Low Growth'
+            value={String(kpiValues.lowGrowth)}
+            subValue='Ürün'
+            trend=''
+            trendUp={false}
+            icon={TrendingDown}
+            accentColor='red'
+            tooltip='Düşük büyüme gösteren ürün sayısı. Pazarlama stratejisi gözden geçirilmeli.'
+          />
+          <KPICard
+            title='High Growth'
+            value={String(kpiValues.highGrowth)}
+            subValue='Ürün'
+            trend=''
+            trendUp={true}
+            icon={TrendingUp}
+            accentColor='green'
+            tooltip='Yüksek büyüme gösteren ürün sayısı. Stok ve tedarik planlaması öncelikli.'
+          />
+        </div>
+
+        {/* Top Right: Trend Forecast Chart */}
+        <div className='lg:col-span-8'>
+          <Card className='h-full'>
+            <CardHeader className='pb-2 2xl:pb-3'>
+              <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-xl'>
+                Talep Tahmin ve Trend
+              </CardTitle>
+              <CardDescription className='text-xs md:text-xs 2xl:text-sm'>
+                Geçmiş satışlar, AI tahmini ve trend çizgisi
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='h-[250px] 2xl:h-[350px]'>
+              <ResponsiveContainer width='100%' height='100%' key={granularity}>
+                <ComposedChart
+                  data={trendData}
+                  margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray='3 3'
+                    vertical={false}
+                    stroke='#e5e7eb'
+                  />
+                  <XAxis
+                    dataKey='date'
+                    fontSize={chartConfig.axisFontSize}
+                    tickLine={false}
+                    axisLine={false}
+                    interval={
+                      granularity === 'daily'
+                        ? 'preserveStartEnd'
+                        : granularity === 'monthly'
+                          ? 0
+                          : is2xl
+                            ? 10
+                            : 15
+                    }
+                    minTickGap={40}
+                    angle={granularity === 'monthly' ? -45 : 0}
+                    textAnchor={granularity === 'monthly' ? 'end' : 'middle'}
+                    height={granularity === 'monthly' ? 60 : 30}
+                  />
+                  <YAxis
+                    fontSize={chartConfig.axisFontSize}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`}
+                    width={chartConfig.yAxisWidth}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#fff',
+                      borderRadius: '8px',
+                      border: '1px solid #e5e7eb',
+                      fontSize: chartConfig.tooltipFontSize,
+                    }}
+                    formatter={(value: number, name: string) => [
+                      value?.toLocaleString() || '—',
+                      name,
+                    ]}
+                  />
+                  <Legend
+                    wrapperStyle={{
+                      fontSize: chartConfig.legendFontSize,
+                      paddingTop: '10px',
+                    }}
+                  />
+                  <Area
+                    type='monotone'
+                    dataKey='history'
+                    fill='#64748b'
+                    fillOpacity={0.6}
+                    stroke='#475569'
+                    strokeWidth={is2xl ? 2 : 1}
+                    name='Geçmiş'
+                  />
+                  <Area
+                    type='monotone'
+                    dataKey='forecast'
+                    fill='#93c5fd'
+                    fillOpacity={0.6}
+                    stroke='#3b82f6'
+                    strokeWidth={chartConfig.strokeWidth}
+                    name='Tahmin'
+                  />
+                  <Line
+                    type='monotone'
+                    dataKey='trendline'
+                    stroke='#1f2937'
+                    strokeWidth={chartConfig.strokeWidth}
+                    dot={false}
+                    name='Trend'
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
-      {/* Charts Row 1: Trend + Bias */}
-      <div className='grid gap-3 2xl:gap-4 lg:grid-cols-5'>
-        {/* Trend Forecast Chart */}
-        <Card className='lg:col-span-3'>
-          <CardHeader className='pb-2 2xl:pb-4'>
-            <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-2xl'>
-              Talep Trendi ve Tahmin
-            </CardTitle>
-            <CardDescription className='text-xs md:text-sm 2xl:text-lg'>
-              Geçmiş satışlar, AI tahmini ve trend çizgisi
-            </CardDescription>
-          </CardHeader>
-          <CardContent className='h-75 2xl:h-[450px]'>
-            <ResponsiveContainer width='100%' height='100%' key={granularity}>
-              <ComposedChart
-                data={trendData}
-                margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
-              >
-                <CartesianGrid
-                  strokeDasharray='3 3'
-                  vertical={false}
-                  stroke='#e5e7eb'
-                />
-                <XAxis
-                  dataKey='date'
-                  fontSize={chartConfig.axisFontSize}
-                  tickLine={false}
-                  axisLine={false}
-                  interval={
-                    granularity === 'daily'
-                      ? 'preserveStartEnd'
-                      : granularity === 'monthly'
-                        ? 0
-                        : is2xl
-                          ? 10
-                          : 15
-                  }
-                  minTickGap={40}
-                  angle={granularity === 'monthly' ? -45 : 0}
-                  textAnchor={granularity === 'monthly' ? 'end' : 'middle'}
-                  height={granularity === 'monthly' ? 60 : 30}
-                />
-                <YAxis
-                  fontSize={chartConfig.axisFontSize}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`}
-                  width={chartConfig.yAxisWidth}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#fff',
-                    borderRadius: '8px',
-                    border: '1px solid #e5e7eb',
-                    fontSize: chartConfig.tooltipFontSize,
-                  }}
-                  formatter={(value: number, name: string) => [
-                    value?.toLocaleString() || '—',
-                    name,
-                  ]}
-                />
-                <Legend
-                  wrapperStyle={{
-                    fontSize: chartConfig.legendFontSize,
-                    paddingTop: '10px',
-                  }}
-                />
-                <Area
-                  type='monotone'
-                  dataKey='history'
-                  fill='#64748b'
-                  fillOpacity={0.6}
-                  stroke='#475569'
-                  strokeWidth={is2xl ? 2 : 1}
-                  name='Geçmiş'
-                />
-                <Area
-                  type='monotone'
-                  dataKey='forecast'
-                  fill='#93c5fd'
-                  fillOpacity={0.6}
-                  stroke='#3b82f6'
-                  strokeWidth={chartConfig.strokeWidth}
-                  strokeDasharray='5 5'
-                  name='Tahmin'
-                />
-                <Line
-                  type='monotone'
-                  dataKey='trendline'
-                  stroke='#1f2937'
-                  strokeWidth={chartConfig.strokeWidth}
-                  dot={false}
-                  name='Trend'
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+      {/* Second Row: Yearly Comparison + Risk Chart */}
+      <div className='grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4'>
+        {/* Left: Year Comparison Chart */}
+        <div className='lg:col-span-6'>
+          <Card className='h-full'>
+            <CardHeader className='pb-2 2xl:pb-3'>
+              <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-xl'>
+                Yıllık Karşılaştırma
+              </CardTitle>
+              <CardDescription className='text-xs md:text-xs 2xl:text-sm'>
+                Mevcut yıl ile geçmiş 2 yıl satış karşılaştırması (Haftalık) -
+                H4
+              </CardDescription>
+            </CardHeader>
+            <CardContent className='h-[250px] 2xl:h-[350px]'>
+              <ResponsiveContainer width='100%' height='100%'>
+                <LineChart
+                  data={yearData}
+                  margin={{ top: 10, right: 30, left: 0, bottom: 10 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray='3 3'
+                    vertical={false}
+                    stroke='#e5e7eb'
+                  />
+                  <XAxis
+                    dataKey='week'
+                    fontSize={chartConfig.axisFontSize}
+                    tickLine={false}
+                    axisLine={false}
+                    interval={is2xl ? 2 : 3}
+                  />
+                  <YAxis
+                    fontSize={chartConfig.axisFontSize}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
+                    width={chartConfig.yAxisWidth}
+                  />
+                  <Tooltip
+                    formatter={(value: number, name: string) => {
+                      if (value === null) return ['—', ''];
+                      const year =
+                        name === 'y2024'
+                          ? '2024'
+                          : name === 'y2025'
+                            ? '2025'
+                            : '2026';
+                      return [value?.toLocaleString(), year];
+                    }}
+                    contentStyle={{ fontSize: chartConfig.tooltipFontSize }}
+                  />
+                  <Legend
+                    formatter={(value) =>
+                      value === 'y2024'
+                        ? '2024'
+                        : value === 'y2025'
+                          ? '2025'
+                          : '2026'
+                    }
+                    wrapperStyle={{
+                      fontSize: chartConfig.legendFontSize,
+                      paddingTop: '10px',
+                    }}
+                  />
+                  <Line
+                    type='monotone'
+                    dataKey='y2024'
+                    stroke='#9ca3af'
+                    strokeWidth={chartConfig.strokeWidth}
+                    dot={{ r: chartConfig.dotRadius }}
+                    activeDot={{ r: chartConfig.activeDotRadius }}
+                    name='y2024'
+                    connectNulls
+                  />
+                  <Line
+                    type='monotone'
+                    dataKey='y2025'
+                    stroke='#374151'
+                    strokeWidth={chartConfig.strokeWidth}
+                    dot={{ r: chartConfig.dotRadius }}
+                    activeDot={{ r: chartConfig.activeDotRadius }}
+                    name='y2025'
+                    connectNulls
+                  />
+                  <Line
+                    type='monotone'
+                    dataKey='y2026'
+                    stroke='#3b82f6'
+                    strokeWidth={is2xl ? 4 : 2.5}
+                    dot={{ r: is2xl ? 5 : 3 }}
+                    activeDot={{ r: is2xl ? 7 : 5 }}
+                    name='y2026'
+                    connectNulls
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
 
-        {/* Bias Risk Chart */}
-        <Card className='lg:col-span-2'>
-          <CardHeader className='pb-2 2xl:pb-4'>
-            <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-2xl flex items-center gap-2'>
-              Aylık Tahmin Sapma Riski
-              <UITooltip>
-                <TooltipTrigger>
-                  <Info className='h-3.5 w-3.5 2xl:h-5 2xl:w-5 text-muted-foreground' />
-                </TooltipTrigger>
-                <TooltipContent className='max-w-[320px] text-xs 2xl:text-base p-3 2xl:p-4'>
-                  <p className='font-semibold mb-1'>Risk Bölgeleri:</p>
-                  <p>
-                    <span className='text-green-600 font-medium'>
-                      Yeşil (±5%):
-                    </span>{' '}
-                    Güvenli - Aksiyon gerekmez
-                  </p>
-                  <p>
-                    <span className='text-orange-500 font-medium'>
-                      Turuncu (&gt;+5%):
-                    </span>{' '}
-                    Stok tükenme riski
-                  </p>
-                  <p>
-                    <span className='text-blue-500 font-medium'>
-                      Mavi (&lt;-5%):
-                    </span>{' '}
-                    Fazla stok riski
-                  </p>
-                </TooltipContent>
-              </UITooltip>
-            </CardTitle>
-          </CardHeader>
-          <CardContent className='h-75 2xl:h-[450px]'>
-            <ResponsiveContainer width='100%' height='100%'>
-              <ComposedChart
-                data={biasData}
-                margin={{ top: 20, right: 15, left: 0, bottom: 10 }}
-              >
-                <CartesianGrid
-                  strokeDasharray='3 3'
-                  vertical={false}
-                  stroke='#e5e7eb'
-                />
-                <XAxis
-                  dataKey='month'
-                  fontSize={chartConfig.axisFontSize}
-                  tickLine={false}
-                  axisLine={false}
-                />
-                <YAxis
-                  domain={[-30, 40]}
-                  fontSize={chartConfig.axisFontSize}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) => `${v}%`}
-                  width={chartConfig.yAxisWidth}
-                />
-                <Tooltip
-                  formatter={(value: number) => [`${value}%`, 'Sapma']}
-                  contentStyle={{ fontSize: chartConfig.tooltipFontSize }}
-                />
+        {/* Right: Bias Risk Chart */}
+        <div className='lg:col-span-6'>
+          <Card className='h-full'>
+            <CardHeader className='pb-2 2xl:pb-3'>
+              <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-xl flex items-center gap-2'>
+                Aylık Tahmin Sapma Riski
+                <UITooltip>
+                  <TooltipTrigger>
+                    <Info className='h-3.5 w-3.5 2xl:h-4 2xl:w-4 text-muted-foreground' />
+                  </TooltipTrigger>
+                  <TooltipContent className='max-w-[320px] text-xs 2xl:text-sm p-3 2xl:p-3'>
+                    <p className='font-semibold mb-1'>Risk Bölgeleri:</p>
+                    <p>
+                      <span className='text-green-600 font-medium'>
+                        Yeşil (±5%):
+                      </span>{' '}
+                      Güvenli - Aksiyon gerekmez
+                    </p>
+                    <p>
+                      <span className='text-orange-500 font-medium'>
+                        Turuncu (&gt;+5%):
+                      </span>{' '}
+                      Stok tükenme riski
+                    </p>
+                    <p>
+                      <span className='text-blue-500 font-medium'>
+                        Mavi (&lt;-5%):
+                      </span>{' '}
+                      Fazla stok riski
+                    </p>
+                  </TooltipContent>
+                </UITooltip>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className='h-[300px] 2xl:h-[450px]'>
+              <ResponsiveContainer width='100%' height='100%'>
+                <ComposedChart
+                  data={biasData}
+                  margin={{ top: 20, right: 15, left: 0, bottom: 10 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray='3 3'
+                    vertical={false}
+                    stroke='#e5e7eb'
+                  />
+                  <XAxis
+                    dataKey='month'
+                    fontSize={chartConfig.axisFontSize}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    domain={[-30, 40]}
+                    fontSize={chartConfig.axisFontSize}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => `${v}%`}
+                    width={chartConfig.yAxisWidth}
+                  />
+                  <Tooltip
+                    formatter={(value: number) => [`${value}%`, 'Sapma']}
+                    contentStyle={{ fontSize: chartConfig.tooltipFontSize }}
+                  />
 
-                {/* Colored zones */}
-                <ReferenceArea
-                  y1={-30}
-                  y2={-5}
-                  fill='#3b82f6'
-                  fillOpacity={0.15}
-                />
-                <ReferenceArea
-                  y1={-5}
-                  y2={5}
-                  fill='#22c55e'
-                  fillOpacity={0.2}
-                />
-                <ReferenceArea
-                  y1={5}
-                  y2={40}
-                  fill='#f97316'
-                  fillOpacity={0.15}
-                />
+                  {/* Colored zones */}
+                  <ReferenceArea
+                    y1={-30}
+                    y2={-5}
+                    fill='#3b82f6'
+                    fillOpacity={0.15}
+                  />
+                  <ReferenceArea
+                    y1={-5}
+                    y2={5}
+                    fill='#22c55e'
+                    fillOpacity={0.2}
+                  />
+                  <ReferenceArea
+                    y1={5}
+                    y2={40}
+                    fill='#f97316'
+                    fillOpacity={0.15}
+                  />
 
-                <ReferenceLine y={0} stroke='#22c55e' strokeDasharray='3 3' />
+                  <ReferenceLine y={0} stroke='#22c55e' strokeDasharray='3 3' />
 
-                <Line
-                  type='monotone'
-                  dataKey='bias'
-                  stroke='#1f2937'
-                  strokeWidth={chartConfig.strokeWidth}
-                  dot={{ fill: '#1f2937', r: chartConfig.dotRadius }}
-                  activeDot={{ r: chartConfig.activeDotRadius }}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+                  <Line
+                    type='monotone'
+                    dataKey='bias'
+                    stroke='#1f2937'
+                    strokeWidth={chartConfig.strokeWidth}
+                    dot={{ fill: '#1f2937', r: chartConfig.dotRadius }}
+                    activeDot={{ r: chartConfig.activeDotRadius }}
+                  />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-
-      {/* Year Comparison Chart*/}
-      <Card>
-        <CardHeader className='pb-2 2xl:pb-4'>
-          <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-2xl'>
-            Yıllık Karşılaştırma
-          </CardTitle>
-          <CardDescription className='text-xs md:text-sm 2xl:text-lg'>
-            Mevcut yıl ile geçmiş 2 yıl satış karşılaştırması (Haftalık) - H4
-          </CardDescription>
-        </CardHeader>
-        <CardContent className='h-87.5 2xl:h-[550px]'>
-          <ResponsiveContainer width='100%' height='100%'>
-            <LineChart
-              data={yearData}
-              margin={{ top: 10, right: 30, left: 0, bottom: 10 }}
-            >
-              <CartesianGrid
-                strokeDasharray='3 3'
-                vertical={false}
-                stroke='#e5e7eb'
-              />
-              <XAxis
-                dataKey='week'
-                fontSize={chartConfig.axisFontSize}
-                tickLine={false}
-                axisLine={false}
-                interval={is2xl ? 2 : 3}
-              />
-              <YAxis
-                fontSize={chartConfig.axisFontSize}
-                tickLine={false}
-                axisLine={false}
-                tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
-                width={chartConfig.yAxisWidth}
-              />
-              <Tooltip
-                formatter={(value: number, name: string) => {
-                  if (value === null) return ['—', ''];
-                  const year =
-                    name === 'y2024'
-                      ? '2024'
-                      : name === 'y2025'
-                        ? '2025'
-                        : '2026';
-                  return [value?.toLocaleString(), year];
-                }}
-                contentStyle={{ fontSize: chartConfig.tooltipFontSize }}
-              />
-              <Legend
-                formatter={(value) =>
-                  value === 'y2024'
-                    ? '2024'
-                    : value === 'y2025'
-                      ? '2025'
-                      : '2026'
-                }
-                wrapperStyle={{
-                  fontSize: chartConfig.legendFontSize,
-                  paddingTop: '10px',
-                }}
-              />
-              <Line
-                type='monotone'
-                dataKey='y2024'
-                stroke='#9ca3af'
-                strokeWidth={chartConfig.strokeWidth}
-                dot={{ r: chartConfig.dotRadius }}
-                activeDot={{ r: chartConfig.activeDotRadius }}
-                name='y2024'
-                connectNulls
-              />
-              <Line
-                type='monotone'
-                dataKey='y2025'
-                stroke='#374151'
-                strokeWidth={chartConfig.strokeWidth}
-                dot={{ r: chartConfig.dotRadius }}
-                activeDot={{ r: chartConfig.activeDotRadius }}
-                name='y2025'
-                connectNulls
-              />
-              <Line
-                type='monotone'
-                dataKey='y2026'
-                stroke='#3b82f6'
-                strokeWidth={is2xl ? 4 : 2.5}
-                dot={{ r: is2xl ? 5 : 3 }}
-                activeDot={{ r: is2xl ? 7 : 5 }}
-                name='y2026'
-                connectNulls
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
 
       {/* Tables Row */}
       <div className='grid gap-3 2xl:gap-4 lg:grid-cols-2'>
@@ -1154,7 +1163,7 @@ export function DemandForecastingSection() {
         <Card>
           <CardHeader className='pb-2 2xl:pb-4'>
             <div className='flex items-center gap-2'>
-              <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-2xl'>
+              <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-xl'>
                 Büyüme Analizi
               </CardTitle>
               <UITooltip>
@@ -1198,7 +1207,7 @@ export function DemandForecastingSection() {
           </CardHeader>
           <CardContent className='pt-0'>
             <div className='overflow-auto max-h-70 2xl:max-h-100'>
-              <table className='w-full text-xs 2xl:text-base'>
+              <table className='w-full text-[10px] 2xl:text-sm'>
                 <thead className='sticky top-0 bg-card'>
                   <tr className='border-b'>
                     <th className='text-left p-2 font-medium text-muted-foreground'>
@@ -1256,7 +1265,7 @@ export function DemandForecastingSection() {
         <Card>
           <CardHeader className='pb-2 2xl:pb-4'>
             <div className='flex items-center gap-2'>
-              <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-2xl'>
+              <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-xl'>
                 Tahmin Hataları
               </CardTitle>
               <UITooltip>
@@ -1299,7 +1308,7 @@ export function DemandForecastingSection() {
           </CardHeader>
           <CardContent className='pt-0'>
             <div className='overflow-auto max-h-70 2xl:max-h-100'>
-              <table className='w-full text-xs 2xl:text-base'>
+              <table className='w-full text-[10px] 2xl:text-sm'>
                 <thead className='sticky top-0 bg-card'>
                   <tr className='border-b'>
                     <th className='text-left p-2 font-medium text-muted-foreground'>
@@ -1398,9 +1407,9 @@ function KPICard({
         : 'text-accent';
 
   return (
-    <Card className='overflow-hidden'>
-      <CardHeader className='flex flex-row items-center justify-between pb-1 pt-2 2xl:pt-4 px-2 2xl:px-5'>
-        <CardTitle className='text-[10px] md:text-xs 2xl:text-base font-medium text-muted-foreground truncate flex items-center gap-1'>
+    <div className='rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden'>
+      <div className='flex flex-row items-center justify-between pb-1 pt-1.5 2xl:pt-3 px-2 2xl:px-3'>
+        <div className='text-[10px] md:text-[11px] 2xl:text-sm font-medium text-muted-foreground truncate flex items-center gap-1'>
           {title}
           {tooltip && (
             <UITooltip>
@@ -1412,22 +1421,22 @@ function KPICard({
               </TooltipContent>
             </UITooltip>
           )}
-        </CardTitle>
+        </div>
         <div
           className={cn(
-            'w-6 h-6 2xl:w-10 2xl:h-10 rounded-md flex items-center justify-center shrink-0',
+            'w-5 h-5 2xl:w-8 2xl:h-8 rounded-md flex items-center justify-center shrink-0',
             iconBgColor,
           )}
         >
-          <Icon className={cn('h-3 w-3 2xl:h-5 2xl:w-5', iconColor)} />
+          <Icon className={cn('h-2.5 w-2.5 2xl:h-4 2xl:w-4', iconColor)} />
         </div>
-      </CardHeader>
-      <CardContent className='px-2 2xl:px-5 pb-2 2xl:pb-4'>
-        <div className='text-lg md:text-xl 2xl:text-3xl font-bold tracking-tight'>
+      </div>
+      <div className='px-2 2xl:px-3 pb-2 2xl:pb-2'>
+        <div className='text-lg md:text-xl 2xl:text-2xl font-bold tracking-tight'>
           {value}
         </div>
         {subValue && (
-          <div className='text-[10px] md:text-xs 2xl:text-base text-muted-foreground'>
+          <div className='text-[9px] md:text-[10px] 2xl:text-sm text-muted-foreground'>
             {subValue}
           </div>
         )}
@@ -1435,20 +1444,20 @@ function KPICard({
           <div className='flex items-center mt-0.5 2xl:mt-1'>
             <span
               className={cn(
-                'flex items-center text-[10px] 2xl:text-sm font-medium',
+                'flex items-center text-[9px] 2xl:text-xs font-medium',
                 trendUp ? 'text-green-600' : 'text-red-500',
               )}
             >
               {trendUp ? (
-                <ArrowUpRight className='h-2.5 w-2.5 2xl:h-4 2xl:w-4 mr-0.5' />
+                <ArrowUpRight className='h-2 w-2 2xl:h-3 2xl:w-3 mr-0.5' />
               ) : (
-                <ArrowDownRight className='h-2.5 w-2.5 2xl:h-4 2xl:w-4 mr-0.5' />
+                <ArrowDownRight className='h-2 w-2 2xl:h-3 2xl:w-3 mr-0.5' />
               )}
               {trend}
             </span>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   );
 }

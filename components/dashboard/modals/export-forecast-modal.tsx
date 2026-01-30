@@ -405,47 +405,47 @@ export function ExportForecastModal({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className='max-w-[calc(100vw-2rem)]! w-625! h-[calc(100vh-2rem)]! min-w-200! flex flex-col p-0 gap-0 rounded-xl overflow-hidden border-0 shadow-2xl'
+        className='w-[90vw] sm:max-w-[90vw] md:max-w-[90vw] h-[95vh] flex flex-col p-0 gap-0 rounded-xl overflow-hidden border-0 shadow-2xl'
         onInteractOutside={(e) => {
           e.preventDefault();
         }}
       >
         {' '}
         {/* Header - Navy Blue (Lacivert) Theme */}
-        <div className='px-6 py-4 bg-[#0D1E3A] text-white shrink-0'>
+        <div className='px-4 py-3 bg-[#0D1E3A] text-white shrink-0'>
           <div className='flex items-center justify-between'>
-            <div className='flex items-center gap-4'>
-              <div className='p-3 bg-[#FFB840] rounded-lg'>
-                <HardDriveDownload className='h-6 w-6 text-[#0D1E3A]' />
+            <div className='flex items-center gap-3'>
+              <div className='p-2 bg-[#FFB840] rounded-lg'>
+                <HardDriveDownload className='h-5 w-5 text-[#0D1E3A]' />
               </div>
               <div>
-                <DialogTitle className='text-2xl font-bold text-white'>
+                <DialogTitle className='text-lg font-bold text-white'>
                   Veri Dışa Aktarma
                 </DialogTitle>
-                <DialogDescription className='text-[#628BB1] text-sm mt-0.5'>
+                <DialogDescription className='text-[#628BB1] text-xs mt-0.5'>
                   Tahmin verilerinizi filtreleyebilirsiniz ve Excel formatında
                   indirebilirsiniz.
                 </DialogDescription>
               </div>
             </div>
-            <div className='flex items-center gap-3'>
-              <div className='flex items-center gap-2 bg-white/10 rounded-lg px-4 py-2'>
-                <ListChecks className='h-5 w-5 text-[#FFB840]' />
-                <span className='text-2xl font-bold'>{selectedRows.size}</span>
-                <span className='text-[#628BB1] text-sm'>satır seçili</span>
+            <div className='flex items-center gap-2'>
+              <div className='flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5'>
+                <ListChecks className='h-4 w-4 text-[#FFB840]' />
+                <span className='text-lg font-bold'>{selectedRows.size}</span>
+                <span className='text-[#628BB1] text-xs'>satır seçili</span>
               </div>
-              <div className='flex items-center gap-2 bg-white/10 rounded-lg px-4 py-2'>
-                <Columns className='h-5 w-5 text-[#FFB840]' />
-                <span className='text-2xl font-bold'>
+              <div className='flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5'>
+                <Columns className='h-4 w-4 text-[#FFB840]' />
+                <span className='text-lg font-bold'>
                   {visibleColumns.length}
                 </span>
-                <span className='text-[#628BB1] text-sm'>sütun</span>
+                <span className='text-[#628BB1] text-xs'>sütun</span>
               </div>
               <Button
                 variant='ghost'
                 size='icon'
                 onClick={() => onOpenChange(false)}
-                className='text-white/70 hover:text-white hover:bg-white/10 ml-2'
+                className='text-white/70 hover:text-white hover:bg-white/10 ml-1 h-8 w-8'
               >
                 ✕
               </Button>
@@ -455,16 +455,16 @@ export function ExportForecastModal({
         {/* Main Content */}
         <div className='flex-1 flex overflow-hidden bg-[#F4F7FA]'>
           {/* Left Sidebar - Filters & Columns */}
-          <div className='w-80 border-r border-border bg-card flex flex-col shrink-0'>
+          <div className='w-64 border-r border-border bg-card flex flex-col shrink-0'>
             {/* Filters Section */}
-            <div className='p-5 border-b'>
-              <h3 className='text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2'>
-                <Filter className='h-4 w-4 text-[#628BB1]' />
+            <div className='p-3 border-b'>
+              <h3 className='text-xs font-semibold text-card-foreground mb-3 flex items-center gap-2'>
+                <Filter className='h-3.5 w-3.5 text-[#628BB1]' />
                 Filtreler
               </h3>
-              <div className='space-y-4'>
-                <div className='space-y-1.5'>
-                  <Label className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>
+              <div className='space-y-3'>
+                <div className='space-y-1'>
+                  <Label className='text-[10px] font-medium text-muted-foreground uppercase tracking-wider'>
                     Bölge
                   </Label>
                   <MultiSelect
@@ -474,8 +474,8 @@ export function ExportForecastModal({
                     placeholder='Tüm Bölgeler'
                   />
                 </div>
-                <div className='space-y-1.5'>
-                  <Label className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>
+                <div className='space-y-1'>
+                  <Label className='text-[10px] font-medium text-muted-foreground uppercase tracking-wider'>
                     Mağaza
                   </Label>
                   <MultiSelect
@@ -485,8 +485,8 @@ export function ExportForecastModal({
                     placeholder='Tüm Mağazalar'
                   />
                 </div>
-                <div className='space-y-1.5'>
-                  <Label className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>
+                <div className='space-y-1'>
+                  <Label className='text-[10px] font-medium text-muted-foreground uppercase tracking-wider'>
                     Reyon
                   </Label>
                   <MultiSelect
@@ -497,15 +497,15 @@ export function ExportForecastModal({
                   />
                 </div>
                 {/* Period Selector - Segmented Control */}
-                <div className='space-y-1.5'>
-                  <Label className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>
+                <div className='space-y-1'>
+                  <Label className='text-[10px] font-medium text-muted-foreground uppercase tracking-wider'>
                     Dönem
                   </Label>
-                  <div className='flex items-center p-1 bg-muted/40 border rounded-lg h-10'>
+                  <div className='flex items-center p-1 bg-muted/40 border rounded-lg h-9'>
                     <button
                       onClick={() => setPeriod('monthly')}
                       className={cn(
-                        'flex-1 flex items-center justify-center text-sm font-medium h-full rounded-md transition-all',
+                        'flex-1 flex items-center justify-center text-xs font-medium h-full rounded-md transition-all',
                         period === 'monthly'
                           ? 'bg-white text-[#0D1E3A] shadow-sm'
                           : 'text-muted-foreground hover:text-foreground',
@@ -513,11 +513,11 @@ export function ExportForecastModal({
                     >
                       Aylık
                     </button>
-                    <div className='w-px h-4 bg-border/50 mx-1' />
+                    <div className='w-px h-3 bg-border/50 mx-1' />
                     <button
                       onClick={() => setPeriod('weekly')}
                       className={cn(
-                        'flex-1 flex items-center justify-center text-sm font-medium h-full rounded-md transition-all',
+                        'flex-1 flex items-center justify-center text-xs font-medium h-full rounded-md transition-all',
                         period === 'weekly'
                           ? 'bg-white text-[#0D1E3A] shadow-sm'
                           : 'text-muted-foreground hover:text-foreground',
@@ -531,17 +531,17 @@ export function ExportForecastModal({
             </div>
 
             {/* Column Selection */}
-            <div className='p-5 flex-1 overflow-auto'>
-              <h3 className='text-sm font-semibold text-card-foreground mb-4 flex items-center gap-2'>
-                <Columns className='h-4 w-4 text-[#628BB1]' />
+            <div className='p-3 flex-1 overflow-auto'>
+              <h3 className='text-xs font-semibold text-card-foreground mb-3 flex items-center gap-2'>
+                <Columns className='h-3.5 w-3.5 text-[#628BB1]' />
                 Dışa Aktarılacak Sütunlar
               </h3>
-              <div className='space-y-1'>
+              <div className='space-y-0.5'>
                 {ALL_COLUMNS.map((col) => (
                   <div
                     key={col.id}
                     className={cn(
-                      'flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all',
+                      'flex items-center gap-2 px-2 py-1.5 rounded-md cursor-pointer transition-all',
                       visibleColumns.includes(col.id)
                         ? 'bg-[#FFB840]/10 border border-[#FFB840]/30'
                         : 'bg-muted/30 hover:bg-muted/50 border border-transparent',
@@ -551,14 +551,14 @@ export function ExportForecastModal({
                     <Checkbox
                       checked={visibleColumns.includes(col.id)}
                       className={cn(
-                        'pointer-events-none',
+                        'pointer-events-none h-3.5 w-3.5',
                         visibleColumns.includes(col.id) &&
                           'border-[#FFB840] bg-[#FFB840] text-[#0D1E3A]',
                       )}
                     />
                     <span
                       className={cn(
-                        'text-sm font-medium',
+                        'text-xs font-medium',
                         visibleColumns.includes(col.id)
                           ? 'text-card-foreground'
                           : 'text-muted-foreground',
@@ -575,30 +575,30 @@ export function ExportForecastModal({
           {/* Right Content - Table */}
           <div className='flex-1 flex flex-col overflow-hidden'>
             {/* Search Bar */}
-            <div className='p-4 bg-card border-b'>
+            <div className='p-3 bg-card border-b'>
               <div className='relative'>
-                <Search className='absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground' />
+                <Search className='absolute left-4 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground' />
                 <Input
                   placeholder='Ürün ara (İsim veya SKU yazın)...'
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className='pl-12 h-12 text-base bg-muted/30 border-muted focus-visible:ring-[#FFB840] focus-visible:border-[#FFB840]'
+                  className='pl-10 h-9 text-sm bg-muted/30 border-muted focus-visible:ring-[#FFB840] focus-visible:border-[#FFB840]'
                 />
               </div>
             </div>
 
             {/* Table */}
-            <div className='flex-1 overflow-hidden p-4 flex flex-col'>
+            <div className='flex-1 overflow-hidden p-3 flex flex-col'>
               <div className='rounded-xl border bg-card shadow-sm flex-1 overflow-auto'>
-                <table className='min-w-225 w-full text-sm'>
+                <table className='min-w-225 w-full text-xs'>
                   <thead className='sticky top-0 z-10'>
                     <tr className='border-b bg-[#F4F7FA]'>
-                      <th className='w-14 text-center h-14 px-2 font-medium bg-[#F4F7FA] align-middle'>
+                      <th className='w-10 text-center h-10 px-1 font-medium bg-[#F4F7FA] align-middle'>
                         <div className='flex items-center justify-center'>
                           <Checkbox
                             checked={isAllSelected}
                             onCheckedChange={handleSelectAll}
-                            className='h-4 w-4 border-2 border-[#0D1E3A]'
+                            className='h-3.5 w-3.5 border-2 border-[#0D1E3A]'
                           />
                         </div>
                       </th>
@@ -662,7 +662,7 @@ export function ExportForecastModal({
                             key={colId}
                             onClick={() => handleSort(colId)}
                             className={cn(
-                              'h-14 px-2 text-left font-semibold text-xs uppercase tracking-wider text-[#0D1E3A] bg-[#F4F7FA] cursor-pointer hover:bg-muted/50 transition-colors select-none group',
+                              'h-10 px-2 text-left font-semibold text-[10px] uppercase tracking-wider text-[#0D1E3A] bg-[#F4F7FA] cursor-pointer hover:bg-muted/50 transition-colors select-none group',
                               isNumeric && 'text-center',
                             )}
                           >
@@ -744,7 +744,7 @@ export function ExportForecastModal({
                             handleRowSelect(row.id, !selectedRows.has(row.id))
                           }
                         >
-                          <td className='text-center px-2 align-middle'>
+                          <td className='text-center px-1 align-middle'>
                             <div className='flex items-center justify-center'>
                               <Checkbox
                                 checked={selectedRows.has(row.id)}
@@ -753,7 +753,7 @@ export function ExportForecastModal({
                                 }
                                 onClick={(e) => e.stopPropagation()}
                                 className={cn(
-                                  'h-4 w-4 border-2 border-[#0D1E3A]',
+                                  'h-3.5 w-3.5 border-2 border-[#0D1E3A]',
                                   selectedRows.has(row.id) &&
                                     'border-[#FFB840] bg-[#FFB840] text-[#0D1E3A]',
                                 )}
@@ -776,7 +776,7 @@ export function ExportForecastModal({
                               <td
                                 key={colId}
                                 className={cn(
-                                  'py-3 px-2',
+                                  'py-2 px-2',
                                   isNumeric && 'text-center',
                                 )}
                               >
@@ -885,9 +885,9 @@ export function ExportForecastModal({
           </div>
         </div>
         {/* Footer */}
-        <div className='px-6 py-4 border-t bg-card flex items-center justify-between shrink-0'>
-          <div className='flex items-center gap-4'>
-            <span className='text-sm text-muted-foreground'>
+        <div className='px-4 py-3 border-t bg-card flex items-center justify-between shrink-0'>
+          <div className='flex items-center gap-3'>
+            <span className='text-xs text-muted-foreground'>
               Toplam{' '}
               <span className='font-bold text-card-foreground'>
                 {filteredData.length}
@@ -895,7 +895,7 @@ export function ExportForecastModal({
               kayıt
             </span>
             {selectedRows.size > 0 && (
-              <span className='text-sm text-[#628BB1]'>
+              <span className='text-xs text-[#628BB1]'>
                 <span className='font-bold text-[#0D1E3A]'>
                   {selectedRows.size}
                 </span>{' '}
@@ -903,20 +903,20 @@ export function ExportForecastModal({
               </span>
             )}
           </div>
-          <div className='flex gap-3'>
+          <div className='flex gap-2'>
             <Button
               variant='outline'
               onClick={() => onOpenChange(false)}
-              className='h-11 px-6 border-border hover:bg-muted'
+              className='h-8 px-4 border-border hover:bg-muted text-xs'
             >
               İptal
             </Button>
             <Button
-              className='h-11 px-8 gap-2 bg-[#FFB840] hover:bg-[#e5a636] text-[#0D1E3A] font-semibold shadow-lg'
+              className='h-8 px-5 gap-2 bg-[#FFB840] hover:bg-[#e5a636] text-[#0D1E3A] font-semibold shadow-lg text-xs'
               onClick={handleExport}
               disabled={selectedRows.size === 0}
             >
-              <Download className='h-5 w-5' />
+              <Download className='h-3.5 w-3.5' />
               Excel Olarak İndir ({selectedRows.size})
             </Button>
           </div>

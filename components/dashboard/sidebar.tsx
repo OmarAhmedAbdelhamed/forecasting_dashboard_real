@@ -37,16 +37,16 @@ export function Sidebar({
     <aside
       className={cn(
         'fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-out flex flex-col overflow-hidden',
-        collapsed ? 'w-[72px]' : 'w-[280px] lg:w-[340px] shadow-2xl',
+        collapsed ? 'w-[55px]' : 'w-[240px] lg:w-[280px] shadow-2xl',
       )}
       onMouseEnter={() => onCollapsedChange(false)}
       onMouseLeave={() => onCollapsedChange(true)}
     >
       {/* Logo */}
-      <div className='h-16 flex items-center border-b border-sidebar-border overflow-hidden'>
+      <div className='h-14 flex items-center border-b border-sidebar-border overflow-hidden'>
         {/* Fixed-width logo container for centering when collapsed */}
-        <div className='w-[72px] shrink-0 flex items-center justify-center'>
-          <div className='w-10 h-10 rounded-lg flex items-center justify-center bg-white overflow-hidden p-1'>
+        <div className='w-[64px] shrink-0 flex items-center justify-center'>
+          <div className='w-8 h-8 rounded-lg flex items-center justify-center bg-white overflow-hidden p-1'>
             <img
               src='/bee2_ai_logo.svg'
               alt='Bee2 AI'
@@ -57,7 +57,7 @@ export function Sidebar({
         {/* Text that fades out - positioned after the fixed container */}
         <span
           className={cn(
-            'font-semibold text-lg lg:text-xl text-sidebar-foreground whitespace-nowrap transition-opacity duration-300',
+            'font-semibold text-base lg:text-lg text-sidebar-foreground whitespace-nowrap transition-opacity duration-300',
             collapsed ? 'opacity-0' : 'opacity-100',
           )}
         >
@@ -76,7 +76,7 @@ export function Sidebar({
               key={item.href}
               onClick={() => onSectionChange(item.href)}
               className={cn(
-                'w-full flex items-center py-2.5 lg:py-3 rounded-lg text-sm lg:text-base font-medium transition-colors duration-200 group relative',
+                'w-full flex items-center py-2 rounded-lg text-xs lg:text-sm font-medium transition-colors duration-200 group relative',
                 isActive
                   ? 'bg-sidebar-accent text-sidebar-foreground'
                   : 'text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50',
@@ -90,10 +90,10 @@ export function Sidebar({
                 )}
               />
               {/* Fixed-width icon container for centering */}
-              <div className='w-14 shrink-0 flex items-center justify-center'>
+              <div className='w-12 shrink-0 flex items-center justify-center'>
                 <Icon
                   className={cn(
-                    'w-5 h-5 lg:w-6 lg:h-6 transition-transform duration-200',
+                    'w-4 h-4 lg:w-5 lg:h-5 transition-transform duration-200',
                     isActive ? 'text-accent' : 'group-hover:scale-110',
                   )}
                 />

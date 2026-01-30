@@ -26,9 +26,13 @@ interface UpcomingPromotionsProps {
 export function UpcomingPromotions({ promotions }: UpcomingPromotionsProps) {
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>Yaklaşan Promosyonlar (Gelecek 7 Gün)</CardTitle>
-        <CardDescription>Onaylanan ve planlanan kampanyalar.</CardDescription>
+      <CardHeader className='pb-2 pt-3 px-4'>
+        <CardTitle className='text-base md:text-lg'>
+          Yaklaşan Promosyonlar (Gelecek 7 Gün)
+        </CardTitle>
+        <CardDescription className='text-xs'>
+          Onaylanan ve planlanan kampanyalar.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <Table>

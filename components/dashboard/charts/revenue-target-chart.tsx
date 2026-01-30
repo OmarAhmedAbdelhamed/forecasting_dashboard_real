@@ -28,16 +28,16 @@ interface RevenueTargetChartProps {
 export function RevenueTargetChart({ data }: RevenueTargetChartProps) {
   return (
     <Card className='col-span-2'>
-      <CardHeader className='pb-2'>
-        <CardTitle className='text-lg md:text-xl lg:text-2xl font-semibold text-gray-800'>
+      <CardHeader className='pb-0 pt-3 px-4'>
+        <CardTitle className='text-base md:text-lg lg:text-xl font-semibold text-gray-800'>
           Ciro ve Hedef Karşılaştırması (Haftalık)
         </CardTitle>
-        <CardDescription className='text-sm md:text-base lg:text-lg text-gray-500'>
+        <CardDescription className='text-xs md:text-sm lg:text-base text-gray-500'>
           Haftalık gerçekleşen ciro ile hedeflenen cironun karşılaştırması.
         </CardDescription>
       </CardHeader>
-      <CardContent className='pt-4'>
-        <ResponsiveContainer width='100%' height={400}>
+      <CardContent className='pt-2'>
+        <ResponsiveContainer width='100%' height={300}>
           <ComposedChart
             data={data}
             margin={{ top: 10, right: 30, bottom: 60, left: 10 }}

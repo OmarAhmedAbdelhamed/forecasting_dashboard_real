@@ -39,7 +39,7 @@ export default function Dashboard() {
         collapsed={sidebarCollapsed}
         onCollapsedChange={setSidebarCollapsed}
       />
-      <div className='flex-1 flex flex-col transition-all duration-300 ease-out ml-[72px]'>
+      <div className='flex-1 flex flex-col transition-all duration-300 ease-out ml-[55px]'>
         <Header activeSection={activeSection} />
         <main className='flex-1 p-6 overflow-auto'>
           <div

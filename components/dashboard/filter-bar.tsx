@@ -44,15 +44,15 @@ export function FilterBar({
   children,
 }: FilterBarProps) {
   return (
-    <div className='w-full bg-card border border-border rounded-lg p-3 shadow-sm mb-6 flex flex-col lg:flex-row gap-4 items-end lg:items-center justify-between animate-in fade-in-50 slide-in-from-top-2 relative z-50'>
+    <div className='w-full bg-card border border-border rounded-lg p-2 shadow-sm mb-4 flex flex-col lg:flex-row gap-3 items-end lg:items-center justify-between animate-in fade-in-50 slide-in-from-top-2 relative z-50'>
       {/* Page Title */}
-      <h2 className='text-lg md:text-xl lg:text-2xl font-bold tracking-tight text-foreground'>
+      <h2 className='text-base md:text-lg lg:text-xl font-bold tracking-tight text-foreground'>
         {title}
       </h2>
 
       {/* Filters */}
-      <div className='flex flex-col md:flex-row flex-wrap gap-3 w-full lg:w-auto items-end md:items-center'>
-        <div className='w-full md:w-auto min-w-[180px]'>
+      <div className='flex flex-col md:flex-row flex-wrap gap-2 w-full lg:w-auto items-end md:items-center'>
+        <div className='w-full md:w-auto min-w-[150px]'>
           <MultiSelect
             options={regionOptions}
             selected={selectedRegions}
@@ -60,7 +60,7 @@ export function FilterBar({
             placeholder='Bölge'
           />
         </div>
-        <div className='w-full md:w-auto min-w-[180px]'>
+        <div className='w-full md:w-auto min-w-[150px]'>
           <MultiSelect
             options={storeOptions}
             selected={selectedStores}
@@ -68,7 +68,7 @@ export function FilterBar({
             placeholder='Mağaza'
           />
         </div>
-        <div className='w-full md:w-auto min-w-[180px]'>
+        <div className='w-full md:w-auto min-w-[150px]'>
           <MultiSelect
             options={categoryOptions}
             selected={selectedCategories}
