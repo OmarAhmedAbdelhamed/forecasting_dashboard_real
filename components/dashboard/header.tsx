@@ -12,6 +12,8 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/shared/dropdown-menu';
 
+import { useAuth } from '@/hooks/use-auth';
+
 interface HeaderProps {
   activeSection: Section;
 }
@@ -26,10 +28,10 @@ const sectionTitles: any = {
 
 export function Header({ activeSection }: HeaderProps) {
   const router = useRouter();
+  const { logout } = useAuth();
 
   const handleLogout = () => {
-    // Clear any auth state here if needed
-    router.push('/auth/login');
+    logout();
   };
 
   return (
