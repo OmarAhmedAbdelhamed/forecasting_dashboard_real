@@ -2,6 +2,7 @@ import React from 'react';
 import type { Metadata } from 'next';
 import { DM_Sans, JetBrains_Mono } from 'next/font/google';
 import { Analytics } from '@vercel/analytics/next';
+import { Providers } from '@/components/providers';
 import './globals.css';
 
 const _dmSans = DM_Sans({
@@ -41,7 +42,7 @@ export default function RootLayout({
   return (
     <html lang='en' suppressHydrationWarning>
       <body className={`font-sans antialiased`} suppressHydrationWarning>
-        {children}
+        <Providers>{children}</Providers>
         <Analytics />
       </body>
     </html>

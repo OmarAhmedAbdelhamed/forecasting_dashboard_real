@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useAuth } from '@/hooks/use-auth';
 import { Loader2, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/shared/button';
 import { Input } from '@/components/ui/shared/input';
@@ -24,7 +25,15 @@ interface FormErrors {
 
 export default function LoginPage() {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
+  const { login, user, isLoading: authLoading } = useAuth();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.push('/dashboard');
+    }
+  }, [user, authLoading, router]);
+
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -81,12 +90,17 @@ export default function LoginPage() {
       return;
     }
 
-    setIsLoading(true);
     // Simulate login and redirect to dashboard
-    setTimeout(() => {
-      setIsLoading(false);
+    const result = await login(email, password);
+
+    if (result.success) {
       router.push('/dashboard');
-    }, 2000);
+    } else {
+      setErrors((prev) => ({
+        ...prev,
+        email: result.error || 'Giriş başarısız',
+      }));
+    }
   };
 
   return (
@@ -200,9 +214,9 @@ export default function LoginPage() {
             <Button
               type='submit'
               className='w-full font-semibold shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] 2xl:h-12 2xl:text-base'
-              disabled={isLoading}
+              disabled={authLoading}
             >
-              {isLoading ? (
+              {authLoading ? (
                 <>
                   <Loader2 className='mr-2 h-4 w-4 2xl:h-5 2xl:w-5 animate-spin' />
                   Giriş Yapılıyor...

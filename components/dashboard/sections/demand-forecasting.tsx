@@ -9,6 +9,8 @@ import {
   CardDescription,
 } from '@/components/ui/shared/card';
 import { Input } from '@/components/ui/shared/input';
+import { Button } from '@/components/ui/shared/button';
+import { ExportForecastModal } from '@/components/dashboard/modals/export-forecast-modal';
 import { MultiSelect } from '@/components/ui/shared/multi-select';
 import {
   Select,
@@ -27,6 +29,7 @@ import {
   AlertTriangle,
   Search,
   Info,
+  HardDriveDownload,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
@@ -43,7 +46,12 @@ import {
   ReferenceLine,
   ReferenceArea,
 } from 'recharts';
-import { STORES, PRODUCTS, REGIONS, REYONLAR } from '@/lib/constants';
+import {
+  STORES,
+  PRODUCTS,
+  REGIONS_FLAT as REGIONS,
+  REYONLAR,
+} from '@/data/mock-data';
 import {
   Tooltip as UITooltip,
   TooltipContent,
@@ -521,6 +529,9 @@ export function DemandForecastingSection() {
   // Screen size detection for responsive charts
   const [is2xl, setIs2xl] = useState(false);
 
+  // Export Modal State
+  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
   useEffect(() => {
     const checkScreenSize = () => {
       setIs2xl(window.innerWidth >= 1536); // 2xl breakpoint
@@ -698,9 +709,20 @@ export function DemandForecastingSection() {
     <div className='space-y-4 2xl:space-y-6'>
       {/* Header with Filters */}
       <div className='w-full bg-card border border-border rounded-lg p-3 2xl:p-4 shadow-sm flex flex-col lg:flex-row gap-4 items-end lg:items-center justify-between'>
-        <h2 className='text-lg md:text-xl lg:text-2xl 2xl:text-3xl font-bold tracking-tight text-foreground'>
-          Talep Tahminleme
-        </h2>
+        <div className='flex items-center gap-4'>
+          <h2 className='text-lg md:text-xl lg:text-2xl 2xl:text-2xl font-semibold tracking-tight text-foreground'>
+            Talep Tahminleme
+          </h2>
+          <Button
+            variant='outline'
+            size='icon'
+            onClick={() => setIsExportModalOpen(true)}
+            className='h-10 w-10 2xl:h-12 2xl:w-12 border-[#FFB840] bg-[#FFB840]/10 text-[#0D1E3A] hover:bg-[#FFB840] hover:text-[#0D1E3A] transition-all duration-200'
+            title='Excel Olarak Dışa Aktar'
+          >
+            <HardDriveDownload className='h-7 w-7 2xl:h-8 2xl:w-8' />
+          </Button>
+        </div>
 
         <div className='flex flex-col md:flex-row flex-wrap gap-3 items-end md:items-center'>
           {/* Period Selector */}
@@ -766,6 +788,11 @@ export function DemandForecastingSection() {
           </div>
         </div>
       </div>
+
+      <ExportForecastModal
+        open={isExportModalOpen}
+        onOpenChange={setIsExportModalOpen}
+      />
 
       {/* KPI Cards - 6 in a row with better padding */}
       <div className='grid gap-3 2xl:gap-4 grid-cols-2 md:grid-cols-3 lg:grid-cols-6'>

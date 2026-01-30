@@ -25,7 +25,7 @@ export function DatePicker({
   className?: string;
 }) {
   return (
-    <div className={cn('grid gap-2', className)}>
+    <div className='grid gap-2'>
       <Popover>
         <PopoverTrigger asChild>
           <Button
@@ -33,6 +33,7 @@ export function DatePicker({
             className={cn(
               'w-full justify-start text-left font-normal',
               !date && 'text-muted-foreground',
+              className,
             )}
           >
             <CalendarIcon className='mr-2 h-4 w-4' />
@@ -44,7 +45,6 @@ export function DatePicker({
             mode='single'
             selected={date}
             onSelect={setDate}
-            initialFocus
           />
         </PopoverContent>
       </Popover>

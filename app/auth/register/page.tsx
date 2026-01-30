@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useAuth } from '@/hooks/use-auth';
 import { Loader2, ArrowRight, Eye, EyeOff, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/shared/button';
 import { Input } from '@/components/ui/shared/input';
@@ -32,7 +34,16 @@ interface TouchedFields {
 }
 
 export default function RegisterPage() {
-  const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
+  const { register, user, isLoading: authLoading } = useAuth();
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.push('/dashboard');
+    }
+  }, [user, authLoading, router]);
+
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
@@ -138,9 +149,21 @@ export default function RegisterPage() {
       return;
     }
 
-    setIsLoading(true);
     // Simulate registration
-    setTimeout(() => setIsLoading(false), 2000);
+    const result = await register({
+      name,
+      email,
+      password,
+    });
+
+    if (result.success) {
+      router.push('/dashboard');
+    } else {
+      setErrors((prev) => ({
+        ...prev,
+        email: result.error || 'Kayıt başarısız',
+      }));
+    }
   };
 
   const getInputClassName = (field: keyof TouchedFields) => {
@@ -345,9 +368,9 @@ export default function RegisterPage() {
             <Button
               type='submit'
               className='w-full font-semibold shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] 2xl:h-12 2xl:text-base'
-              disabled={isLoading}
+              disabled={authLoading}
             >
-              {isLoading ? (
+              {authLoading ? (
                 <>
                   <Loader2 className='mr-2 h-4 w-4 2xl:h-5 2xl:w-5 animate-spin' />
                   Kayıt Olunuyor...

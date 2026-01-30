@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -61,20 +61,17 @@ interface ForecastData {
   weather: 'sun' | 'cloud' | 'rain';
 }
 
-// Dummy Data for Dropdowns
 import {
   STORES,
   PRODUCTS,
   PROMOTIONS,
-  REGIONS,
+  REGIONS_FLAT as REGIONS,
   CATEGORIES,
-} from '@/lib/constants';
-
-
+} from '@/data/mock-data';
 
 // Custom X-Axis Tick Component for Weather
 const CustomizedAxisTick = (props: any) => {
-  const { x, y, payload, data } = props;
+  const { x, y, payload, data, fontSize } = props;
   const dateStr = payload.value;
   const dayData = data.find((d: any) => d.tarih === dateStr);
   const weather = dayData?.weather;
@@ -93,7 +90,7 @@ const CustomizedAxisTick = (props: any) => {
       {/* Weather Icon - Centered close to axis */}
       <foreignObject x={-8} y={10} width={16} height={16}>
         <div className='flex items-center justify-center'>
-          <Icon size={14} color={color} />
+          <Icon size={fontSize ? fontSize + 4 : 14} color={color} />
         </div>
       </foreignObject>
 
@@ -104,7 +101,7 @@ const CustomizedAxisTick = (props: any) => {
         dy={16}
         textAnchor='end'
         fill='#666'
-        fontSize={10}
+        fontSize={fontSize || 10}
         transform='rotate(-45) translate(-10, 20)'
       >
         {format(new Date(dateStr), 'dd MMM')}
@@ -140,6 +137,18 @@ export function ForecastingSection() {
   // State
   const [isLoading, setIsLoading] = useState(false);
   const [forecastData, setForecastData] = useState<ForecastData[] | null>(null);
+
+  // Screen size detection for responsive charts
+  const [is2xl, setIs2xl] = useState(false);
+
+  useEffect(() => {
+    const checkScreenSize = () => {
+      setIs2xl(window.innerWidth >= 1536); // 2xl breakpoint
+    };
+    checkScreenSize();
+    window.addEventListener('resize', checkScreenSize);
+    return () => window.removeEventListener('resize', checkScreenSize);
+  }, []);
 
   const handleAnalyze = async () => {
     if (!startDate || !endDate) return;
@@ -230,28 +239,32 @@ export function ForecastingSection() {
   const avgLift = 12.5;
 
   return (
-    <div className='space-y-2'>
+    <div className='space-y-2 2xl:space-y-4'>
       <div className='flex flex-col gap-1'>
-        <h2 className='text-2xl font-bold tracking-tight'>
+        <h2 className='text-2xl 2xl:text-3xl font-bold tracking-tight'>
           Fiyatlandırma ve Promosyon Analizi
         </h2>
-        <p className='text-sm text-muted-foreground'>
+        <p className='text-sm 2xl:text-base text-muted-foreground'>
           Promosyonların talep, ciro ve stok üzerindeki etkisini simüle edin.
         </p>
       </div>
 
-      <div className='grid gap-3 lg:grid-cols-12'>
+      <div className='grid gap-3 2xl:gap-4 lg:grid-cols-12'>
         {/* Left Column: Inputs & Special Days */}
-        <div className='lg:col-span-4 space-y-3'>
+        <div className='lg:col-span-4 space-y-3 2xl:space-y-4'>
           {/* Configuration Card */}
           <Card className='h-fit'>
-            <CardHeader className='py-3'>
-              <CardTitle className='text-lg'>Konfigürasyon</CardTitle>
-              <CardDescription>Analiz parametrelerini giriniz</CardDescription>
+            <CardHeader className='py-3 2xl:py-4'>
+              <CardTitle className='text-lg 2xl:text-xl'>
+                Konfigürasyon
+              </CardTitle>
+              <CardDescription className='2xl:text-sm'>
+                Analiz parametrelerini giriniz
+              </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-2.5 pb-3'>
+            <CardContent className='space-y-2.5 2xl:space-y-4 pb-3 2xl:pb-4'>
               <div className='space-y-1'>
-                <Label className='text-xs'>Bölge</Label>
+                <Label className='text-xs 2xl:text-sm'>Bölge</Label>
                 <MultiSelect
                   options={REGIONS}
                   selected={bolge}
@@ -261,7 +274,7 @@ export function ForecastingSection() {
               </div>
 
               <div className='space-y-1'>
-                <Label className='text-xs'>Mağaza Kodu</Label>
+                <Label className='text-xs 2xl:text-sm'>Mağaza Kodu</Label>
                 <MultiSelect
                   options={STORES}
                   selected={magazaKodu}
@@ -271,7 +284,7 @@ export function ForecastingSection() {
               </div>
 
               <div className='space-y-1'>
-                <Label className='text-xs'>Reyon</Label>
+                <Label className='text-xs 2xl:text-sm'>Reyon</Label>
                 <MultiSelect
                   options={CATEGORIES}
                   selected={reyon}
@@ -281,7 +294,7 @@ export function ForecastingSection() {
               </div>
 
               <div className='space-y-1'>
-                <Label className='text-xs'>Ürün Kodu</Label>
+                <Label className='text-xs 2xl:text-sm'>Ürün Kodu</Label>
                 <MultiSelect
                   options={PRODUCTS}
                   selected={urunKodu}
@@ -291,51 +304,61 @@ export function ForecastingSection() {
               </div>
 
               <div className='space-y-1'>
-                <Label className='text-xs'>Tahminleme Tarih Aralığı</Label>
+                <Label className='text-xs 2xl:text-sm'>
+                  Tahminleme Tarih Aralığı
+                </Label>
                 <div className='grid grid-cols-2 gap-2'>
                   <DatePicker
                     date={startDate}
                     setDate={setStartDate}
                     placeholder='Başlangıç'
-                    className='h-8 text-sm'
+                    className='h-8 2xl:h-10 text-sm 2xl:text-base'
                   />
                   <DatePicker
                     date={endDate}
                     setDate={setEndDate}
                     placeholder='Bitiş'
-                    className='h-8 text-sm'
+                    className='h-8 2xl:h-10 text-sm 2xl:text-base'
                   />
                 </div>
               </div>
 
               <div className='space-y-1'>
-                <Label className='text-xs'>Promosyon Tarih Aralığı</Label>
+                <Label className='text-xs 2xl:text-sm'>
+                  Promosyon Tarih Aralığı
+                </Label>
                 <div className='grid grid-cols-2 gap-2'>
                   <DatePicker
                     date={startPromosyon}
                     setDate={setStartPromosyon}
                     placeholder='Başlangıç'
-                    className='h-8 text-sm'
+                    className='h-8 2xl:h-10 text-sm 2xl:text-base'
                   />
                   <DatePicker
                     date={endPromosyon}
                     setDate={setEndPromosyon}
                     placeholder='Bitiş'
-                    className='h-8 text-sm'
+                    className='h-8 2xl:h-10 text-sm 2xl:text-base'
                   />
                 </div>
               </div>
 
-              <div className='grid grid-cols-2 gap-3'>
+              <div className='grid grid-cols-2 gap-3 2xl:gap-4'>
                 <div className='space-y-1'>
-                  <Label className='text-xs'>Promosyon Seçimi</Label>
+                  <Label className='text-xs 2xl:text-sm'>
+                    Promosyon Seçimi
+                  </Label>
                   <Select value={promosyon} onValueChange={setPromosyon}>
-                    <SelectTrigger className='h-8 text-sm'>
+                    <SelectTrigger className='h-8 2xl:h-10 text-sm 2xl:text-base'>
                       <SelectValue placeholder='Promo Seç' />
                     </SelectTrigger>
                     <SelectContent>
                       {PROMOTIONS.map((promo) => (
-                        <SelectItem key={promo.value} value={promo.value}>
+                        <SelectItem
+                          key={promo.value}
+                          value={promo.value}
+                          className='text-sm 2xl:text-base'
+                        >
                           {promo.label}
                         </SelectItem>
                       ))}
@@ -343,10 +366,12 @@ export function ForecastingSection() {
                   </Select>
                 </div>
                 <div className='space-y-1'>
-                  <Label className='text-xs'>İndirim Oranı (%)</Label>
+                  <Label className='text-xs 2xl:text-sm'>
+                    İndirim Oranı (%)
+                  </Label>
                   <Input
                     type='number'
-                    className='h-8 text-sm'
+                    className='h-8 2xl:h-10 text-sm 2xl:text-base'
                     value={promosyonIndirimOrani}
                     onChange={(e) => setPromosyonIndirimOrani(e.target.value)}
                   />
@@ -354,7 +379,7 @@ export function ForecastingSection() {
               </div>
 
               <Button
-                className='w-full mt-2 h-9'
+                className='w-full mt-2 h-9 2xl:h-11 2xl:text-base'
                 onClick={handleAnalyze}
                 disabled={isLoading}
               >
@@ -372,11 +397,11 @@ export function ForecastingSection() {
 
           {/* Upcoming Special Days (Moved to Left Column) */}
           <Card className='h-fit'>
-            <CardHeader className='py-3 pb-2'>
-              <CardTitle className='text-base'>
+            <CardHeader className='py-3 pb-2 2xl:py-4'>
+              <CardTitle className='text-base 2xl:text-lg'>
                 Yaklaşan Özel Günler (Fırsatlar)
               </CardTitle>
-              <CardDescription className='text-xs'>
+              <CardDescription className='text-xs 2xl:text-sm'>
                 Önümüzdeki dönemde değerlendirilebilecek fırsatlar
               </CardDescription>
             </CardHeader>
@@ -419,10 +444,10 @@ export function ForecastingSection() {
                     className='flex items-center justify-between p-2 rounded-lg border bg-card hover:bg-accent/50 transition-all cursor-default group'
                   >
                     <div className='grid gap-1'>
-                      <span className='font-semibold text-sm group-hover:text-primary transition-colors'>
+                      <span className='font-semibold text-sm 2xl:text-base group-hover:text-primary transition-colors'>
                         {event.name}
                       </span>
-                      <div className='flex items-center gap-2 text-xs text-muted-foreground'>
+                      <div className='flex items-center gap-2 text-xs 2xl:text-sm text-muted-foreground'>
                         <span>{event.date}</span>
                         <span className='w-1 h-1 rounded-full bg-muted-foreground/40' />
                         <span>{event.type}</span>
@@ -447,53 +472,55 @@ export function ForecastingSection() {
         </div>
 
         {/* Right Column: Visualization & Stats */}
-        <div className='lg:col-span-8 space-y-3'>
+        <div className='lg:col-span-8 space-y-3 2xl:space-y-4'>
           {forecastData ? (
             <>
               {/* Summary Stats */}
-              <div className='grid gap-2 md:grid-cols-3'>
+              <div className='grid gap-2 2xl:gap-4 md:grid-cols-3'>
                 <Card>
-                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-3'>
-                    <CardTitle className='text-sm font-medium'>
+                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-3 2xl:py-4'>
+                    <CardTitle className='text-sm 2xl:text-base font-medium'>
                       Toplam Hacim
                     </CardTitle>
                     <Package className='h-4 w-4 text-muted-foreground' />
                   </CardHeader>
-                  <CardContent className='pb-3'>
-                    <div className='text-xl font-bold'>
+                  <CardContent className='pb-3 2xl:pb-4'>
+                    <div className='text-xl 2xl:text-2xl font-bold'>
                       {totalForecast.toLocaleString()}
                     </div>
-                    <p className='text-[10px] text-muted-foreground'>
+                    <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
                       Tahmini Satış Adedi
                     </p>
                   </CardContent>
                 </Card>
                 <Card>
-                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-3'>
-                    <CardTitle className='text-sm font-medium'>
+                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-3 2xl:py-4'>
+                    <CardTitle className='text-sm 2xl:text-base font-medium'>
                       Toplam Ciro
                     </CardTitle>
                     <DollarSign className='h-4 w-4 text-muted-foreground' />
                   </CardHeader>
-                  <CardContent className='pb-3'>
-                    <div className='text-xl font-bold'>
+                  <CardContent className='pb-3 2xl:pb-4'>
+                    <div className='text-xl 2xl:text-2xl font-bold'>
                       ₺{(totalRevenue / 1000).toFixed(1)}k
                     </div>
-                    <p className='text-[10px] text-muted-foreground'>
+                    <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
                       Tahmini Gelir
                     </p>
                   </CardContent>
                 </Card>
                 <Card>
-                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-3'>
-                    <CardTitle className='text-sm font-medium'>
+                  <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-3 2xl:py-4'>
+                    <CardTitle className='text-sm 2xl:text-base font-medium'>
                       Promosyon Artışı
                     </CardTitle>
                     <TrendingUp className='h-4 w-4 text-muted-foreground' />
                   </CardHeader>
-                  <CardContent className='pb-3'>
-                    <div className='text-xl font-bold'>+{avgLift}%</div>
-                    <p className='text-[10px] text-muted-foreground'>
+                  <CardContent className='pb-3 2xl:pb-4'>
+                    <div className='text-xl 2xl:text-2xl font-bold'>
+                      +{avgLift}%
+                    </div>
+                    <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
                       Temel Satışa Göre
                     </p>
                   </CardContent>
@@ -502,19 +529,19 @@ export function ForecastingSection() {
 
               {/* Main Chart */}
               <Card className='relative'>
-                <CardHeader className='flex flex-row items-start justify-between space-y-0 pb-2 py-3'>
+                <CardHeader className='flex flex-row items-start justify-between space-y-0 pb-2 py-3 2xl:py-4'>
                   <div className='space-y-0.5'>
-                    <CardTitle className='text-base'>
+                    <CardTitle className='text-base 2xl:text-lg'>
                       Tahmin vs Temel Satış
                     </CardTitle>
-                    <CardDescription className='text-xs'>
+                    <CardDescription className='text-xs 2xl:text-sm'>
                       Temel satışlara kıyasla promosyon etkisi.
                     </CardDescription>
                   </div>
                 </CardHeader>
-                <CardContent className='pl-0 pb-4 px-4 pt-2'>
+                <CardContent className='pl-0 pb-4 px-4 pt-2 2xl:pb-6'>
                   {/* Custom Legend Box - Moved Inside Content */}
-                  <div className='absolute top-2 right-4 bg-white/80 backdrop-blur-sm p-2 rounded-md border border-border/50 shadow-sm z-10 text-[10px] space-y-1 min-w-[160px]'>
+                  <div className='absolute top-2 right-4 bg-white/80 backdrop-blur-sm p-2 rounded-md border border-border/50 shadow-sm z-10 text-[10px] 2xl:text-xs space-y-1 min-w-40 2xl:min-w-45'>
                     <div className='flex items-center justify-between gap-3'>
                       <span className='text-[#FFB840] font-bold'>Sarı:</span>
                       <span className='text-muted-foreground font-medium'>
@@ -594,17 +621,22 @@ export function ForecastingSection() {
                           <XAxis
                             dataKey='tarih'
                             stroke='var(--muted-foreground)'
-                            fontSize={10}
+                            fontSize={is2xl ? 12 : 10}
                             tickLine={false}
                             axisLine={false}
                             interval={0}
-                            tick={<CustomizedAxisTick data={forecastData} />}
-                            height={80}
+                            tick={
+                              <CustomizedAxisTick
+                                data={forecastData}
+                                fontSize={is2xl ? 12 : 10}
+                              />
+                            }
+                            height={is2xl ? 90 : 80}
                           />
                           <YAxis
                             stroke='var(--muted-foreground)'
                             strokeWidth={0}
-                            fontSize={10}
+                            fontSize={is2xl ? 12 : 10}
                             tickLine={false}
                             axisLine={false}
                             tickFormatter={(value) => `${value}`}
@@ -685,368 +717,394 @@ export function ForecastingSection() {
             </div>
           )}
 
-            {/* NEW: Advanced Analytics Module (Decision Support) */}
-            <div className='flex flex-col gap-4'>
-              {/* 1. Strategic Summary Cards */}
-              <div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
-                {/* Best Performing Promo Card */}
-                <Card className='bg-emerald-50/50 border-emerald-100'>
-                  <CardContent className='p-4'>
-                    <div className='flex items-center justify-between mb-2'>
-                      <div className='flex items-center gap-2'>
-                        <span className='bg-emerald-100 text-emerald-700 p-1.5 rounded-full'>
-                          <TrendingUp className='h-4 w-4' />
-                        </span>
-                        <span className='text-xs font-semibold text-emerald-800 uppercase tracking-tight'>
-                          En İyi Performans
-                        </span>
-                      </div>
-                      <span className='text-[10px] text-muted-foreground bg-white px-2 py-0.5 rounded-full border shadow-sm'>
-                        Son 6 Ay
+          {/* NEW: Advanced Analytics Module (Decision Support) */}
+          <div className='flex flex-col gap-4 2xl:gap-6'>
+            {/* 1. Strategic Summary Cards */}
+            <div className='grid grid-cols-1 md:grid-cols-3 gap-3 2xl:gap-4'>
+              {/* Best Performing Promo Card */}
+              <Card className='bg-emerald-50/50 border-emerald-100'>
+                <CardContent className='p-4 2xl:p-5'>
+                  <div className='flex items-center justify-between mb-2'>
+                    <div className='flex items-center gap-2'>
+                      <span className='bg-emerald-100 text-emerald-700 p-1.5 rounded-full'>
+                        <TrendingUp className='h-4 w-4' />
+                      </span>
+                      <span className='text-xs 2xl:text-sm font-semibold text-emerald-800 uppercase tracking-tight'>
+                        En İyi Performans
                       </span>
                     </div>
-                    <div className='space-y-1'>
-                      <div className='text-lg font-bold text-gray-900'>
-                        KATALOG (Mayıs)
-                      </div>
-                      <div className='flex items-baseline gap-2'>
-                        <span className='text-2xl font-black text-emerald-600 tracking-tighter'>
-                          142%
-                        </span>
-                        <span className='text-xs text-muted-foreground font-medium'>
-                          ROI
-                        </span>
-                      </div>
-                      <p className='text-emerald-700 text-xs mt-1 leading-tight'>
-                        12.4k TL net kar artışı sağladı.
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Stock Risk Alert Card */}
-                <Card className='bg-red-50/50 border-red-100'>
-                  <CardContent className='p-4'>
-                    <div className='flex items-center justify-between mb-2'>
-                      <div className='flex items-center gap-2'>
-                        <span className='bg-red-100 text-red-700 p-1.5 rounded-full'>
-                          <Package className='h-4 w-4' />
-                        </span>
-                        <span className='text-xs font-semibold text-red-800 uppercase tracking-tight'>
-                          Stok Riski Uyarısı
-                        </span>
-                      </div>
-                    </div>
-                    <div className='space-y-1'>
-                      <div className='text-lg font-bold text-gray-900'>
-                        ZKAE (Haziran)
-                      </div>
-                      <div className='flex items-baseline gap-2'>
-                        <span className='text-2xl font-black text-red-600 tracking-tighter'>
-                          3 Gün
-                        </span>
-                        <span className='text-xs text-muted-foreground font-medium'>
-                          Stock-Out (OOS)
-                        </span>
-                      </div>
-                      <p className='text-red-700 text-xs mt-1 leading-tight'>
-                        Tahmini 4.5k TL ciro kaybı yaşandı.
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Benchmarking Card */}
-                <Card className='bg-blue-50/50 border-blue-100'>
-                  <CardContent className='p-4'>
-                    <div className='flex items-center justify-between mb-2'>
-                      <div className='flex items-center gap-2'>
-                        <span className='bg-blue-100 text-blue-700 p-1.5 rounded-full'>
-                          <BarChart3 className='h-4 w-4' />
-                        </span>
-                        <span className='text-xs font-semibold text-blue-800 uppercase tracking-tight'>
-                          Kategori Kıyaslaması
-                        </span>
-                      </div>
-                    </div>
-                    <div className='space-y-1'>
-                      <div className='text-sm font-bold text-green-600 mt-0.5'>
-                        {urunKodu.length > 0 &&
-                        parseInt(urunKodu[0]) % 2 === 0
-                          ? '%14.2'
-                          : '%21.5'}
-                      </div>
-                      <div className='flex items-baseline gap-2'>
-                        <span className='text-2xl font-black text-blue-600 tracking-tighter'>
-                          +15%
-                        </span>
-                        <span className='text-xs text-muted-foreground font-medium'>
-                          Daha İyi
-                        </span>
-                      </div>
-                      <p className='text-blue-700 text-xs mt-1 leading-tight'>
-                        Benzer ürünlerin ortalama promosyon lifti %22 iken sizinki
-                        %37.
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* 2. Middle Section: Performance Visualization */}
-              <div className='grid grid-cols-1 md:grid-cols-2 gap-3'>
-                {/* Promo Effectiveness Chart */}
-                <Card className='h-full'>
-                  <CardHeader className='py-3 pb-2'>
-                    <CardTitle className='text-sm font-semibold'>
-                      Promosyon Tipi Karşılaştırması
-                    </CardTitle>
-                    <CardDescription className='text-xs'>
-                      Hangi yöntem daha karlı? (ROI vs Ciro Artışı)
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className='pt-2'>
-                    {/* Simplified Visualization using simple bars for now */}
-                    <div className='space-y-3'>
-                      {[
-                        { type: 'KATALOG', roi: 95, lift: 80, color: 'bg-emerald-500' },
-                        { type: 'ZKAE', roi: 45, lift: 60, color: 'bg-blue-500' },
-                        { type: 'VKA0', roi: 60, lift: 40, color: 'bg-indigo-500' },
-                        { type: 'GAZETE', roi: 75, lift: 70, color: 'bg-amber-500' },
-                      ].map((item, i) => (
-                        <div key={i} className='space-y-1'>
-                          <div className='flex justify-between text-xs font-medium'>
-                            <span>{item.type}</span>
-                            <span className='text-muted-foreground'>
-                              ROI: %{item.roi} | Lift: %{item.lift}
-                            </span>
-                          </div>
-                          <div className='h-2 w-full bg-muted rounded-full overflow-hidden flex'>
-                            <div
-                              className={`h-full ${item.color}`}
-                              style={{ width: `${item.roi}%` }}
-                              title='ROI'
-                            />
-                            <div
-                              className='h-full bg-gray-300'
-                              style={{ width: `${item.lift * 0.5}%` }}
-                              title='Lift (Scaled)'
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Seasonality / Smart Insights List */}
-                <Card className='h-full'>
-                  <CardHeader className='py-3 pb-2'>
-                    <CardTitle className='text-sm font-semibold'>
-                      Akıllı İçgörüler & Sezonsallık
-                    </CardTitle>
-                    <CardDescription className='text-xs'>
-                      Geçmiş verilerden çıkarımlar
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className='pt-2'>
-                    <div className='grid gap-2'>
-                      {[
-                        {
-                          title: 'Yaz Dönemi Fırsatı',
-                          desc: 'Bu ürün Haziran-Ağustos döneminde %20 daha fazla talep görüyor.',
-                          type: 'success',
-                        },
-                        {
-                          title: 'Marj Erezyonu',
-                          desc: 'Gazete ilanları yüksek ciro getiriyor ancak karlılığı %5 puan düşürüyor.',
-                          type: 'warning',
-                        },
-                        {
-                          title: 'Stok Yönetimi Başarısı',
-                          desc: 'Son 3 promosyonda stok planlaması %98 doğrulukla gerçekleşti.',
-                          type: 'info',
-                        },
-                      ].map((insight, i) => (
-                        <div
-                          key={i}
-                          className={`p-2.5 rounded-lg border text-xs ${
-                            insight.type === 'success'
-                              ? 'bg-emerald-50 border-emerald-100 text-emerald-800'
-                              : insight.type === 'warning'
-                                ? 'bg-amber-50 border-amber-100 text-amber-800'
-                                : 'bg-blue-50 border-blue-100 text-blue-800'
-                          }`}
-                        >
-                          <span className='font-bold block mb-0.5'>
-                            {insight.title}
-                          </span>
-                          {insight.desc}
-                        </div>
-                      ))}
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* 3. Detailed History Table with Advanced Metrics */}
-              <Card>
-                <CardHeader className='py-3 pb-2 flex flex-row items-center justify-between'>
-                  <div className='space-y-0.5'>
-                    <CardTitle className='text-base'>
-                      Detaylı Promosyon Geçmişi
-                    </CardTitle>
-                    <CardDescription className='text-xs'>
-                      Finansal ve operasyonel metrikler
-                    </CardDescription>
+                    <span className='text-[10px] 2xl:text-xs text-muted-foreground bg-white px-2 py-0.5 rounded-full border shadow-sm'>
+                      Son 6 Ay
+                    </span>
                   </div>
-                  <div className='flex gap-2'>
-                    <Button variant='outline' size='sm' className='h-7 text-xs'>
-                      Filtrele
-                    </Button>
-                    <Button variant='outline' size='sm' className='h-7 text-xs'>
-                      Dışa Aktar
-                    </Button>
+                  <div className='space-y-1'>
+                    <div className='text-lg 2xl:text-xl font-bold text-gray-900'>
+                      KATALOG (Mayıs)
+                    </div>
+                    <div className='flex items-baseline gap-2'>
+                      <span className='text-2xl 2xl:text-3xl font-black text-emerald-600 tracking-tighter'>
+                        142%
+                      </span>
+                      <span className='text-xs 2xl:text-sm text-muted-foreground font-medium'>
+                        ROI
+                      </span>
+                    </div>
+                    <p className='text-emerald-700 text-xs 2xl:text-sm mt-1 leading-tight'>
+                      12.4k TL net kar artışı sağladı.
+                    </p>
                   </div>
-                </CardHeader>
-                <CardContent className='p-0'>
-                  <div className='border-t'>
-                    <table className='w-full text-xs text-left'>
-                      <thead className='bg-muted/50 text-muted-foreground font-medium uppercase'>
-                        <tr>
-                          <th className='p-3 w-[120px]'>Tarih</th>
-                          <th className='p-3'>Kampanya / Tip</th>
-                          <th className='p-3 text-right'>Ciro Artışı (Lift)</th>
-                          <th className='p-3 text-right'>Net Kar Etkisi</th>
-                          <th className='p-3 text-right'>ROI %</th>
-                          <th className='p-3 text-center'>Stok Durumu</th>
-                          <th className='p-3 text-right'>Tahmin Doğruluğu</th>
-                        </tr>
-                      </thead>
-                      <tbody className='divide-y'>
-                        {[
-                          {
-                            date: '12-19 Mayıs 2025',
-                            name: 'Bahar Temizliği',
-                            type: 'KATALOG',
-                            uplift: '+42%',
-                            upliftVal: '₺12.4k',
-                            profit: '+₺3.2k',
-                            roi: 142,
-                            stock: 'OK',
-                            forecast: '92%',
-                          },
-                          {
-                            date: '05-12 Nisan 2025',
-                            name: 'Ramazan Paketi',
-                            type: 'ZKAE',
-                            uplift: '+55%',
-                            upliftVal: '₺18.1k',
-                            profit: '-₺1.2k',
-                            roi: -15,
-                            stock: 'OOS',
-                            forecast: '65%',
-                          },
-                          {
-                            date: '10-14 Şubat 2025',
-                            name: 'Sevgililer Günü',
-                            type: 'VKA0',
-                            uplift: '+18%',
-                            upliftVal: '₺4.5k',
-                            profit: '+₺0.8k',
-                            roi: 45,
-                            stock: 'Over',
-                            forecast: '88%',
-                          },
-                          {
-                            date: '15-20 Ocak 2025',
-                            name: 'Kış İndirimi',
-                            type: 'GAZETE',
-                            uplift: '+30%',
-                            upliftVal: '₺9.2k',
-                            profit: '+₺1.5k',
-                            roi: 85,
-                            stock: 'OK',
-                            forecast: '95%',
-                          },
-                        ].map((row, i) => (
-                          <tr
-                            key={i}
-                            className='group hover:bg-muted/30 transition-colors cursor-pointer'
-                          >
-                            <td className='p-3 font-medium text-gray-700'>
-                              {row.date}
-                            </td>
-                            <td className='p-3'>
-                              <div className='font-semibold text-gray-900'>
-                                {row.name}
-                              </div>
-                              <div className='text-[10px] text-muted-foreground bg-muted w-fit px-1.5 py-0.5 rounded'>
-                                {row.type}
-                              </div>
-                            </td>
-                            <td className='p-3 text-right'>
-                              <div className='font-bold text-gray-900'>
-                                {row.uplift}
-                              </div>
-                              <div className='text-[10px] text-muted-foreground'>
-                                {row.upliftVal}
-                              </div>
-                            </td>
-                            <td className='p-3 text-right font-medium'>
-                              <span
-                                className={
-                                  row.profit.startsWith('-')
-                                    ? 'text-red-600'
-                                    : 'text-emerald-600'
-                                }
-                              >
-                                {row.profit}
-                              </span>
-                            </td>
-                            <td className='p-3 text-right'>
-                              <div
-                                className={`font-bold inline-block px-1.5 py-0.5 rounded ${
-                                  row.roi > 100
-                                    ? 'bg-emerald-100 text-emerald-700'
-                                    : row.roi > 0
-                                      ? 'bg-blue-50 text-blue-700'
-                                      : 'bg-red-50 text-red-700'
-                                }`}
-                              >
-                                %{row.roi}
-                              </div>
-                            </td>
-                            <td className='p-3 text-center'>
-                              <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                  row.stock === 'OK'
-                                    ? 'bg-green-50 text-green-700 border-green-200'
-                                    : row.stock === 'OOS'
-                                      ? 'bg-red-50 text-red-700 border-red-200'
-                                      : 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                                }`}
-                              >
-                                {row.stock === 'OK'
-                                  ? 'YETERLİ'
-                                  : row.stock === 'OOS'
-                                    ? 'TÜKENDİ'
-                                    : 'AŞIRI STOK'}
-                              </span>
-                            </td>
-                            <td className='p-3 text-right text-gray-600'>
-                              {row.forecast}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                </CardContent>
+              </Card>
+
+              {/* Stock Risk Alert Card */}
+              <Card className='bg-red-50/50 border-red-100'>
+                <CardContent className='p-4 2xl:p-5'>
+                  <div className='flex items-center justify-between mb-2'>
+                    <div className='flex items-center gap-2'>
+                      <span className='bg-red-100 text-red-700 p-1.5 rounded-full'>
+                        <Package className='h-4 w-4' />
+                      </span>
+                      <span className='text-xs 2xl:text-sm font-semibold text-red-800 uppercase tracking-tight'>
+                        Stok Riski Uyarısı
+                      </span>
+                    </div>
+                  </div>
+                  <div className='space-y-1'>
+                    <div className='text-lg 2xl:text-xl font-bold text-gray-900'>
+                      ZKAE (Haziran)
+                    </div>
+                    <div className='flex items-baseline gap-2'>
+                      <span className='text-2xl 2xl:text-3xl font-black text-red-600 tracking-tighter'>
+                        3 Gün
+                      </span>
+                      <span className='text-xs 2xl:text-sm text-muted-foreground font-medium'>
+                        Stock-Out (OOS)
+                      </span>
+                    </div>
+                    <p className='text-red-700 text-xs 2xl:text-sm mt-1 leading-tight'>
+                      Tahmini 4.5k TL ciro kaybı yaşandı.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Benchmarking Card */}
+              <Card className='bg-blue-50/50 border-blue-100'>
+                <CardContent className='p-4 2xl:p-5'>
+                  <div className='flex items-center justify-between mb-2'>
+                    <div className='flex items-center gap-2'>
+                      <span className='bg-blue-100 text-blue-700 p-1.5 rounded-full'>
+                        <BarChart3 className='h-4 w-4' />
+                      </span>
+                      <span className='text-xs 2xl:text-sm font-semibold text-blue-800 uppercase tracking-tight'>
+                        Kategori Kıyaslaması
+                      </span>
+                    </div>
+                  </div>
+                  <div className='space-y-1'>
+                    <div className='text-sm 2xl:text-base font-bold text-green-600 mt-0.5'>
+                      {urunKodu.length > 0 && parseInt(urunKodu[0]) % 2 === 0
+                        ? '%14.2'
+                        : '%21.5'}
+                    </div>
+                    <div className='flex items-baseline gap-2'>
+                      <span className='text-2xl 2xl:text-3xl font-black text-blue-600 tracking-tighter'>
+                        +15%
+                      </span>
+                      <span className='text-xs 2xl:text-sm text-muted-foreground font-medium'>
+                        Daha İyi
+                      </span>
+                    </div>
+                    <p className='text-blue-700 text-xs 2xl:text-sm mt-1 leading-tight'>
+                      Benzer ürünlerin ortalama promosyon lifti %22 iken sizinki
+                      %37.
+                    </p>
                   </div>
                 </CardContent>
               </Card>
             </div>
 
-          
+            {/* 2. Middle Section: Performance Visualization */}
+            <div className='grid grid-cols-1 md:grid-cols-2 gap-3 2xl:gap-4'>
+              {/* Promo Effectiveness Chart */}
+              <Card className='h-full'>
+                <CardHeader className='py-3 pb-2 2xl:py-4'>
+                  <CardTitle className='text-sm 2xl:text-base font-semibold'>
+                    Promosyon Tipi Karşılaştırması
+                  </CardTitle>
+                  <CardDescription className='text-xs 2xl:text-sm'>
+                    Hangi yöntem daha karlı? (ROI vs Ciro Artışı)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className='pt-2'>
+                  {/* Simplified Visualization using simple bars for now */}
+                  <div className='space-y-3'>
+                    {[
+                      {
+                        type: 'KATALOG',
+                        roi: 95,
+                        lift: 80,
+                        color: 'bg-emerald-500',
+                      },
+                      { type: 'ZKAE', roi: 45, lift: 60, color: 'bg-blue-500' },
+                      {
+                        type: 'VKA0',
+                        roi: 60,
+                        lift: 40,
+                        color: 'bg-indigo-500',
+                      },
+                      {
+                        type: 'GAZETE',
+                        roi: 75,
+                        lift: 70,
+                        color: 'bg-amber-500',
+                      },
+                    ].map((item, i) => (
+                      <div key={i} className='space-y-1'>
+                        <div className='flex justify-between text-xs 2xl:text-sm font-medium'>
+                          <span>{item.type}</span>
+                          <span className='text-muted-foreground'>
+                            ROI: %{item.roi} | Lift: %{item.lift}
+                          </span>
+                        </div>
+                        <div className='h-2 w-full bg-muted rounded-full overflow-hidden flex'>
+                          <div
+                            className={`h-full ${item.color}`}
+                            style={{ width: `${item.roi}%` }}
+                            title='ROI'
+                          />
+                          <div
+                            className='h-full bg-gray-300'
+                            style={{ width: `${item.lift * 0.5}%` }}
+                            title='Lift (Scaled)'
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Seasonality / Smart Insights List */}
+              <Card className='h-full'>
+                <CardHeader className='py-3 pb-2 2xl:py-4'>
+                  <CardTitle className='text-sm 2xl:text-base font-semibold'>
+                    Akıllı İçgörüler & Sezonsallık
+                  </CardTitle>
+                  <CardDescription className='text-xs 2xl:text-sm'>
+                    Geçmiş verilerden çıkarımlar
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className='pt-2'>
+                  <div className='grid gap-2'>
+                    {[
+                      {
+                        title: 'Yaz Dönemi Fırsatı',
+                        desc: 'Bu ürün Haziran-Ağustos döneminde %20 daha fazla talep görüyor.',
+                        type: 'success',
+                      },
+                      {
+                        title: 'Marj Erezyonu',
+                        desc: 'Gazete ilanları yüksek ciro getiriyor ancak karlılığı %5 puan düşürüyor.',
+                        type: 'warning',
+                      },
+                      {
+                        title: 'Stok Yönetimi Başarısı',
+                        desc: 'Son 3 promosyonda stok planlaması %98 doğrulukla gerçekleşti.',
+                        type: 'info',
+                      },
+                    ].map((insight, i) => (
+                      <div
+                        key={i}
+                        className={`p-2.5 2xl:p-3 rounded-lg border text-xs 2xl:text-sm ${
+                          insight.type === 'success'
+                            ? 'bg-emerald-50 border-emerald-100 text-emerald-800'
+                            : insight.type === 'warning'
+                              ? 'bg-amber-50 border-amber-100 text-amber-800'
+                              : 'bg-blue-50 border-blue-100 text-blue-800'
+                        }`}
+                      >
+                        <span className='font-bold block mb-0.5 2xl:mb-1'>
+                          {insight.title}
+                        </span>
+                        {insight.desc}
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* 3. Detailed History Table with Advanced Metrics */}
+            <Card>
+              <CardHeader className='py-3 pb-2 2xl:py-4 flex flex-row items-center justify-between'>
+                <div className='space-y-0.5'>
+                  <CardTitle className='text-base 2xl:text-lg'>
+                    Detaylı Promosyon Geçmişi
+                  </CardTitle>
+                  <CardDescription className='text-xs 2xl:text-sm'>
+                    Finansal ve operasyonel metrikler
+                  </CardDescription>
+                </div>
+                <div className='flex gap-2'>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    className='h-7 2xl:h-9 text-xs 2xl:text-sm'
+                  >
+                    Filtrele
+                  </Button>
+                  <Button
+                    variant='outline'
+                    size='sm'
+                    className='h-7 2xl:h-9 text-xs 2xl:text-sm'
+                  >
+                    Dışa Aktar
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className='p-0 2xl:p-1'>
+                <div className='border-t'>
+                  <table className='w-full text-xs 2xl:text-sm text-left'>
+                    <thead className='bg-muted/50 text-muted-foreground font-medium uppercase'>
+                      <tr>
+                        <th className='p-3 2xl:p-4 w-[120px]'>Tarih</th>
+                        <th className='p-3 2xl:p-4'>Kampanya / Tip</th>
+                        <th className='p-3 2xl:p-4 text-right'>
+                          Ciro Artışı (Lift)
+                        </th>
+                        <th className='p-3 2xl:p-4 text-right'>
+                          Net Kar Etkisi
+                        </th>
+                        <th className='p-3 2xl:p-4 text-right'>ROI %</th>
+                        <th className='p-3 2xl:p-4 text-center'>Stok Durumu</th>
+                        <th className='p-3 2xl:p-4 text-right'>
+                          Tahmin Doğruluğu
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className='divide-y'>
+                      {[
+                        {
+                          date: '12-19 Mayıs 2025',
+                          name: 'Bahar Temizliği',
+                          type: 'KATALOG',
+                          uplift: '+42%',
+                          upliftVal: '₺12.4k',
+                          profit: '+₺3.2k',
+                          roi: 142,
+                          stock: 'OK',
+                          forecast: '92%',
+                        },
+                        {
+                          date: '05-12 Nisan 2025',
+                          name: 'Ramazan Paketi',
+                          type: 'ZKAE',
+                          uplift: '+55%',
+                          upliftVal: '₺18.1k',
+                          profit: '-₺1.2k',
+                          roi: -15,
+                          stock: 'OOS',
+                          forecast: '65%',
+                        },
+                        {
+                          date: '10-14 Şubat 2025',
+                          name: 'Sevgililer Günü',
+                          type: 'VKA0',
+                          uplift: '+18%',
+                          upliftVal: '₺4.5k',
+                          profit: '+₺0.8k',
+                          roi: 45,
+                          stock: 'Over',
+                          forecast: '88%',
+                        },
+                        {
+                          date: '15-20 Ocak 2025',
+                          name: 'Kış İndirimi',
+                          type: 'GAZETE',
+                          uplift: '+30%',
+                          upliftVal: '₺9.2k',
+                          profit: '+₺1.5k',
+                          roi: 85,
+                          stock: 'OK',
+                          forecast: '95%',
+                        },
+                      ].map((row, i) => (
+                        <tr
+                          key={i}
+                          className='group hover:bg-muted/30 transition-colors cursor-pointer'
+                        >
+                          <td className='p-3 2xl:p-4 font-medium text-gray-700'>
+                            {row.date}
+                          </td>
+                          <td className='p-3 2xl:p-4'>
+                            <div className='font-semibold text-gray-900'>
+                              {row.name}
+                            </div>
+                            <div className='text-[10px] 2xl:text-xs text-muted-foreground bg-muted w-fit px-1.5 py-0.5 rounded'>
+                              {row.type}
+                            </div>
+                          </td>
+                          <td className='p-3 2xl:p-4 text-right'>
+                            <div className='font-bold text-gray-900'>
+                              {row.uplift}
+                            </div>
+                            <div className='text-[10px] 2xl:text-xs text-muted-foreground'>
+                              {row.upliftVal}
+                            </div>
+                          </td>
+                          <td className='p-3 2xl:p-4 text-right font-medium'>
+                            <span
+                              className={
+                                row.profit.startsWith('-')
+                                  ? 'text-red-600'
+                                  : 'text-emerald-600'
+                              }
+                            >
+                              {row.profit}
+                            </span>
+                          </td>
+                          <td className='p-3 2xl:p-4 text-right'>
+                            <div
+                              className={`font-bold inline-block px-1.5 py-0.5 rounded ${
+                                row.roi > 100
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : row.roi > 0
+                                    ? 'bg-blue-50 text-blue-700'
+                                    : 'bg-red-50 text-red-700'
+                              }`}
+                            >
+                              %{row.roi}
+                            </div>
+                          </td>
+                          <td className='p-3 2xl:p-4 text-center'>
+                            <span
+                              className={`text-[10px] 2xl:text-xs font-bold px-2 py-0.5 rounded-full border ${
+                                row.stock === 'OK'
+                                  ? 'bg-green-50 text-green-700 border-green-200'
+                                  : row.stock === 'OOS'
+                                    ? 'bg-red-50 text-red-700 border-red-200'
+                                    : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                              }`}
+                            >
+                              {row.stock === 'OK'
+                                ? 'YETERLİ'
+                                : row.stock === 'OOS'
+                                  ? 'TÜKENDİ'
+                                  : 'AŞIRI STOK'}
+                            </span>
+                          </td>
+                          <td className='p-3 2xl:p-4 text-right text-gray-600'>
+                            {row.forecast}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </div>

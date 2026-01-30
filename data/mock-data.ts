@@ -25,6 +25,40 @@ export interface Region {
   stores: Store[];
 }
 
+// ============ FLAT ARRAYS FOR DROPDOWNS ============
+
+// Regions - flat list for simple dropdowns
+export const REGIONS_FLAT = [
+  { value: 'marmara', label: 'Marmara' },
+  { value: 'ege', label: 'Ege' },
+  { value: 'akdeniz', label: 'Akdeniz' },
+  { value: 'ic_anadolu', label: 'İç Anadolu' },
+  { value: 'karadeniz', label: 'Karadeniz' },
+];
+
+// Reyonlar (Departments/Sections)
+export const REYONLAR = [
+  { value: 'kasap', label: 'Kasap' },
+  { value: 'manav', label: 'Manav' },
+  { value: 'sut_urunleri', label: 'Süt Ürünleri' },
+  { value: 'atistirmalik', label: 'Atıştırmalık' },
+  { value: 'icecekler', label: 'İçecekler' },
+  { value: 'temizlik', label: 'Temizlik' },
+  { value: 'dondurma', label: 'Dondurma' },
+  { value: 'unlu_mamuller', label: 'Unlu Mamuller' },
+];
+
+// Promotions (Promotional Campaigns)
+export const PROMOTIONS = [
+  { value: 'KATALOG', label: 'KATALOG (Genel İndirim)' },
+  { value: 'ZKAE', label: 'ZKAE (Kasa Arkası)' },
+  { value: 'VKA0', label: 'VKA0 (Çoklu Alım)' },
+  { value: 'GAZETE', label: 'GAZETE İLANI' },
+  { value: '50TL_OP', label: '50 TL üzeri Operasyon' },
+];
+
+// ============ HIERARCHICAL DATA STRUCTURE ============
+
 export const REGIONS: Region[] = [
   {
     value: 'marmara',
@@ -832,8 +866,6 @@ export interface StockRisk {
   action: string;
 }
 
-// --- Helper Functions for Dynamic Data ---
-
 function filterProducts(
   regions: string[],
   stores: string[],
@@ -851,34 +883,12 @@ function filterProducts(
   }
 
   let filteredCategories = filteredStores.flatMap((s) => s.categories);
-  // Note: Category filtering in the UI is usually by "category value" (e.g. 'gida')
-  // but our mock data structure has categories nested.
-  // If the user selects "Gıda", we want all Gıda categories from selected stores.
+
   if (categories.length > 0) {
-    // The UI passes "storeValue_categoryValue" or just "categoryValue"?
-    // Looking at getAllCategories, it returns value: `${store.value}_${category.value}`
-    // But usually filters might want to filter by generic category name (e.g. "Dairy" across all stores).
-    // Let's assume the passed `categories` are the specific IDs from the dropdown.
-    // If the dropdown uses composite keys, we check for inclusion.
     filteredCategories = filteredCategories.filter((c) => {
-      // We need to reconstruct the key to match what's likely in the dropdown
-      // But here we don't have the parent store value easily accessible in this flat map without context.
-      // Let's rely on the fact that we are traversing.
-      // Actually, let's simplify: The `categories` arg contains unique identifiers.
-      // In `getAllCategories`, we created identifiers like `store_category`.
-      // So we need to match that.
-      // However, for a "simulation", exact matching might be too strict if we want to show *some* data.
-      // Let's assume for now we just return all products from the filtered stores if no category is selected,
-      // and if categories ARE selected, we try to match.
       return true;
     });
   }
-
-  // To properly filter by specific category selections (which are store-specific in the current mock setup),
-  // we would need to pass the store context.
-  // For this mock simulation, let's gather ALL products from the filtered stores,
-  // and then if `categories` has entries, we filter products that belong to those selected category nodes.
-
   const allProducts: Product[] = [];
 
   filteredStores.forEach((store) => {
