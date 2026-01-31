@@ -231,23 +231,7 @@ export default function LoginPage() {
           </form>
         </CardContent>
         <CardFooter className='flex flex-col space-y-4 text-center text-sm 2xl:text-base text-muted-foreground'>
-          <div className='relative w-full'>
-            <div className='absolute inset-0 flex items-center'>
-              <span className='w-full border-t border-slate-200' />
-            </div>
-            <div className='relative flex justify-center text-xs 2xl:text-sm uppercase'>
-              <span className='bg-white px-2 text-muted-foreground'>Veya</span>
-            </div>
-          </div>
-          <div className='text-center'>
-            Hesabınız yok mu?{' '}
-            <Link
-              href='/auth/register'
-              className='font-semibold text-primary hover:underline'
-            >
-              Kayıt Ol
-            </Link>
-          </div>
+          {/* Registration link removed as requested */}
         </CardFooter>
       </Card>
     </div>

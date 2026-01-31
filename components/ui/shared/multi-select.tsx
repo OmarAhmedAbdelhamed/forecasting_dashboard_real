@@ -80,7 +80,7 @@ export function MultiSelect({
     <div ref={containerRef} className={cn('relative w-full', className)}>
       {/* Input Area */}
       <div
-        className='flex items-center justify-between min-h-8 w-full rounded-lg border border-border/50 bg-card px-2 py-1.5 text-xs shadow-sm cursor-pointer transition-all hover:border-primary/30 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20'
+        className='flex items-center justify-between min-h-10 w-full rounded-lg border border-border/50 bg-card px-3 py-2 text-sm shadow-sm cursor-pointer transition-all hover:border-primary/30 focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/20'
         onClick={() => {
           setIsOpen(!isOpen);
           inputRef.current?.focus();
@@ -88,7 +88,7 @@ export function MultiSelect({
       >
         <div className='flex items-center gap-2 flex-1 min-w-0'>
           {/* Placeholder / Label */}
-          <span className='text-muted-foreground truncate text-xs'>
+          <span className='text-muted-foreground truncate text-sm'>
             {placeholder}
           </span>
 
@@ -121,103 +121,106 @@ export function MultiSelect({
               onChange={(e) => setSearchValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder='Search...'
-              className='w-full bg-transparent outline-none placeholder:text-muted-foreground text-xs'
+              className='w-full bg-transparent outline-none placeholder:text-muted-foreground text-sm'
             />
           </div>
 
-          {/* Selected Badges */}
-          {selected.length > 0 && (
-            <div className='flex flex-wrap gap-1.5 p-2 border-b'>
-              {selected.map((value) => {
-                const option = options.find((o) => o.value === value);
-                return (
-                  <span
-                    key={value}
-                    className='inline-flex items-center gap-1 rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-secondary-foreground'
-                  >
-                    {option?.label}
-                    <button
-                      type='button'
-                      onClick={(e) => removeOption(value, e)}
-                      className='rounded-full hover:bg-muted-foreground/20 p-0.5'
+          {/* Scrollable Content Area (Selected Items + Options) */}
+          <div className='max-h-60 overflow-auto'>
+            {/* Selected Badges */}
+            {selected.length > 0 && (
+              <div className='flex flex-wrap gap-1.5 p-2 border-b shrink-0'>
+                {selected.map((value) => {
+                  const option = options.find((o) => o.value === value);
+                  return (
+                    <span
+                      key={value}
+                      className='inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground'
                     >
-                      <X className='h-3 w-3' />
-                    </button>
-                  </span>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Options List */}
-          <ul className='max-h-60 overflow-auto p-1 space-y-1'>
-            {filteredOptions.length > 0 && (
-              <li
-                onClick={() => {
-                  const allFilteredSelected = filteredOptions.every((option) =>
-                    selected.includes(option.value),
+                      {option?.label}
+                      <button
+                        type='button'
+                        onClick={(e) => removeOption(value, e)}
+                        className='rounded-full hover:bg-muted-foreground/20 p-0.5'
+                      >
+                        <X className='h-3 w-3' />
+                      </button>
+                    </span>
                   );
-                  if (allFilteredSelected) {
-                    // Deselect all filtered options
-                    const newSelected = selected.filter(
-                      (s) => !filteredOptions.some((o) => o.value === s),
+                })}
+              </div>
+            )}
+
+            {/* Options List */}
+            <ul className='p-1 space-y-1'>
+              {filteredOptions.length > 0 && (
+                <li
+                  onClick={() => {
+                    const allFilteredSelected = filteredOptions.every(
+                      (option) => selected.includes(option.value),
                     );
-                    onChange(newSelected);
-                  } else {
-                    // Select all filtered options
-                    const newSelected = [
-                      ...selected,
-                      ...filteredOptions
-                        .filter((o) => !selected.includes(o.value))
-                        .map((o) => o.value),
-                    ];
-                    onChange(newSelected);
-                  }
-                }}
-                className={cn(
-                  'flex items-center justify-between px-2 py-1.5 text-xs rounded-sm cursor-pointer font-semibold border-b mb-1',
-                  filteredOptions.every((option) =>
+                    if (allFilteredSelected) {
+                      // Deselect all filtered options
+                      const newSelected = selected.filter(
+                        (s) => !filteredOptions.some((o) => o.value === s),
+                      );
+                      onChange(newSelected);
+                    } else {
+                      // Select all filtered options
+                      const newSelected = [
+                        ...selected,
+                        ...filteredOptions
+                          .filter((o) => !selected.includes(o.value))
+                          .map((o) => o.value),
+                      ];
+                      onChange(newSelected);
+                    }
+                  }}
+                  className={cn(
+                    'flex items-center justify-between px-2 py-2 text-sm rounded-sm cursor-pointer font-semibold border-b mb-1',
+                    filteredOptions.every((option) =>
+                      selected.includes(option.value),
+                    )
+                      ? 'bg-accent text-accent-foreground'
+                      : 'hover:bg-muted',
+                  )}
+                >
+                  {filteredOptions.every((option) =>
                     selected.includes(option.value),
                   )
-                    ? 'bg-accent text-accent-foreground'
-                    : 'hover:bg-muted',
-                )}
-              >
-                {filteredOptions.every((option) =>
-                  selected.includes(option.value),
-                )
-                  ? 'Seçimi Kaldır'
-                  : 'Tümünü Seç'}
-                {filteredOptions.every((option) =>
-                  selected.includes(option.value),
-                ) && <Check className='h-4 w-4 text-primary' />}
-              </li>
-            )}
-            {filteredOptions.length === 0 ? (
-              <li className='px-3 py-2 text-sm text-muted-foreground text-center'>
-                No results found
-              </li>
-            ) : (
-              filteredOptions.map((option) => {
-                const isSelected = selected.includes(option.value);
-                return (
-                  <li
-                    key={option.value}
-                    onClick={() => toggleOption(option.value)}
-                    className={cn(
-                      'flex items-center justify-between px-2 py-1.5 text-xs rounded-sm cursor-pointer',
-                      isSelected
-                        ? 'bg-accent text-accent-foreground'
-                        : 'hover:bg-muted',
-                    )}
-                  >
-                    {option.label}
-                    {isSelected && <Check className='h-4 w-4 text-primary' />}
-                  </li>
-                );
-              })
-            )}
-          </ul>
+                    ? 'Seçimi Kaldır'
+                    : 'Tümünü Seç'}
+                  {filteredOptions.every((option) =>
+                    selected.includes(option.value),
+                  ) && <Check className='h-4 w-4 text-primary' />}
+                </li>
+              )}
+              {filteredOptions.length === 0 ? (
+                <li className='px-3 py-2 text-sm text-muted-foreground text-center'>
+                  No results found
+                </li>
+              ) : (
+                filteredOptions.map((option) => {
+                  const isSelected = selected.includes(option.value);
+                  return (
+                    <li
+                      key={option.value}
+                      onClick={() => toggleOption(option.value)}
+                      className={cn(
+                        'flex items-center justify-between px-2 py-2 text-sm rounded-sm cursor-pointer',
+                        isSelected
+                          ? 'bg-accent text-accent-foreground'
+                          : 'hover:bg-muted',
+                      )}
+                    >
+                      {option.label}
+                      {isSelected && <Check className='h-4 w-4 text-primary' />}
+                    </li>
+                  );
+                })
+              )}
+            </ul>
+          </div>
         </div>
       )}
     </div>

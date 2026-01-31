@@ -4,4 +4,5 @@ export type Section =
   | 'demand_forecasting'
   | 'inventory_planning'
   | 'pricing_promotion'
-  | 'seasonal_planning';
+  | 'seasonal_planning'
+  | 'alert_center';

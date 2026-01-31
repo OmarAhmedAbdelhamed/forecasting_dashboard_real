@@ -10,6 +10,7 @@ import {
   Package,
   Tag,
   CalendarRange,
+  AlertTriangle,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -25,6 +26,7 @@ const navigation: { name: string; href: Section; icon: React.ElementType }[] = [
   { name: 'Envanter Planlama', href: 'inventory_planning', icon: Package },
   { name: 'Fiyatlandırma & Promosyon', href: 'pricing_promotion', icon: Tag },
   { name: 'Sezonluk Planlama', href: 'seasonal_planning', icon: CalendarRange },
+  { name: 'Alert Center', href: 'alert_center', icon: AlertTriangle },
 ];
 
 export function Sidebar({

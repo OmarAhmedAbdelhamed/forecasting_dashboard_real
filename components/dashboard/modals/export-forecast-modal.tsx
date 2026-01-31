@@ -147,6 +147,11 @@ const generateMockExportData = (count = 100, period: string = 'monthly') => {
       baseForecast * (0.9 + Math.random() * 0.2),
     );
 
+    // Stock Selling Rate Calculation (Average Daily Sales based on period)
+    // Monthly: Divide by 30, Weekly: Divide by 7
+    const periodDays = period === 'monthly' ? 30 : 7;
+    const sellingRate = Math.round(actual / periodDays);
+
     return {
       id: `EXP-${1000 + i}`,
       productName: productName,
@@ -163,6 +168,7 @@ const generateMockExportData = (count = 100, period: string = 'monthly') => {
       stockLevel: Math.floor(baseForecast * (0.5 + Math.random())),
       revenue: (actual * price).toFixed(2),
       forecastRevenue: (baseForecast * price).toFixed(2),
+      sellingRate: sellingRate,
 
       promotionStatus: (Math.random() > 0.6
         ? 'none'
@@ -186,6 +192,7 @@ const ALL_COLUMNS = [
   { id: 'actualSales', label: 'Gerçekleşen' },
   { id: 'accuracy', label: 'Doğruluk (%)' },
   { id: 'stockLevel', label: 'Stok' },
+  { id: 'sellingRate', label: 'Satış Hızı (Günlük)' },
   { id: 'futureForecast', label: 'Gelecek Tahmin' },
   { id: 'revenue', label: 'Ciro (TL)' },
   { id: 'forecastRevenue', label: 'Ciro Tahmini (TL)' },
@@ -419,10 +426,10 @@ export function ExportForecastModal({
                 <HardDriveDownload className='h-5 w-5 text-[#0D1E3A]' />
               </div>
               <div>
-                <DialogTitle className='text-lg font-bold text-white'>
+                <DialogTitle className='text-xl font-bold text-white'>
                   Veri Dışa Aktarma
                 </DialogTitle>
-                <DialogDescription className='text-[#628BB1] text-xs mt-0.5'>
+                <DialogDescription className='text-[#628BB1] text-sm mt-0.5'>
                   Tahmin verilerinizi filtreleyebilirsiniz ve Excel formatında
                   indirebilirsiniz.
                 </DialogDescription>
@@ -431,15 +438,15 @@ export function ExportForecastModal({
             <div className='flex items-center gap-2'>
               <div className='flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5'>
                 <ListChecks className='h-4 w-4 text-[#FFB840]' />
-                <span className='text-lg font-bold'>{selectedRows.size}</span>
-                <span className='text-[#628BB1] text-xs'>satır seçili</span>
+                <span className='text-xl font-bold'>{selectedRows.size}</span>
+                <span className='text-[#628BB1] text-sm'>satır seçili</span>
               </div>
               <div className='flex items-center gap-2 bg-white/10 rounded-lg px-3 py-1.5'>
                 <Columns className='h-4 w-4 text-[#FFB840]' />
-                <span className='text-lg font-bold'>
+                <span className='text-xl font-bold'>
                   {visibleColumns.length}
                 </span>
-                <span className='text-[#628BB1] text-xs'>sütun</span>
+                <span className='text-[#628BB1] text-sm'>sütun</span>
               </div>
               <Button
                 variant='ghost'
@@ -458,13 +465,13 @@ export function ExportForecastModal({
           <div className='w-64 border-r border-border bg-card flex flex-col shrink-0'>
             {/* Filters Section */}
             <div className='p-3 border-b'>
-              <h3 className='text-xs font-semibold text-card-foreground mb-3 flex items-center gap-2'>
+              <h3 className='text-sm font-semibold text-card-foreground mb-3 flex items-center gap-2'>
                 <Filter className='h-3.5 w-3.5 text-[#628BB1]' />
                 Filtreler
               </h3>
               <div className='space-y-3'>
                 <div className='space-y-1'>
-                  <Label className='text-[10px] font-medium text-muted-foreground uppercase tracking-wider'>
+                  <Label className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>
                     Bölge
                   </Label>
                   <MultiSelect
@@ -475,7 +482,7 @@ export function ExportForecastModal({
                   />
                 </div>
                 <div className='space-y-1'>
-                  <Label className='text-[10px] font-medium text-muted-foreground uppercase tracking-wider'>
+                  <Label className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>
                     Mağaza
                   </Label>
                   <MultiSelect
@@ -486,7 +493,7 @@ export function ExportForecastModal({
                   />
                 </div>
                 <div className='space-y-1'>
-                  <Label className='text-[10px] font-medium text-muted-foreground uppercase tracking-wider'>
+                  <Label className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>
                     Reyon
                   </Label>
                   <MultiSelect
@@ -498,14 +505,14 @@ export function ExportForecastModal({
                 </div>
                 {/* Period Selector - Segmented Control */}
                 <div className='space-y-1'>
-                  <Label className='text-[10px] font-medium text-muted-foreground uppercase tracking-wider'>
+                  <Label className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>
                     Dönem
                   </Label>
                   <div className='flex items-center p-1 bg-muted/40 border rounded-lg h-9'>
                     <button
                       onClick={() => setPeriod('monthly')}
                       className={cn(
-                        'flex-1 flex items-center justify-center text-xs font-medium h-full rounded-md transition-all',
+                        'flex-1 flex items-center justify-center text-sm font-medium h-full rounded-md transition-all',
                         period === 'monthly'
                           ? 'bg-white text-[#0D1E3A] shadow-sm'
                           : 'text-muted-foreground hover:text-foreground',
@@ -517,7 +524,7 @@ export function ExportForecastModal({
                     <button
                       onClick={() => setPeriod('weekly')}
                       className={cn(
-                        'flex-1 flex items-center justify-center text-xs font-medium h-full rounded-md transition-all',
+                        'flex-1 flex items-center justify-center text-sm font-medium h-full rounded-md transition-all',
                         period === 'weekly'
                           ? 'bg-white text-[#0D1E3A] shadow-sm'
                           : 'text-muted-foreground hover:text-foreground',
@@ -558,7 +565,7 @@ export function ExportForecastModal({
                     />
                     <span
                       className={cn(
-                        'text-xs font-medium',
+                        'text-sm font-medium',
                         visibleColumns.includes(col.id)
                           ? 'text-card-foreground'
                           : 'text-muted-foreground',
@@ -582,7 +589,7 @@ export function ExportForecastModal({
                   placeholder='Ürün ara (İsim veya SKU yazın)...'
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  className='pl-10 h-9 text-sm bg-muted/30 border-muted focus-visible:ring-[#FFB840] focus-visible:border-[#FFB840]'
+                  className='pl-10 h-10 text-base bg-muted/30 border-muted focus-visible:ring-[#FFB840] focus-visible:border-[#FFB840]'
                 />
               </div>
             </div>
@@ -590,7 +597,7 @@ export function ExportForecastModal({
             {/* Table */}
             <div className='flex-1 overflow-hidden p-3 flex flex-col'>
               <div className='rounded-xl border bg-card shadow-sm flex-1 overflow-auto'>
-                <table className='min-w-225 w-full text-xs'>
+                <table className='min-w-225 w-full text-sm'>
                   <thead className='sticky top-0 z-10'>
                     <tr className='border-b bg-[#F4F7FA]'>
                       <th className='w-10 text-center h-10 px-1 font-medium bg-[#F4F7FA] align-middle'>
@@ -644,6 +651,12 @@ export function ExportForecastModal({
                         } else if (colId === 'promotionStatus') {
                           tooltipText =
                             'Ürünün promosiyon kampanyası durumu (Devam Eden, Planlanan veya Yok).';
+                          tooltipText =
+                            'Geçen yılın aynı dönemine kıyasla satışlardaki büyüme oranı (YoY). (Hesaplanmamış)';
+                          // Note: YoY logic is not strictly present in mock data here, placeholder or derived if needed.
+                        } else if (colId === 'sellingRate') {
+                          tooltipText =
+                            'Seçilen dönemdeki ortalama günlük satış adedi.';
                         }
 
                         // Alignment
@@ -655,6 +668,7 @@ export function ExportForecastModal({
                           'revenue',
                           'forecastRevenue',
                           'futureForecast',
+                          'sellingRate',
                         ].includes(colId);
 
                         return (
@@ -662,7 +676,7 @@ export function ExportForecastModal({
                             key={colId}
                             onClick={() => handleSort(colId)}
                             className={cn(
-                              'h-10 px-2 text-left font-semibold text-[10px] uppercase tracking-wider text-[#0D1E3A] bg-[#F4F7FA] cursor-pointer hover:bg-muted/50 transition-colors select-none group',
+                              'h-10 px-2 text-left font-semibold text-xs uppercase tracking-wider text-[#0D1E3A] bg-[#F4F7FA] cursor-pointer hover:bg-muted/50 transition-colors select-none group',
                               isNumeric && 'text-center',
                             )}
                           >
@@ -770,6 +784,7 @@ export function ExportForecastModal({
                               'revenue',
                               'forecastRevenue',
                               'futureForecast',
+                              'sellingRate',
                             ].includes(colId);
 
                             return (
@@ -802,7 +817,7 @@ export function ExportForecastModal({
                                   <Badge
                                     variant='outline'
                                     className={cn(
-                                      'text-xs',
+                                      'text-sm',
                                       val === 'ongoing'
                                         ? 'border-green-300 bg-green-50 text-green-700'
                                         : val === 'scheduled'
@@ -817,7 +832,7 @@ export function ExportForecastModal({
                                         : 'Yok'}
                                   </Badge>
                                 ) : colId === 'sku' ? (
-                                  <span className='font-mono text-xs text-muted-foreground'>
+                                  <span className='font-mono text-sm text-muted-foreground'>
                                     {val}
                                   </span>
                                 ) : colId === 'futureForecast' ? (
@@ -887,7 +902,7 @@ export function ExportForecastModal({
         {/* Footer */}
         <div className='px-4 py-3 border-t bg-card flex items-center justify-between shrink-0'>
           <div className='flex items-center gap-3'>
-            <span className='text-xs text-muted-foreground'>
+            <span className='text-sm text-muted-foreground'>
               Toplam{' '}
               <span className='font-bold text-card-foreground'>
                 {filteredData.length}
@@ -895,7 +910,7 @@ export function ExportForecastModal({
               kayıt
             </span>
             {selectedRows.size > 0 && (
-              <span className='text-xs text-[#628BB1]'>
+              <span className='text-sm text-[#628BB1]'>
                 <span className='font-bold text-[#0D1E3A]'>
                   {selectedRows.size}
                 </span>{' '}
@@ -907,12 +922,12 @@ export function ExportForecastModal({
             <Button
               variant='outline'
               onClick={() => onOpenChange(false)}
-              className='h-8 px-4 border-border hover:bg-muted text-xs'
+              className='h-9 px-4 border-border hover:bg-muted text-sm'
             >
               İptal
             </Button>
             <Button
-              className='h-8 px-5 gap-2 bg-[#FFB840] hover:bg-[#e5a636] text-[#0D1E3A] font-semibold shadow-lg text-xs'
+              className='h-9 px-5 gap-2 bg-[#FFB840] hover:bg-[#e5a636] text-[#0D1E3A] font-semibold shadow-lg text-sm'
               onClick={handleExport}
               disabled={selectedRows.size === 0}
             >

@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+
 import { useState, useMemo } from 'react';
 import { FilterBar } from '@/components/dashboard/filter-bar';
 import { AlertsBar } from '@/components/dashboard/alerts-bar';
@@ -14,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/shared/card';
+import { Button } from '@/components/ui/shared/button';
 import {
   Tooltip,
   TooltipContent,
@@ -164,11 +167,19 @@ export function OverviewSection() {
 
         <div className='lg:col-span-4'>
           <div className='border border-red-200 bg-red-50/10 rounded-lg overflow-hidden flex flex-col h-full'>
-            <div className='pb-1 pt-2 px-3'>
-              <div className='text-red-600 flex items-center gap-2 text-lg font-semibold'>
-                <AlertTriangle className='h-6 w-6' />
-                Alert Center
+            <div className='pb-2 pt-3 px-4 flex items-center justify-between'>
+              <div className='flex items-center gap-2 text-red-600'>
+                <AlertTriangle className='h-5 w-5' />
+                <span className='font-semibold'>Alert Center</span>
               </div>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='text-xs h-8 hover:bg-red-100 hover:text-red-700 text-red-600'
+                asChild
+              >
+                <Link href='/alert-center'>See More</Link>
+              </Button>
             </div>
             <div className='p-2 flex-1'>
               <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 xlg:grid-cols-4 gap-2 h-full'>

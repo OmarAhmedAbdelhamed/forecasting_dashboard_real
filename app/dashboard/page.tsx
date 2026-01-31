@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Sidebar } from '@/components/dashboard/sidebar';
 import { Header } from '@/components/dashboard/header';
 import { OverviewSection } from '@/components/dashboard/sections/overview';
@@ -11,8 +12,17 @@ import { SeasonalPlanningSection } from '@/components/dashboard/sections/seasona
 import type { Section } from '@/types/types';
 
 export default function Dashboard() {
+  const router = useRouter();
   const [activeSection, setActiveSection] = useState<Section>('overview');
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+
+  const handleSectionChange = (section: Section) => {
+    if (section === 'alert_center') {
+      router.push('/alert-center');
+    } else {
+      setActiveSection(section);
+    }
+  };
 
   const renderSection = () => {
     switch (activeSection) {
@@ -35,7 +45,7 @@ export default function Dashboard() {
     <div className='flex min-h-screen bg-background'>
       <Sidebar
         activeSection={activeSection}
-        onSectionChange={setActiveSection}
+        onSectionChange={handleSectionChange}
         collapsed={sidebarCollapsed}
         onCollapsedChange={setSidebarCollapsed}
       />
