@@ -36,8 +36,12 @@ export default function LoginPage() {
   }, [user, authLoading, router]);
 
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(
+    process.env.NEXT_PUBLIC_TEST_EMAIL || 'admin@bee2.ai',
+  );
+  const [password, setPassword] = useState(
+    process.env.NEXT_PUBLIC_TEST_PASSWORD || 'test123',
+  );
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<{
     email?: boolean;
