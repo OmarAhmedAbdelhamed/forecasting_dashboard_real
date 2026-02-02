@@ -49,11 +49,11 @@ const CAMPAIGN_NAMES = [
 ];
 
 const PROMO_TYPES = [
-  'KATALOG',
-  'ZKAE',
-  'VKA0',
-  'GAZETE',
-  '50TL_OP',
+  'INTERNET_INDIRIMI',
+  'ALISVERIS_INDIRIMI_500',
+  'COKLU_ALIM',
+  'OZEL_GUN_INDIRIMI',
+  'SADAKAT_KART',
   'Mağaza İçi',
 ];
 

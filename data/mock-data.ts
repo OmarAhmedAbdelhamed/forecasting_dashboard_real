@@ -50,11 +50,11 @@ export const REYONLAR = [
 
 // Promotions (Promotional Campaigns)
 export const PROMOTIONS = [
-  { value: 'KATALOG', label: 'KATALOG (Genel İndirim)' },
-  { value: 'ZKAE', label: 'ZKAE (Kasa Arkası)' },
-  { value: 'VKA0', label: 'VKA0 (Çoklu Alım)' },
-  { value: 'GAZETE', label: 'GAZETE İLANI' },
-  { value: '50TL_OP', label: '50 TL üzeri Operasyon' },
+  { value: 'INTERNET_INDIRIMI', label: 'İnternet İndirimi' },
+  { value: 'ALISVERIS_INDIRIMI_500', label: '500 TL Üzeri Alışveriş İndirimi' },
+  { value: 'COKLU_ALIM', label: 'Çoklu Alım Fırsatı' },
+  { value: 'OZEL_GUN_INDIRIMI', label: 'Özel Gün İndirimi' },
+  { value: 'SADAKAT_KART', label: 'Sadakat Kart İndirimi' },
 ];
 
 // ============ HIERARCHICAL DATA STRUCTURE ============
@@ -1048,7 +1048,7 @@ export function getPromotions(
     {
       id: 'PROMO-1025',
       name: 'Çaykur Rize - Çoklu Alım',
-      type: 'VKA0',
+      type: 'COKLU_ALIM',
       startDate: '30 May',
       discount: '3 Al 2 Öde',
       status: 'Taslak',
@@ -1093,71 +1093,183 @@ export function getStockRisks(
 
 // ============ PROMOTION ANALYTICS DATA ============
 
-export const PROMOTION_HISTORY_DATA = [
+export interface PromotionHistoryItem {
+  date: string;
+  name: string;
+  type: string;
+  uplift: string;
+  upliftVal: string;
+  profit: string;
+  roi: number;
+  stock: 'OK' | 'OOS' | 'Over';
+  forecast: string;
+  // NEW FIELDS
+  stockCostIncrease?: string; // Tahmini Stok Maliyeti Artışı
+  lostSalesVal?: string; // Kaçırılan Ciro (OOS durumunda)
+}
+
+export const PROMOTION_HISTORY_DATA: PromotionHistoryItem[] = [
   {
     date: '10-19 Mayıs 2025',
     name: 'Bahar Temizliği',
-    type: 'KATALOG',
+    type: 'INTERNET_INDIRIMI',
     uplift: '+42%',
     upliftVal: '₺12.4k',
     profit: '+₺3.2k',
     roi: 142,
     stock: 'OK',
     forecast: '92%',
+    stockCostIncrease: '₺1.2k',
+    lostSalesVal: '₺0',
   },
   {
     date: '05-12 Nisan 2025',
     name: 'Ramazan Paketi',
-    type: 'ZKAE',
+    type: 'ALISVERIS_INDIRIMI_500',
     uplift: '+55%',
     upliftVal: '₺18.1k',
     profit: '-₺1.2k',
     roi: -15,
     stock: 'OOS',
     forecast: '65%',
+    stockCostIncrease: '₺450',
+    lostSalesVal: '₺4.5k', // OOS caused lost sales
   },
   {
     date: '10-14 Şubat 2025',
     name: 'Sevgililer Günü',
-    type: 'VKA0',
+    type: 'COKLU_ALIM',
     uplift: '+18%',
     upliftVal: '₺4.5k',
     profit: '-₺0.8k',
     roi: 45,
     stock: 'Over',
     forecast: '88%',
+    stockCostIncrease: '₺2.1k', // Excessive stock cost
+    lostSalesVal: '₺0',
   },
   {
     date: '15-20 Ocak 2025',
     name: 'Kış İndirimi',
-    type: 'GAZETE',
+    type: 'OZEL_GUN_INDIRIMI',
     uplift: '+30%',
     upliftVal: '₺9.2k',
     profit: '+₺1.5k',
     roi: 85,
     stock: 'OK',
     forecast: '95%',
+    stockCostIncrease: '₺800',
+    lostSalesVal: '₺0',
   },
   {
     date: '20-25 Aralık 2024',
     name: 'Yılbaşı Özel',
-    type: 'KATALOG',
+    type: 'INTERNET_INDIRIMI',
     uplift: '+48%',
     upliftVal: '₺15.2k',
     profit: '+₺4.1k',
     roi: 155,
     stock: 'OK',
     forecast: '94%',
+    stockCostIncrease: '₺1.5k',
+    lostSalesVal: '₺0',
   },
   {
     date: '24-28 Kasım 2024',
     name: 'Efsane Cuma',
-    type: '50TL_OP',
+    type: 'SADAKAT_KART',
     uplift: '+60%',
     upliftVal: '₺22.5k',
     profit: '-₺0.5k',
     roi: -5,
     stock: 'OOS',
     forecast: '70%',
+    stockCostIncrease: '₺300',
+    lostSalesVal: '₺8.2k',
   },
 ];
+
+export interface SimilarCampaign {
+  id: string;
+  name: string;
+  date: string;
+  similarityScore: number;
+  type: string;
+  lift: number;
+  roi: number;
+  stockOutDays: number;
+}
+
+export const SIMILAR_CAMPAIGNS: SimilarCampaign[] = [
+  {
+    id: 'SC-1',
+    name: 'İnternet\'e Özel İndirim Günleri',
+    date: 'Nisan 2024',
+    similarityScore: 95,
+    type: 'INTERNET_INDIRIMI',
+    lift: 38,
+    roi: 120,
+    stockOutDays: 0,
+  },
+  {
+    id: 'SC-2',
+    name: '500 TL Üzeri Alışveriş İndirimi',
+    date: 'Ekim 2024',
+    similarityScore: 82,
+    type: 'INTERNET_INDIRIMI',
+    lift: 45,
+    roi: 110,
+    stockOutDays: 2,
+  },
+  {
+    id: 'SC-3',
+    name: '3 Al 2 Öde Fırsatı',
+    date: 'Haziran 2024',
+    similarityScore: 65,
+    type: 'COKLU_ALIM',
+    lift: 22,
+    roi: 40,
+    stockOutDays: 0,
+  },
+  {
+    id: 'SC-4',
+    name: 'Okula Dönüş Sepet İndirimi',
+    date: 'Eylül 2024',
+    similarityScore: 88,
+    type: 'ALISVERIS_INDIRIMI_500',
+    lift: 55,
+    roi: 145,
+    stockOutDays: 5,
+  },
+  {
+    id: 'SC-5',
+    name: 'Kış Sezonu Dev İndirimi',
+    date: 'Ocak 2025',
+    similarityScore: 75,
+    type: 'ALISVERIS_INDIRIMI_500',
+    lift: 42,
+    roi: 90,
+    stockOutDays: 1,
+  },
+  {
+    id: 'SC-6',
+    name: 'Hafta Sonu Süper Fırsat',
+    date: 'Mayıs 2024',
+    similarityScore: 60,
+    type: 'SADAKAT_KART',
+    lift: 15,
+    roi: 30,
+    stockOutDays: 0,
+  },
+  {
+    id: 'SC-7',
+    name: 'Gazete Manşet İndirimi',
+    date: 'Mart 2024',
+    similarityScore: 92,
+    type: 'OZEL_GUN_INDIRIMI',
+    lift: 70,
+    roi: 65,
+    stockOutDays: 3,
+  },
+];
+
