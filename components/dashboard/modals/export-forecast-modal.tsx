@@ -1,13 +1,11 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogHeader,
   DialogTitle,
-  DialogFooter,
 } from '@/components/ui/shared/dialog';
 import { Button } from '@/components/ui/shared/button';
 import { Input } from '@/components/ui/shared/input';
@@ -16,44 +14,23 @@ import { MultiSelect } from '@/components/ui/shared/multi-select';
 import { Checkbox } from '@/components/ui/shared/checkbox';
 import { Badge } from '@/components/ui/shared/badge';
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/shared/table';
-import {
   Download,
   Filter,
   Search,
-  Settings2,
-  FileSpreadsheet,
   Columns,
   ListChecks,
   Package,
-  ChevronRight,
   HardDriveDownload,
   Info,
-  Calendar,
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
 } from 'lucide-react';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/shared/select';
-import {
   Tooltip,
   TooltipContent,
-  TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/shared/tooltip';
-import { ScrollArea } from '@/components/ui/shared/scroll-area';
 import { STORES, REGIONS_FLAT as REGIONS, REYONLAR } from '@/data/mock-data';
 import { cn } from '@/lib/utils';
 
@@ -249,7 +226,7 @@ export function ExportForecastModal({
 
   // Filtering Logic
   const filteredData = useMemo(() => {
-    let result = MOCK_DATA.filter((item) => {
+    const result = MOCK_DATA.filter((item) => {
       const matchesSearch =
         searchQuery === '' ||
         item.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -282,8 +259,8 @@ export function ExportForecastModal({
     // Sorting
     if (sortConfig !== null) {
       result.sort((a, b) => {
-        let aValue: any = a[sortConfig.key as keyof ProductData];
-        let bValue: any = b[sortConfig.key as keyof ProductData];
+        let aValue: string | number = a[sortConfig.key as keyof ProductData];
+        let bValue: string | number = b[sortConfig.key as keyof ProductData];
 
         // Handle numeric strings (Revenue)
         if (['revenue', 'forecastRevenue'].includes(sortConfig.key)) {

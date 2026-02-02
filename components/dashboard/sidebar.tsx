@@ -3,6 +3,7 @@
 import React from 'react';
 
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 import type { Section } from '@/types/types';
 import {
   LayoutDashboard,
@@ -39,7 +40,7 @@ export function Sidebar({
     <aside
       className={cn(
         'fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-out flex flex-col overflow-hidden',
-        collapsed ? 'w-[55px]' : 'w-[240px] lg:w-[280px] shadow-2xl',
+        collapsed ? 'w-13.75' : 'w-60 lg:w-70 shadow-2xl',
       )}
       onMouseEnter={() => onCollapsedChange(false)}
       onMouseLeave={() => onCollapsedChange(true)}
@@ -47,12 +48,15 @@ export function Sidebar({
       {/* Logo */}
       <div className='h-14 flex items-center border-b border-sidebar-border overflow-hidden'>
         {/* Fixed-width logo container for centering when collapsed */}
-        <div className='w-[64px] shrink-0 flex items-center justify-center'>
+        <div className='w-16 shrink-0 flex items-center justify-center'>
           <div className='w-8 h-8 rounded-lg flex items-center justify-center bg-white overflow-hidden p-1'>
-            <img
+            <Image
               src='/bee2_ai_logo.svg'
               alt='Bee2 AI'
+              width={32}
+              height={32}
               className='w-full h-full object-contain'
+              priority
             />
           </div>
         </div>

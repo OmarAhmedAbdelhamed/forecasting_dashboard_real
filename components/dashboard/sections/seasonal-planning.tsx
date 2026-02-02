@@ -1,11 +1,5 @@
 'use client';
 
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/shared/card';
 import { CalendarRange } from 'lucide-react';
 
 export function SeasonalPlanningSection() {

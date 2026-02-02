@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/hooks/use-auth';
 import { Loader2, ArrowRight, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/shared/button';
@@ -108,10 +109,13 @@ export default function LoginPage() {
       {/* Logo Section */}
       <div className='flex flex-col items-center mb-8 2xl:mb-10'>
         <div className='w-20 h-20 2xl:w-24 2xl:h-24 rounded-2xl bg-white shadow-lg flex items-center justify-center p-2 mb-4'>
-          <img
+          <Image
             src='/bee2_ai_logo.svg'
             alt='Bee2 AI'
+            width={96}
+            height={96}
             className='w-full h-full object-contain'
+            priority
           />
         </div>
         <h1 className='text-2xl 2xl:text-3xl font-bold text-foreground'>

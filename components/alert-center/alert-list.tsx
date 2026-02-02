@@ -7,6 +7,8 @@ import {
   GrowthProduct,
   ForecastErrorProduct,
 } from '@/data/mock-alerts';
+import { generateInventoryAlerts } from '@/data/mock-data';
+import { InventoryAlert } from '@/types/inventory';
 import {
   Card,
   CardContent,
@@ -25,19 +27,13 @@ import {
 } from '@/components/ui/shared/select';
 import {
   Search,
-  Info,
   TrendingUp,
   TrendingDown,
   AlertTriangle,
   CheckCircle,
-  Clock,
+  Box,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/shared/tooltip';
 
 interface ResolvedAlert {
   id: string;
@@ -46,11 +42,11 @@ interface ResolvedAlert {
   action: string;
   comment: string;
   date: Date;
-  data: any;
+  data: GrowthProduct | ForecastErrorProduct | InventoryAlert;
 }
 
 interface AlertListProps {
-  type: 'low-growth' | 'high-growth' | 'forecast-error';
+  type: 'low-growth' | 'high-growth' | 'forecast-error' | 'inventory';
   filters: {
     selectedRegions: string[];
     selectedStores: string[];
@@ -72,13 +68,22 @@ export function AlertList({
   const [actions, setActions] = useState<Record<string, string>>({});
 
   const filteredData = useMemo(() => {
-    let data: any[] = [];
+    let data: (GrowthProduct | ForecastErrorProduct | InventoryAlert)[] = [];
     if (type === 'low-growth') {
       data = GROWTH_PRODUCTS_DATA.filter((p) => p.type === 'low');
     } else if (type === 'high-growth') {
       data = GROWTH_PRODUCTS_DATA.filter((p) => p.type === 'high');
-    } else {
+    } else if (type === 'forecast-error') {
       data = FORECAST_ERROR_DATA;
+    } else if (type === 'inventory') {
+      data = generateInventoryAlerts(
+        filters.selectedRegions,
+        filters.selectedStores,
+      ).map((alert) => ({
+        ...alert,
+        name: alert.productName, // Map productName to name for consistency in search/render
+        store: alert.storeName || 'Genel',
+      }));
     }
 
     // Filter out already resolved items
@@ -89,14 +94,19 @@ export function AlertList({
     return data
       .filter((item) => !resolvedIds.includes(item.id))
       .filter((item) => {
+        const itemName = (item as any).name || (item as any).productName || '';
         const matchesSearch =
           search === '' ||
-          item.name.toLowerCase().includes(search.toLowerCase()) ||
-          item.id.toLowerCase().includes(search.toLowerCase());
+          itemName.toLowerCase().includes(search.toLowerCase()) ||
+          item.id.toLowerCase().includes(search.toLowerCase()) ||
+          ((item as any).sku &&
+            (item as any).sku.toLowerCase().includes(search.toLowerCase()));
 
+        const itemStore = (item as any).store || (item as any).storeName || '';
         const matchesStore =
           filters.selectedStores.length === 0 ||
-          filters.selectedStores.includes(item.store);
+          filters.selectedStores.includes(itemStore) ||
+          itemStore === 'Genel';
 
         return matchesSearch && matchesStore;
       });
@@ -106,11 +116,14 @@ export function AlertList({
     return resolvedAlerts.filter((alert) => alert.type === type);
   }, [resolvedAlerts, type]);
 
-  const handleResolve = (item: any) => {
+  const handleResolve = (
+    item: GrowthProduct | ForecastErrorProduct | InventoryAlert,
+  ) => {
+    const itemName = (item as any).name || (item as any).productName || 'Ürün';
     onResolve({
       id: item.id,
       type: type,
-      name: item.name,
+      name: itemName,
       action: actions[item.id] || 'review', // Default action if none selected
       comment: comments[item.id] || '',
       date: new Date(),
@@ -140,6 +153,17 @@ export function AlertList({
     { value: 'ignore', label: 'Yoksay' },
   ];
 
+  const inventoryActionOptions = [
+    { value: 'transfer', label: 'Transfer Başlat' },
+    { value: 'reorder', label: 'Sipariş Geç' },
+    { value: 'review', label: 'İncelemeye Al' },
+    { value: 'count', label: 'Sayım Yap' },
+    { value: 'ignore', label: 'Yoksay' },
+  ];
+
+  const currentActions =
+    type === 'inventory' ? inventoryActionOptions : actionOptions;
+
   return (
     <div className='flex flex-col gap-6 h-full'>
       {/* Active Alerts Card */}
@@ -166,6 +190,12 @@ export function AlertList({
                     Tahmin Sapmaları
                   </>
                 )}
+                {type === 'inventory' && (
+                  <>
+                    <Box className='h-5 w-5 text-blue-500' />
+                    Kritik Stok Uyarıları
+                  </>
+                )}
               </CardTitle>
               <CardDescription>
                 {type === 'low-growth' &&
@@ -174,6 +204,8 @@ export function AlertList({
                   'Beklenenden hızlı büyüyen ve stok takibi gereken ürünler.'}
                 {type === 'forecast-error' &&
                   'AI tahmini ile gerçekleşen satış arasında yüksek fark olan ürünler.'}
+                {type === 'inventory' &&
+                  'Stok tükenme riski, fazla stok veya transfer ihtiyacı olan ürünler.'}
               </CardDescription>
             </div>
             <div className='relative w-full md:w-72'>
@@ -199,7 +231,19 @@ export function AlertList({
                     Ürün
                   </th>
 
-                  {isGrowthType ? (
+                  {type === 'inventory' ? (
+                    <>
+                      <th className='h-12 px-4 text-left align-middle font-medium text-muted-foreground'>
+                        Mağaza
+                      </th>
+                      <th className='h-12 px-4 text-right align-middle font-medium text-muted-foreground'>
+                        Mevcut
+                      </th>
+                      <th className='h-12 px-4 text-right align-middle font-medium text-muted-foreground'>
+                        Tahmin
+                      </th>
+                    </>
+                  ) : isGrowthType ? (
                     <>
                       <th className='h-12 px-4 text-right align-middle font-medium text-muted-foreground'>
                         Büyüme
@@ -224,10 +268,10 @@ export function AlertList({
 
                   {/* Inline Action Columns */}
                   <th className='h-12 px-4 text-left align-middle font-medium text-muted-foreground min-w-[200px]'>
-                    Yorum
+                    Yorum / Öneri
                   </th>
                   <th className='h-12 px-4 text-left align-middle font-medium text-muted-foreground w-[180px]'>
-                    Aksiyon Seçimi
+                    Aksiyon
                   </th>
                   <th className='h-12 px-4 text-center align-middle font-medium text-muted-foreground w-[100px]'>
                     İşlem
@@ -238,7 +282,7 @@ export function AlertList({
                 {filteredData.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={isGrowthType ? 8 : 7}
+                      colSpan={type === 'inventory' ? 8 : isGrowthType ? 8 : 7}
                       className='h-24 text-center text-muted-foreground'
                     >
                       Kriterlere uygun kayıt bulunamadı veya tümü çözümlendi.
@@ -250,10 +294,36 @@ export function AlertList({
                       key={item.id}
                       className='border-b transition-colors hover:bg-muted/50'
                     >
-                      <td className='p-4 font-mono text-xs'>{item.id}</td>
-                      <td className='p-4 font-medium'>{item.name}</td>
+                      <td className='p-4 font-mono text-xs'>
+                        {(item as any).sku || item.id}
+                      </td>
+                      <td className='p-4 font-medium'>
+                        {(item as any).productName || (item as any).name}
+                      </td>
 
-                      {isGrowthType ? (
+                      {type === 'inventory' ? (
+                        <>
+                          <td className='p-4 text-left'>
+                            {(item as InventoryAlert).storeName || 'Genel'}
+                          </td>
+                          <td
+                            className={cn(
+                              'p-4 text-right font-bold',
+                              (item as InventoryAlert).metrics?.currentStock ===
+                                0
+                                ? 'text-red-600'
+                                : 'text-slate-700',
+                            )}
+                          >
+                            {(item as InventoryAlert).metrics?.currentStock ??
+                              '-'}
+                          </td>
+                          <td className='p-4 text-right font-medium text-blue-600'>
+                            {(item as InventoryAlert).metrics
+                              ?.forecastedDemand ?? '-'}
+                          </td>
+                        </>
+                      ) : isGrowthType ? (
                         <>
                           <td
                             className={cn(
@@ -313,17 +383,29 @@ export function AlertList({
 
                       {/* Inline Actions */}
                       <td className='p-4'>
-                        <Input
-                          placeholder='Yorum...'
-                          className='h-8 text-xs'
-                          value={comments[item.id] || ''}
-                          onChange={(e) =>
-                            setComments((prev) => ({
-                              ...prev,
-                              [item.id]: e.target.value,
-                            }))
-                          }
-                        />
+                        <div className='flex flex-col gap-1'>
+                          {type === 'inventory' &&
+                            (item as InventoryAlert).recommendation && (
+                              <p className='text-[10px] text-blue-600 font-semibold uppercase mb-0.5 flex items-center gap-1'>
+                                <TrendingUp className='h-3 w-3' /> AI Önerisi:
+                              </p>
+                            )}
+                          <Input
+                            placeholder={
+                              type === 'inventory'
+                                ? (item as InventoryAlert).message
+                                : 'Yorum...'
+                            }
+                            className='h-8 text-xs'
+                            value={comments[item.id] || ''}
+                            onChange={(e) =>
+                              setComments((prev) => ({
+                                ...prev,
+                                [item.id]: e.target.value,
+                              }))
+                            }
+                          />
+                        </div>
                       </td>
                       <td className='p-4'>
                         <Select
@@ -336,7 +418,7 @@ export function AlertList({
                             <SelectValue placeholder='Aksiyon Seç' />
                           </SelectTrigger>
                           <SelectContent>
-                            {actionOptions.map((opt) => (
+                            {currentActions.map((opt) => (
                               <SelectItem
                                 key={opt.value}
                                 value={opt.value}
@@ -390,7 +472,19 @@ export function AlertList({
                     </th>
 
                     {/* Dynamic Columns based on type */}
-                    {isGrowthType ? (
+                    {type === 'inventory' ? (
+                      <>
+                        <th className='h-12 px-4 text-left align-middle font-medium text-muted-foreground'>
+                          Mağaza
+                        </th>
+                        <th className='h-12 px-4 text-right align-middle font-medium text-muted-foreground'>
+                          Stok
+                        </th>
+                        <th className='h-12 px-4 text-right align-middle font-medium text-muted-foreground'>
+                          Tahmin
+                        </th>
+                      </>
+                    ) : isGrowthType ? (
                       <>
                         <th className='h-12 px-4 text-right align-middle font-medium text-muted-foreground'>
                           Büyüme
@@ -438,7 +532,22 @@ export function AlertList({
                       </td>
 
                       {/* Dynamic Data Columns */}
-                      {isGrowthType ? (
+                      {type === 'inventory' ? (
+                        <>
+                          <td className='p-4 text-left text-muted-foreground opacity-80'>
+                            {(alert.data as InventoryAlert).storeName ||
+                              'Genel'}
+                          </td>
+                          <td className='p-4 text-right text-muted-foreground opacity-80'>
+                            {(alert.data as InventoryAlert).metrics
+                              ?.currentStock ?? '-'}
+                          </td>
+                          <td className='p-4 text-right text-muted-foreground opacity-80'>
+                            {(alert.data as InventoryAlert).metrics
+                              ?.forecastedDemand ?? '-'}
+                          </td>
+                        </>
+                      ) : isGrowthType ? (
                         <>
                           <td
                             className={cn(
@@ -482,12 +591,15 @@ export function AlertList({
 
                       <td className='p-4'>
                         <span className='inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 ring-1 ring-inset ring-blue-700/10'>
-                          {actionOptions.find((o) => o.value === alert.action)
-                            ?.label || alert.action}
+                          {(type === 'inventory'
+                            ? inventoryActionOptions
+                            : actionOptions
+                          ).find((o) => o.value === alert.action)?.label ||
+                            alert.action}
                         </span>
                       </td>
                       <td className='p-4 text-muted-foreground italic max-w-[200px] truncate'>
-                        "{alert.comment || '-'}"
+                        &quot;{alert.comment || '-'}&quot;
                       </td>
                       <td className='p-4 text-right text-muted-foreground text-xs whitespace-nowrap'>
                         {alert.date.toLocaleDateString('tr-TR')}{' '}

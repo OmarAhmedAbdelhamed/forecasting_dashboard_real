@@ -3,6 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useAuth } from '@/hooks/use-auth';
 import { Loader2, ArrowRight, Eye, EyeOff, Check, X } from 'lucide-react';
 import { Button } from '@/components/ui/shared/button';
@@ -181,10 +182,13 @@ export default function RegisterPage() {
       {/* Logo Section */}
       <div className='flex flex-col items-center mb-6 2xl:mb-8'>
         <div className='w-16 h-16 2xl:w-20 2xl:h-20 rounded-xl bg-white shadow-lg flex items-center justify-center p-2 mb-3'>
-          <img
+          <Image
             src='/bee2_ai_logo.svg'
             alt='Bee2 AI'
+            width={80}
+            height={80}
             className='w-full h-full object-contain'
+            priority
           />
         </div>
         <h1 className='text-xl 2xl:text-2xl font-bold text-foreground'>

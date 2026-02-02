@@ -15,6 +15,9 @@ interface MultiSelectProps {
   onChange: (selected: string[]) => void;
   placeholder?: string;
   className?: string;
+  // New props for better control over display
+  displayCount?: number;
+  displaySelected?: string[];
 }
 
 export function MultiSelect({
@@ -23,6 +26,8 @@ export function MultiSelect({
   onChange,
   placeholder = 'Select...',
   className,
+  displayCount,
+  displaySelected,
 }: MultiSelectProps) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -93,9 +98,9 @@ export function MultiSelect({
           </span>
 
           {/* Selected Count Badge */}
-          {selected.length > 0 && (
-            <span className='inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-medium px-2 py-0.5 min-w-[20px]'>
-              {selected.length}
+          {(displayCount ?? selected.length) > 0 && (
+            <span className='inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-medium px-2 py-0.5 min-w-5'>
+              {displayCount ?? selected.length}
             </span>
           )}
         </div>
@@ -111,7 +116,7 @@ export function MultiSelect({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className='absolute z-[9999] mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95'>
+        <div className='absolute z-9999 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95'>
           {/* Search Input */}
           <div className='p-2 border-b'>
             <input
@@ -128,9 +133,9 @@ export function MultiSelect({
           {/* Scrollable Content Area (Selected Items + Options) */}
           <div className='max-h-60 overflow-auto'>
             {/* Selected Badges */}
-            {selected.length > 0 && (
+            {(displaySelected ?? selected).length > 0 && (
               <div className='flex flex-wrap gap-1.5 p-2 border-b shrink-0'>
-                {selected.map((value) => {
+                {(displaySelected ?? selected).map((value) => {
                   const option = options.find((o) => o.value === value);
                   return (
                     <span

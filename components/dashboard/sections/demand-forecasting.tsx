@@ -11,6 +11,7 @@ import {
 import { Input } from '@/components/ui/shared/input';
 import { Button } from '@/components/ui/shared/button';
 import { ExportForecastModal } from '@/components/dashboard/modals/export-forecast-modal';
+import { FilterBar } from '@/components/ui/shared/filter-bar';
 import { MultiSelect } from '@/components/ui/shared/multi-select';
 import {
   Select,
@@ -46,12 +47,7 @@ import {
   ReferenceLine,
   ReferenceArea,
 } from 'recharts';
-import {
-  STORES,
-  PRODUCTS,
-  REGIONS_FLAT as REGIONS,
-  REYONLAR,
-} from '@/data/mock-data';
+import { STORES, PRODUCTS, REYONLAR } from '@/data/mock-data';
 import {
   Tooltip as UITooltip,
   TooltipContent,
@@ -302,7 +298,6 @@ export function DemandForecastingSection() {
   // Filter states
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
-  const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedReyonlar, setSelectedReyonlar] = useState<string[]>([]);
   const [periodValue, setPeriodValue] = useState('30');
   const [periodUnit, setPeriodUnit] = useState('gun');
@@ -328,19 +323,6 @@ export function DemandForecastingSection() {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
-  // Clamp period value when unit changes
-  useEffect(() => {
-    const val = parseInt(periodValue) || 0;
-    let max = 365;
-    if (periodUnit === 'ay') max = 12;
-    if (periodUnit === 'hafta') max = 52;
-    if (periodUnit === 'yil') max = 1;
-
-    if (val > max) {
-      setPeriodValue(max.toString());
-    }
-  }, [periodUnit, periodValue]);
-
   const chartConfig = getChartConfig(is2xl);
 
   // Period calculation with 1 year max cap
@@ -365,19 +347,13 @@ export function DemandForecastingSection() {
     return days;
   }, [periodValue, periodUnit]);
 
-  // Convert period to weeks for data slicing (data is in weekly format)
-  const periodInWeeks = useMemo(() => {
-    return Math.max(1, Math.ceil(periodInDays / 7));
-  }, [periodInDays]);
-
   // Combine all filter selections into a seed for data generation
   const filterSeed = useMemo(() => {
     const storeChar = selectedStores[0]?.charCodeAt(0) || 0;
     const productChar = selectedProducts[0]?.charCodeAt(0) || 0;
-    const regionChar = selectedRegions[0]?.charCodeAt(0) || 0;
     const reyonChar = selectedReyonlar[0]?.charCodeAt(0) || 0;
-    return storeChar + productChar + regionChar + reyonChar;
-  }, [selectedStores, selectedProducts, selectedRegions, selectedReyonlar]);
+    return storeChar + productChar + reyonChar;
+  }, [selectedStores, selectedProducts, selectedReyonlar]);
 
   // Determine granularity based on period unit
   const granularity = useMemo<'daily' | 'weekly' | 'monthly'>(() => {
@@ -443,7 +419,15 @@ export function DemandForecastingSection() {
 
     // Combine: All history + Selected Forecast period
     return [...finalHistory, ...slicedForecast];
-  }, [selectedStores, selectedProducts, filterSeed, periodInWeeks]);
+  }, [
+    selectedStores,
+    selectedProducts,
+    filterSeed,
+    granularity,
+    periodInDays,
+    periodUnit,
+    periodValue,
+  ]);
 
   const biasData = useMemo(
     () => generateMonthlyBiasData(selectedStores[0], selectedProducts[0]),
@@ -494,12 +478,10 @@ export function DemandForecastingSection() {
 
   return (
     <div className='space-y-4 2xl:space-y-6'>
-      {/* Header with Filters */}
-      <div className='w-full bg-card border border-border rounded-lg p-2 2xl:p-3 shadow-sm flex flex-col lg:flex-row gap-3 items-end lg:items-center justify-between'>
-        <div className='flex items-center gap-3'>
-          <h2 className='text-base md:text-lg lg:text-xl 2xl:text-xl font-semibold tracking-tight text-foreground'>
-            Talep Tahminleme
-          </h2>
+      {/* Universal Filter Bar */}
+      <FilterBar
+        title='Talep Tahminleme'
+        leftContent={
           <Button
             variant='outline'
             size='icon'
@@ -509,72 +491,63 @@ export function DemandForecastingSection() {
           >
             <HardDriveDownload className='h-7 w-7 2xl:h-8 2xl:w-8' />
           </Button>
-        </div>
+        }
+        storeOptions={STORES}
+        selectedStores={selectedStores}
+        onStoreChange={setSelectedStores}
+        categoryOptions={REYONLAR}
+        selectedCategories={selectedReyonlar}
+        onCategoryChange={setSelectedReyonlar}
+        productOptions={PRODUCTS}
+        selectedProducts={selectedProducts}
+        onProductChange={setSelectedProducts}
+      >
+        {/* Period Selector (passed as children to appear before main filters) */}
+        <div className='flex items-center gap-2'>
+          <Input
+            type='number'
+            min='1'
+            max={
+              periodUnit === 'yil'
+                ? 1
+                : periodUnit === 'ay'
+                  ? 12
+                  : periodUnit === 'hafta'
+                    ? 52
+                    : 365
+            }
+            value={periodValue}
+            onChange={(e) => setPeriodValue(e.target.value)}
+            className='w-14 2xl:w-16 h-8 2xl:h-10 text-center text-xs 2xl:text-sm bg-white dark:bg-slate-900'
+            disabled={periodUnit === 'yil'}
+          />
+          <Select
+            value={periodUnit}
+            onValueChange={(newUnit) => {
+              setPeriodUnit(newUnit);
+              const val = parseInt(periodValue) || 0;
+              let max = 365;
+              if (newUnit === 'ay') max = 12;
+              if (newUnit === 'hafta') max = 52;
+              if (newUnit === 'yil') max = 1;
 
-        <div className='flex flex-col md:flex-row flex-wrap gap-3 items-end md:items-center'>
-          {/* Period Selector */}
-          <div className='flex items-center gap-2'>
-            <Input
-              type='number'
-              min='1'
-              max={
-                periodUnit === 'yil'
-                  ? 1
-                  : periodUnit === 'ay'
-                    ? 12
-                    : periodUnit === 'hafta'
-                      ? 52
-                      : 365
+              if (val > max) {
+                setPeriodValue(max.toString());
               }
-              value={periodValue}
-              onChange={(e) => setPeriodValue(e.target.value)}
-              className='w-14 2xl:w-16 h-8 2xl:h-9 text-center text-xs 2xl:text-sm'
-              disabled={periodUnit === 'yil'}
-            />
-            <Select value={periodUnit} onValueChange={setPeriodUnit}>
-              <SelectTrigger className='w-16 2xl:w-20 h-8 2xl:h-9 text-xs 2xl:text-sm'>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value='gun'>gün</SelectItem>
-                <SelectItem value='hafta'>hafta</SelectItem>
-                <SelectItem value='ay'>ay</SelectItem>
-                <SelectItem value='yil'>yıl</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Store Filter */}
-          <div className='min-w-32 2xl:min-w-40'>
-            <MultiSelect
-              options={STORES}
-              selected={selectedStores}
-              onChange={setSelectedStores}
-              placeholder='Mağaza'
-            />
-          </div>
-
-          {/* Reyon Filter */}
-          <div className='min-w-32 2xl:min-w-40'>
-            <MultiSelect
-              options={REYONLAR}
-              selected={selectedReyonlar}
-              onChange={setSelectedReyonlar}
-              placeholder='Reyon'
-            />
-          </div>
-
-          {/* Product Filter */}
-          <div className='min-w-32 2xl:min-w-40'>
-            <MultiSelect
-              options={PRODUCTS}
-              selected={selectedProducts}
-              onChange={setSelectedProducts}
-              placeholder='Ürün'
-            />
-          </div>
+            }}
+          >
+            <SelectTrigger className='w-16 2xl:w-20 h-8 2xl:h-10 text-xs 2xl:text-sm bg-white dark:bg-slate-900'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='gun'>gün</SelectItem>
+              <SelectItem value='hafta'>hafta</SelectItem>
+              <SelectItem value='ay'>ay</SelectItem>
+              <SelectItem value='yil'>yıl</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-      </div>
+      </FilterBar>
 
       <ExportForecastModal
         open={isExportModalOpen}
@@ -601,7 +574,7 @@ export function DemandForecastingSection() {
             trend='+1.2%'
             trendUp={true}
             icon={Target}
-            tooltip='Model doğruluğu (1 - MAPE). Tahmin ile gerçekleşen arasındaki tutarlılık.'
+            tooltip='Model doğruluğu. Tahmin ile gerçekleşen arasındaki tutarlılık.'
           />
           <KPICard
             title='Yıllık Büyüme'
@@ -1176,7 +1149,7 @@ function KPICard({
   subValue?: string;
   trend: string;
   trendUp: boolean;
-  icon: any;
+  icon: React.ElementType;
   accentColor?: 'green' | 'red';
   tooltip?: string;
 }) {

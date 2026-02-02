@@ -32,7 +32,12 @@ import {
   TooltipTrigger,
 } from '@/components/ui/shared/tooltip';
 import { cn } from '@/lib/utils';
-import { STORES, REGIONS_FLAT as REGIONS, REYONLAR } from '@/data/mock-data';
+import {
+  STORES,
+  REGIONS_FLAT as REGIONS,
+  REYONLAR,
+  type PromotionHistoryItem,
+} from '@/data/mock-data';
 
 // --- MOCK DATA GENERATOR ---
 const CAMPAIGN_NAMES = [
@@ -127,7 +132,7 @@ const ALL_COLUMNS = [
 interface ExportPromotionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  initialData?: any[];
+  initialData?: PromotionHistoryItem[];
 }
 
 export function ExportPromotionModal({
@@ -166,12 +171,41 @@ export function ExportPromotionModal({
     setSortConfig({ key, direction });
   };
 
-  // Generate data
-  const MOCK_DATA = useMemo(() => generateMockPromotionData(100), []);
+  // Data Transformation Helper (if needed)
+  const transformToModalData = (
+    data: PromotionHistoryItem[],
+  ): PromotionData[] => {
+    return data.map((item, i) => ({
+      id: `PROMO-HIST-${i}`,
+      date: item.date,
+      name: item.name,
+      type: item.type,
+      region: 'Tüm Bölgeler', // Default as these are not in PromotionHistoryItem but expected in modal
+      store: 'Tüm Mağazalar', // Default
+      category: 'Çeşitli', // Default
+      uplift: parseFloat(item.uplift.replace('%', '').replace('+', '')),
+      upliftVal:
+        parseFloat(item.upliftVal.replace('₺', '').replace('k', '')) * 1000,
+      profit: parseFloat(
+        item.profit.replace('₺', '').replace('k', '').replace('+', ''),
+      ),
+      roi: item.roi,
+      stock: item.stock,
+      forecast: parseFloat(item.forecast.replace('%', '')),
+    }));
+  };
+
+  // Generate or use provided data
+  const MOCK_DATA = useMemo(() => {
+    if (initialData && initialData.length > 0) {
+      return transformToModalData(initialData);
+    }
+    return generateMockPromotionData(100);
+  }, [initialData]);
 
   // Filtering Logic
   const filteredData = useMemo(() => {
-    let result = MOCK_DATA.filter((item) => {
+    const result = MOCK_DATA.filter((item) => {
       const matchesSearch =
         searchQuery === '' ||
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -204,8 +238,8 @@ export function ExportPromotionModal({
     // Sorting
     if (sortConfig !== null) {
       result.sort((a, b) => {
-        let aValue: any = a[sortConfig.key as keyof PromotionData];
-        let bValue: any = b[sortConfig.key as keyof PromotionData];
+        const aValue = a[sortConfig.key as keyof PromotionData];
+        const bValue = b[sortConfig.key as keyof PromotionData];
 
         if (aValue < bValue) {
           return sortConfig.direction === 'asc' ? -1 : 1;
@@ -274,7 +308,7 @@ export function ExportPromotionModal({
     const csvRows = rowsToExport.map((row) => {
       return visibleColumns
         .map((colId) => {
-          let val = row[colId as keyof PromotionData];
+          const val = row[colId as keyof PromotionData];
           return typeof val === 'string' && val.includes(',')
             ? `"${val}"`
             : val;
@@ -471,7 +505,7 @@ export function ExportPromotionModal({
                       {visibleColumns.map((colId) => {
                         const col = ALL_COLUMNS.find((c) => c.id === colId);
 
-                        let label = col?.label;
+                        const label = col?.label;
                         let tooltipText = '';
 
                         if (colId === 'uplift') {

@@ -8,12 +8,14 @@ import {
   TabsTrigger,
 } from '@/components/ui/shared/tabs';
 import { AlertList } from './alert-list';
-import { FilterBar } from '@/components/dashboard/filter-bar';
+import { FilterBar } from '@/components/ui/shared/filter-bar';
 import {
   REGIONS_FLAT,
   getStoresByRegions,
   getCategoriesByStores,
 } from '@/data/mock-data';
+import { GrowthProduct, ForecastErrorProduct } from '@/data/mock-alerts';
+import { InventoryAlert } from '@/types/inventory';
 
 interface ResolvedAlert {
   id: string;
@@ -22,11 +24,10 @@ interface ResolvedAlert {
   action: string;
   comment: string;
   date: Date;
-  data: any;
+  data: GrowthProduct | ForecastErrorProduct | InventoryAlert;
 }
 
 export function AlertCenterLayout() {
-  const [activeTab, setActiveTab] = useState('low-growth');
   // Resolved alerts state
   const [resolvedAlerts, setResolvedAlerts] = useState<ResolvedAlert[]>([]);
 
@@ -73,16 +74,13 @@ export function AlertCenterLayout() {
         />
       </div>
 
-      <Tabs
-        defaultValue='low-growth'
-        className='flex-1 flex flex-col'
-        onValueChange={setActiveTab}
-      >
+      <Tabs defaultValue='low-growth' className='flex-1 flex flex-col'>
         <div className='flex items-center justify-between pointer-events-auto'>
-          <TabsList className='grid w-full max-w-md grid-cols-3'>
+          <TabsList className='grid w-full max-w-xl grid-cols-4'>
             <TabsTrigger value='low-growth'>Low Growth</TabsTrigger>
             <TabsTrigger value='high-growth'>High Growth</TabsTrigger>
             <TabsTrigger value='forecast-error'>Forecast Hatalar</TabsTrigger>
+            <TabsTrigger value='inventory'>Stok Uyarıları</TabsTrigger>
           </TabsList>
         </div>
 
@@ -105,6 +103,14 @@ export function AlertCenterLayout() {
         <TabsContent value='forecast-error' className='flex-1 mt-4'>
           <AlertList
             type='forecast-error'
+            filters={{ selectedRegions, selectedStores, selectedCategories }}
+            resolvedAlerts={resolvedAlerts}
+            onResolve={handleResolve}
+          />
+        </TabsContent>
+        <TabsContent value='inventory' className='flex-1 mt-4'>
+          <AlertList
+            type='inventory'
             filters={{ selectedRegions, selectedStores, selectedCategories }}
             resolvedAlerts={resolvedAlerts}
             onResolve={handleResolve}

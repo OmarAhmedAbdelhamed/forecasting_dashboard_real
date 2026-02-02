@@ -3,19 +3,11 @@
 import Link from 'next/link';
 
 import { useState, useMemo } from 'react';
-import { FilterBar } from '@/components/dashboard/filter-bar';
-import { AlertsBar } from '@/components/dashboard/alerts-bar';
+import { FilterBar } from '@/components/ui/shared/filter-bar';
 import { MetricCard } from '@/components/dashboard/metric-card';
 import { RevenueTargetChart } from '@/components/dashboard/charts/revenue-target-chart';
 import { HistoricalUnitsChart } from '@/components/dashboard/charts/historical-units-chart';
 import { UpcomingPromotions } from '@/components/dashboard/tables/upcoming-promotions';
-import { StockRiskTable } from '@/components/dashboard/tables/stock-risk-table';
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/shared/card';
 import { Button } from '@/components/ui/shared/button';
 import {
   Tooltip,
@@ -27,9 +19,6 @@ import {
   Target,
   AlertTriangle,
   CalendarRange,
-  Tags,
-  ArrowUpRight,
-  ArrowDownRight,
   Info,
 } from 'lucide-react';
 import {
@@ -40,7 +29,6 @@ import {
   getRevenueChartData,
   getHistoricalChartData,
   getPromotions,
-  getStockRisks,
 } from '@/data/mock-data';
 
 export function OverviewSection() {
@@ -86,15 +74,7 @@ export function OverviewSection() {
     [selectedRegions, selectedStores, selectedCategories],
   );
 
-  const promotions = useMemo(
-    () => getPromotions(selectedRegions, selectedStores, selectedCategories),
-    [selectedRegions, selectedStores, selectedCategories],
-  );
-
-  const stockRisks = useMemo(
-    () => getStockRisks(selectedRegions, selectedStores, selectedCategories),
-    [selectedRegions, selectedStores, selectedCategories],
-  );
+  const promotions = useMemo(() => getPromotions(), []);
 
   // Reset child selections when parent changes
   const handleRegionChange = (regions: string[]) => {

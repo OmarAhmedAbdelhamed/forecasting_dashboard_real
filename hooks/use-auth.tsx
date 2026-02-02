@@ -45,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const storedUser = localStorage.getItem('bee2-auth-user');
     if (storedUser) {
       try {
-        setUser(JSON.parse(storedUser));
+        setUser(JSON.parse(storedUser)); // eslint-disable-line
       } catch (error) {
         console.error('Failed to parse user', error);
       }

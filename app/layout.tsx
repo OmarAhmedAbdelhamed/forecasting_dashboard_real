@@ -5,11 +5,15 @@ import { Analytics } from '@vercel/analytics/next';
 import { Providers } from '@/components/providers';
 import './globals.css';
 
-const _dmSans = DM_Sans({
+const dmSans = DM_Sans({
   subsets: ['latin'],
   weight: ['400', '500', '600', '700'],
+  variable: '--font-dm-sans',
 });
-const _jetbrainsMono = JetBrains_Mono({ subsets: ['latin'] });
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-jetbrains-mono',
+});
 
 export const metadata: Metadata = {
   title: 'Bee2 AI Forecasting',
@@ -41,7 +45,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang='en' suppressHydrationWarning>
-      <body className={`font-sans antialiased`} suppressHydrationWarning>
+      <body
+        className={`font-sans antialiased ${dmSans.variable} ${jetbrainsMono.variable}`}
+        suppressHydrationWarning
+      >
         <Providers>{children}</Providers>
         <Analytics />
       </body>

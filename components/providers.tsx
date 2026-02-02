@@ -1,7 +1,15 @@
 'use client';
 
 import { AuthProvider } from '@/hooks/use-auth';
+import { CustomListsProvider } from '@/context/custom-lists-context';
+import { TooltipProvider } from '@/components/ui/shared/tooltip';
 
 export function Providers({ children }: { children: React.ReactNode }) {
-  return <AuthProvider>{children}</AuthProvider>;
+  return (
+    <AuthProvider>
+      <CustomListsProvider>
+        <TooltipProvider delayDuration={0}>{children}</TooltipProvider>
+      </CustomListsProvider>
+    </AuthProvider>
+  );
 }
