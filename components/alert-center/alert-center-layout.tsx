@@ -76,11 +76,10 @@ export function AlertCenterLayout() {
 
       <Tabs defaultValue='low-growth' className='flex-1 flex flex-col'>
         <div className='flex items-center justify-between pointer-events-auto'>
-          <TabsList className='grid w-full max-w-xl grid-cols-4'>
+          <TabsList className='grid w-full max-w-xl grid-cols-3'>
             <TabsTrigger value='low-growth'>Low Growth</TabsTrigger>
             <TabsTrigger value='high-growth'>High Growth</TabsTrigger>
             <TabsTrigger value='forecast-error'>Forecast Hatalar</TabsTrigger>
-            <TabsTrigger value='inventory'>Stok Uyarıları</TabsTrigger>
           </TabsList>
         </div>
 
@@ -103,14 +102,6 @@ export function AlertCenterLayout() {
         <TabsContent value='forecast-error' className='flex-1 mt-4'>
           <AlertList
             type='forecast-error'
-            filters={{ selectedRegions, selectedStores, selectedCategories }}
-            resolvedAlerts={resolvedAlerts}
-            onResolve={handleResolve}
-          />
-        </TabsContent>
-        <TabsContent value='inventory' className='flex-1 mt-4'>
-          <AlertList
-            type='inventory'
             filters={{ selectedRegions, selectedStores, selectedCategories }}
             resolvedAlerts={resolvedAlerts}
             onResolve={handleResolve}

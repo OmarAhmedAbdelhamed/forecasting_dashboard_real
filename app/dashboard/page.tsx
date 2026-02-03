@@ -16,15 +16,13 @@ export default function Dashboard() {
   const searchParams = useSearchParams();
 
   // Get section from URL or default to 'overview'
-  const initialSection = (searchParams.get('section') as Section) || 'overview';
-  const [activeSection, setActiveSection] = useState<Section>(initialSection);
+  const activeSection = (searchParams.get('section') as Section) || 'overview';
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   const handleSectionChange = (section: Section) => {
     if (section === 'alert_center') {
       router.push('/alert-center');
     } else {
-      setActiveSection(section);
       // Update URL without page reload
       router.push(`/dashboard?section=${section}`, { scroll: false });
     }

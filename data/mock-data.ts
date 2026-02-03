@@ -6,7 +6,7 @@ import {
   InventoryAlert,
   CustomProductList,
 } from '@/types/inventory';
-import { format, subDays, subHours } from 'date-fns';
+import { format, subDays } from 'date-fns';
 
 // Hierarchical data structure: Bölge -> Mağaza -> Reyon -> Ürün
 
@@ -71,6 +71,169 @@ export const PROMOTIONS = [
 
 // ============ HIERARCHICAL DATA STRUCTURE ============
 
+// ============ UNIFIED PRODUCT CATALOG ============
+const SHARED_FOOD_PRODUCTS: Product[] = [
+  { value: 'sut', label: 'Süt', forecastDemand: 1000, currentStock: 400 },
+  { value: 'ekmek', label: 'Ekmek', forecastDemand: 2000, currentStock: 800 },
+  {
+    value: 'peynir',
+    label: 'Beyaz Peynir',
+    forecastDemand: 600,
+    currentStock: 250,
+  },
+  {
+    value: 'yumurta',
+    label: 'Yumurta (30lu)',
+    forecastDemand: 1200,
+    currentStock: 500,
+  },
+  {
+    value: 'tereyag',
+    label: 'Tereyağ',
+    forecastDemand: 400,
+    currentStock: 150,
+  },
+  { value: 'zeytin', label: 'Zeytin', forecastDemand: 500, currentStock: 200 },
+  {
+    value: 'zeytinyagi',
+    label: 'Zeytinyağı',
+    forecastDemand: 300,
+    currentStock: 120,
+  },
+  { value: 'et', label: 'Kırmızı Et', forecastDemand: 800, currentStock: 300 },
+  { value: 'bal', label: 'Bal', forecastDemand: 400, currentStock: 150 },
+  {
+    value: 'kasar',
+    label: 'Eski Kaşar',
+    forecastDemand: 600,
+    currentStock: 250,
+  },
+  {
+    value: 'otlu_peynir',
+    label: 'Otlu Peynir',
+    forecastDemand: 500,
+    currentStock: 200,
+  },
+  {
+    value: 'fistik',
+    label: 'Antep Fıstığı',
+    forecastDemand: 600,
+    currentStock: 250,
+  },
+  {
+    value: 'baklava',
+    label: 'Baklava',
+    forecastDemand: 400,
+    currentStock: 150,
+  },
+  { value: 'karpuz', label: 'Karpuz', forecastDemand: 1000, currentStock: 400 },
+  { value: 'incir', label: 'İncir', forecastDemand: 400, currentStock: 150 },
+  { value: 'findik', label: 'Fındık', forecastDemand: 500, currentStock: 180 },
+  {
+    value: 'portakal',
+    label: 'Portakal',
+    forecastDemand: 800,
+    currentStock: 320,
+  },
+  { value: 'limon', label: 'Limon', forecastDemand: 600, currentStock: 240 },
+  { value: 'un', label: 'Un', forecastDemand: 500, currentStock: 200 },
+];
+
+const SHARED_DRINK_PRODUCTS: Product[] = [
+  { value: 'su', label: 'Su (5L)', forecastDemand: 3000, currentStock: 1200 },
+  { value: 'kola', label: 'Kola', forecastDemand: 1800, currentStock: 700 },
+  {
+    value: 'meyve_suyu',
+    label: 'Meyve Suyu',
+    forecastDemand: 900,
+    currentStock: 350,
+  },
+  { value: 'cay', label: 'Çay', forecastDemand: 600, currentStock: 250 },
+  { value: 'ayran', label: 'Ayran', forecastDemand: 800, currentStock: 300 },
+  {
+    value: 'portakal_suyu',
+    label: 'Portakal Suyu',
+    forecastDemand: 1200,
+    currentStock: 450,
+  },
+];
+
+const SHARED_CLEANING_PRODUCTS: Product[] = [
+  {
+    value: 'deterjan',
+    label: 'Deterjan',
+    forecastDemand: 500,
+    currentStock: 200,
+  },
+  {
+    value: 'yumusatici',
+    label: 'Yumuşatıcı',
+    forecastDemand: 350,
+    currentStock: 140,
+  },
+  {
+    value: 'bulasik_det',
+    label: 'Bulaşık Deterjanı',
+    forecastDemand: 450,
+    currentStock: 180,
+  },
+  {
+    value: 'cam_sil',
+    label: 'Cam Sil',
+    forecastDemand: 250,
+    currentStock: 100,
+  },
+];
+
+const SHARED_PERSONAL_CARE_PRODUCTS: Product[] = [
+  {
+    value: 'sampuan',
+    label: 'Şampuan',
+    forecastDemand: 600,
+    currentStock: 240,
+  },
+  {
+    value: 'dis_macunu',
+    label: 'Diş Macunu',
+    forecastDemand: 450,
+    currentStock: 180,
+  },
+  { value: 'sabun', label: 'Sabun', forecastDemand: 700, currentStock: 300 },
+  { value: 'krem', label: 'Krem', forecastDemand: 300, currentStock: 120 },
+];
+
+const SHARED_ELECTRONICS_PRODUCTS: Product[] = [
+  {
+    value: 'telefon',
+    label: 'Akıllı Telefon',
+    forecastDemand: 200,
+    currentStock: 80,
+  },
+  { value: 'tablet', label: 'Tablet', forecastDemand: 150, currentStock: 60 },
+  {
+    value: 'laptop',
+    label: 'Dizüstü Bilgisayar',
+    forecastDemand: 100,
+    currentStock: 40,
+  },
+];
+
+const UNIFIED_CATEGORIES: Category[] = [
+  { value: 'gida', label: 'Gıda', products: SHARED_FOOD_PRODUCTS },
+  { value: 'icecek', label: 'İçecek', products: SHARED_DRINK_PRODUCTS },
+  { value: 'temizlik', label: 'Temizlik', products: SHARED_CLEANING_PRODUCTS },
+  {
+    value: 'kisisel_bakim',
+    label: 'Kişisel Bakım',
+    products: SHARED_PERSONAL_CARE_PRODUCTS,
+  },
+  {
+    value: 'elektronik',
+    label: 'Elektronik',
+    products: SHARED_ELECTRONICS_PRODUCTS,
+  },
+];
+
 export const REGIONS: Region[] = [
   {
     value: 'marmara',
@@ -79,218 +242,22 @@ export const REGIONS: Region[] = [
       {
         value: 'ist_kadikoy',
         label: 'İstanbul - Kadıköy',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'sut',
-                label: 'Süt',
-                forecastDemand: 1200,
-                currentStock: 450,
-              },
-              {
-                value: 'ekmek',
-                label: 'Ekmek',
-                forecastDemand: 2500,
-                currentStock: 800,
-              },
-              {
-                value: 'peynir',
-                label: 'Peynir',
-                forecastDemand: 800,
-                currentStock: 200,
-              },
-              {
-                value: 'yumurta',
-                label: 'Yumurta',
-                forecastDemand: 1500,
-                currentStock: 600,
-              },
-              {
-                value: 'tereyag',
-                label: 'Tereyağ',
-                forecastDemand: 400,
-                currentStock: 150,
-              },
-            ],
-          },
-          {
-            value: 'icecek',
-            label: 'İçecek',
-            products: [
-              {
-                value: 'su',
-                label: 'Su',
-                forecastDemand: 3000,
-                currentStock: 1200,
-              },
-              {
-                value: 'kola',
-                label: 'Kola',
-                forecastDemand: 1800,
-                currentStock: 700,
-              },
-              {
-                value: 'meyve_suyu',
-                label: 'Meyve Suyu',
-                forecastDemand: 900,
-                currentStock: 350,
-              },
-              {
-                value: 'cay',
-                label: 'Çay',
-                forecastDemand: 600,
-                currentStock: 250,
-              },
-            ],
-          },
-          {
-            value: 'temizlik',
-            label: 'Temizlik',
-            products: [
-              {
-                value: 'deterjan',
-                label: 'Deterjan',
-                forecastDemand: 500,
-                currentStock: 180,
-              },
-              {
-                value: 'yumusatici',
-                label: 'Yumuşatıcı',
-                forecastDemand: 350,
-                currentStock: 120,
-              },
-              {
-                value: 'bulasik_det',
-                label: 'Bulaşık Deterjanı',
-                forecastDemand: 450,
-                currentStock: 200,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
       {
         value: 'ist_besiktas',
         label: 'İstanbul - Beşiktaş',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'sut',
-                label: 'Süt',
-                forecastDemand: 1400,
-                currentStock: 520,
-              },
-              {
-                value: 'ekmek',
-                label: 'Ekmek',
-                forecastDemand: 2800,
-                currentStock: 950,
-              },
-              {
-                value: 'peynir',
-                label: 'Peynir',
-                forecastDemand: 1000,
-                currentStock: 280,
-              },
-            ],
-          },
-          {
-            value: 'kisisel_bakim',
-            label: 'Kişisel Bakım',
-            products: [
-              {
-                value: 'sampuan',
-                label: 'Şampuan',
-                forecastDemand: 600,
-                currentStock: 220,
-              },
-              {
-                value: 'dis_macunu',
-                label: 'Diş Macunu',
-                forecastDemand: 450,
-                currentStock: 180,
-              },
-              {
-                value: 'sabun',
-                label: 'Sabun',
-                forecastDemand: 700,
-                currentStock: 300,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
       {
         value: 'ist_sisli',
         label: 'İstanbul - Şişli',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'sut',
-                label: 'Süt',
-                forecastDemand: 1600,
-                currentStock: 600,
-              },
-              {
-                value: 'ekmek',
-                label: 'Ekmek',
-                forecastDemand: 3200,
-                currentStock: 1100,
-              },
-            ],
-          },
-          {
-            value: 'icecek',
-            label: 'İçecek',
-            products: [
-              {
-                value: 'su',
-                label: 'Su',
-                forecastDemand: 3500,
-                currentStock: 1400,
-              },
-              {
-                value: 'kola',
-                label: 'Kola',
-                forecastDemand: 2000,
-                currentStock: 800,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
       {
         value: 'ist_uskudar',
         label: 'İstanbul - Üsküdar',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'sut',
-                label: 'Süt',
-                forecastDemand: 1100,
-                currentStock: 400,
-              },
-              {
-                value: 'ekmek',
-                label: 'Ekmek',
-                forecastDemand: 2200,
-                currentStock: 750,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
     ],
   },
@@ -301,122 +268,17 @@ export const REGIONS: Region[] = [
       {
         value: 'izmir_konak',
         label: 'İzmir - Konak',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'sut',
-                label: 'Süt',
-                forecastDemand: 900,
-                currentStock: 350,
-              },
-              {
-                value: 'ekmek',
-                label: 'Ekmek',
-                forecastDemand: 1800,
-                currentStock: 600,
-              },
-              {
-                value: 'zeytin',
-                label: 'Zeytin',
-                forecastDemand: 700,
-                currentStock: 250,
-              },
-              {
-                value: 'zeytinyagi',
-                label: 'Zeytinyağı',
-                forecastDemand: 500,
-                currentStock: 180,
-              },
-            ],
-          },
-          {
-            value: 'icecek',
-            label: 'İçecek',
-            products: [
-              {
-                value: 'su',
-                label: 'Su',
-                forecastDemand: 2200,
-                currentStock: 900,
-              },
-              {
-                value: 'ayran',
-                label: 'Ayran',
-                forecastDemand: 800,
-                currentStock: 300,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
       {
         value: 'izmir_karsiyaka',
         label: 'İzmir - Karşıyaka',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'sut',
-                label: 'Süt',
-                forecastDemand: 850,
-                currentStock: 320,
-              },
-              {
-                value: 'ekmek',
-                label: 'Ekmek',
-                forecastDemand: 1700,
-                currentStock: 580,
-              },
-            ],
-          },
-          {
-            value: 'temizlik',
-            label: 'Temizlik',
-            products: [
-              {
-                value: 'deterjan',
-                label: 'Deterjan',
-                forecastDemand: 400,
-                currentStock: 150,
-              },
-              {
-                value: 'cam_sil',
-                label: 'Cam Sil',
-                forecastDemand: 250,
-                currentStock: 90,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
       {
         value: 'aydin_merkez',
         label: 'Aydın - Merkez',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'sut',
-                label: 'Süt',
-                forecastDemand: 600,
-                currentStock: 220,
-              },
-              {
-                value: 'incir',
-                label: 'İncir',
-                forecastDemand: 400,
-                currentStock: 150,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
     ],
   },
@@ -427,122 +289,17 @@ export const REGIONS: Region[] = [
       {
         value: 'ankara_cankaya',
         label: 'Ankara - Çankaya',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'sut',
-                label: 'Süt',
-                forecastDemand: 1300,
-                currentStock: 480,
-              },
-              {
-                value: 'ekmek',
-                label: 'Ekmek',
-                forecastDemand: 2600,
-                currentStock: 900,
-              },
-              {
-                value: 'peynir',
-                label: 'Peynir',
-                forecastDemand: 700,
-                currentStock: 260,
-              },
-            ],
-          },
-          {
-            value: 'icecek',
-            label: 'İçecek',
-            products: [
-              {
-                value: 'su',
-                label: 'Su',
-                forecastDemand: 2800,
-                currentStock: 1100,
-              },
-              {
-                value: 'kola',
-                label: 'Kola',
-                forecastDemand: 1600,
-                currentStock: 620,
-              },
-            ],
-          },
-          {
-            value: 'kisisel_bakim',
-            label: 'Kişisel Bakım',
-            products: [
-              {
-                value: 'sampuan',
-                label: 'Şampuan',
-                forecastDemand: 550,
-                currentStock: 200,
-              },
-              {
-                value: 'krem',
-                label: 'Krem',
-                forecastDemand: 300,
-                currentStock: 110,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
       {
         value: 'ankara_kecioren',
         label: 'Ankara - Keçiören',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'sut',
-                label: 'Süt',
-                forecastDemand: 1000,
-                currentStock: 380,
-              },
-              {
-                value: 'ekmek',
-                label: 'Ekmek',
-                forecastDemand: 2000,
-                currentStock: 700,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
       {
         value: 'konya_selcuklu',
         label: 'Konya - Selçuklu',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'sut',
-                label: 'Süt',
-                forecastDemand: 750,
-                currentStock: 280,
-              },
-              {
-                value: 'ekmek',
-                label: 'Ekmek',
-                forecastDemand: 1500,
-                currentStock: 520,
-              },
-              {
-                value: 'un',
-                label: 'Un',
-                forecastDemand: 600,
-                currentStock: 220,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
     ],
   },
@@ -553,74 +310,12 @@ export const REGIONS: Region[] = [
       {
         value: 'antalya_muratpasa',
         label: 'Antalya - Muratpaşa',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'sut',
-                label: 'Süt',
-                forecastDemand: 1100,
-                currentStock: 420,
-              },
-              {
-                value: 'ekmek',
-                label: 'Ekmek',
-                forecastDemand: 2200,
-                currentStock: 780,
-              },
-              {
-                value: 'portakal',
-                label: 'Portakal',
-                forecastDemand: 900,
-                currentStock: 350,
-              },
-            ],
-          },
-          {
-            value: 'icecek',
-            label: 'İçecek',
-            products: [
-              {
-                value: 'su',
-                label: 'Su',
-                forecastDemand: 4000,
-                currentStock: 1600,
-              },
-              {
-                value: 'portakal_suyu',
-                label: 'Portakal Suyu',
-                forecastDemand: 1200,
-                currentStock: 450,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
       {
         value: 'mersin_yenisehir',
         label: 'Mersin - Yenişehir',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'sut',
-                label: 'Süt',
-                forecastDemand: 800,
-                currentStock: 300,
-              },
-              {
-                value: 'limon',
-                label: 'Limon',
-                forecastDemand: 600,
-                currentStock: 220,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
     ],
   },
@@ -631,80 +326,12 @@ export const REGIONS: Region[] = [
       {
         value: 'trabzon_ortahisar',
         label: 'Trabzon - Ortahisar',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'sut',
-                label: 'Süt',
-                forecastDemand: 700,
-                currentStock: 260,
-              },
-              {
-                value: 'ekmek',
-                label: 'Ekmek',
-                forecastDemand: 1400,
-                currentStock: 500,
-              },
-              {
-                value: 'findik',
-                label: 'Fındık',
-                forecastDemand: 500,
-                currentStock: 180,
-              },
-              {
-                value: 'tereyag',
-                label: 'Tereyağ',
-                forecastDemand: 350,
-                currentStock: 130,
-              },
-            ],
-          },
-          {
-            value: 'icecek',
-            label: 'İçecek',
-            products: [
-              {
-                value: 'cay',
-                label: 'Çay',
-                forecastDemand: 1200,
-                currentStock: 450,
-              },
-              {
-                value: 'su',
-                label: 'Su',
-                forecastDemand: 1800,
-                currentStock: 700,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
       {
         value: 'samsun_ilkadim',
         label: 'Samsun - İlkadım',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'sut',
-                label: 'Süt',
-                forecastDemand: 650,
-                currentStock: 240,
-              },
-              {
-                value: 'ekmek',
-                label: 'Ekmek',
-                forecastDemand: 1300,
-                currentStock: 460,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
     ],
   },
@@ -715,68 +342,12 @@ export const REGIONS: Region[] = [
       {
         value: 'erzurum_yakutiye',
         label: 'Erzurum - Yakutiye',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'et',
-                label: 'Kırmızı Et',
-                forecastDemand: 800,
-                currentStock: 300,
-              },
-              {
-                value: 'bal',
-                label: 'Bal',
-                forecastDemand: 500,
-                currentStock: 200,
-              },
-              {
-                value: 'kasar',
-                label: 'Eski Kaşar',
-                forecastDemand: 600,
-                currentStock: 250,
-              },
-            ],
-          },
-          {
-            value: 'elektronik',
-            label: 'Elektronik',
-            products: [
-              {
-                value: 'telefon',
-                label: 'Akıllı Telefon',
-                forecastDemand: 200,
-                currentStock: 80,
-              },
-              {
-                value: 'tablet',
-                label: 'Tablet',
-                forecastDemand: 150,
-                currentStock: 60,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
       {
         value: 'van_ipekyolu',
         label: 'Van - İpekyolu',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'otlu_peynir',
-                label: 'Otlu Peynir',
-                forecastDemand: 700,
-                currentStock: 300,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
     ],
   },
@@ -787,56 +358,12 @@ export const REGIONS: Region[] = [
       {
         value: 'gaziantep_sahinbey',
         label: 'Gaziantep - Şahinbey',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'fistik',
-                label: 'Antep Fıstığı',
-                forecastDemand: 1200,
-                currentStock: 500,
-              },
-              {
-                value: 'baklava',
-                label: 'Baklava',
-                forecastDemand: 800,
-                currentStock: 300,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
       {
         value: 'diyarbakir_kayapinar',
         label: 'Diyarbakır - Kayapınar',
-        categories: [
-          {
-            value: 'gida',
-            label: 'Gıda',
-            products: [
-              {
-                value: 'karpuz',
-                label: 'Karpuz',
-                forecastDemand: 1500,
-                currentStock: 600,
-              },
-            ],
-          },
-          {
-            value: 'teknoloji',
-            label: 'Teknoloji',
-            products: [
-              {
-                value: 'laptop',
-                label: 'Dizüstü Bilgisayar',
-                forecastDemand: 100,
-                currentStock: 40,
-              },
-            ],
-          },
-        ],
+        categories: UNIFIED_CATEGORIES,
       },
     ],
   },
@@ -885,6 +412,8 @@ export function getAllProducts(): {
           value: `${store.value}_${category.value}_${product.value}`,
           label: product.label,
           categoryKey: `${store.value}_${category.value}`,
+          forecastDemand: product.forecastDemand,
+          currentStock: product.currentStock,
         })),
       ),
     ),
@@ -1398,9 +927,11 @@ export function getInventoryKPIs(
     0,
   );
 
-  const neverSoldItems = items.filter((i) => i.turnoverRate < 2).length; // Assuming low turnover = never sold candidate
+  const neverSoldItems = items.filter(
+    (i) => i.turnoverRate < 2 && i.stockLevel > 0,
+  ).length; // Assuming low turnover = never sold candidate
   const neverSoldValue = items
-    .filter((i) => i.turnoverRate < 2)
+    .filter((i) => i.turnoverRate < 2 && i.stockLevel > 0)
     .reduce((sum, i) => sum + i.stockValue, 0);
 
   const reorderNeededItems = items.filter(
@@ -1444,44 +975,58 @@ export function generateInventoryItems(
     effectiveProductKeys.includes(p.value),
   );
 
-  return filteredProductMetadata.map((p) => {
+  return filteredProductMetadata.map((p: any) => {
     const [, , slug] = p.value.split('_');
 
     // Use specific seeds for each attribute to ensure stability regardless of index
     const rStock = seededRandom(p.value + '_stock');
-    const rMin = seededRandom(p.value + '_min');
-    const rDemand = seededRandom(p.value + '_demand');
-    const rPrice = seededRandom(p.value + '_price');
+    const rVar = seededRandom(p.value + '_var');
+    const rMisc = seededRandom(p.value + '_misc');
 
     const category = p.categoryKey.split('_').pop() || 'General';
     const isElectronics = ['elektronik', 'teknoloji'].includes(category);
 
-    // Stock: 0 to 2500
-    let stock = Math.floor(rStock * 2500);
-    if (isElectronics) {
-      stock = Math.round(stock * 1.5); // Higher stock count for electronics
+    // 1. Calculate Demand
+    // Use the defined forecastDemand as base, with +/- 20% variation per store
+    const baseDemand = p.forecastDemand || 1000;
+    const demandVariation = 0.8 + rVar * 0.4; // 0.8 to 1.2
+    let demand = Math.round(baseDemand * demandVariation);
+    if (demand < 10) demand = 10; // Minimum demand
+
+    // 2. Calculate Stock based on Demand (Intelligent Inventory)
+    // Target Coverage: 15 to 45 days (approx 0.5 to 1.5 months)
+    let targetDays = 15 + Math.floor(rStock * 30);
+
+    // Simulate "Dead Stock" for 5% of items (target > 180 days -> turnover < 2)
+    if (rMisc > 0.85 && rMisc <= 0.9) {
+      targetDays = 200 + Math.floor(rStock * 300); // 200-500 days
+    }
+    // Simulate "Overstock" for 5% of items (target 60-120 days)
+    else if (rMisc > 0.95) {
+      targetDays = 60 + Math.floor(rStock * 60); // 60-120 days
     }
 
-    const demand = 100 + Math.floor(rDemand * 900);
+    // Simulate "Stockout" for 5% of items (stock = 0)
+    let stock = Math.round((demand / 30) * targetDays);
+    if (rMisc < 0.05) {
+      stock = 0;
+    }
 
     // Lead time: 3 to 13 days
-    const rMisc = seededRandom(p.value + '_misc');
     const leadTimeDays = 3 + Math.floor(rMisc * 10);
 
-    // Calculate Safety Stock based on demand and lead time
-    // Formula: Safety Stock = (Daily Demand × Lead Time × 1.5) + Buffer
-    // Buffer is 30-50% of monthly demand for variability protection
+    // Calculate Safety Stock
     const dailyDemand = demand / 30;
-    const leadTimeDemand = Math.ceil(dailyDemand * leadTimeDays * 1.5); // 1.5x multiplier for safety
-    const bufferPercentage = 0.3 + rMin * 0.2; // 30-50% buffer
-    const variabilityBuffer = Math.ceil(demand * bufferPercentage);
-    const minStock = leadTimeDemand + variabilityBuffer;
+    const leadTimeDemand = Math.ceil(dailyDemand * leadTimeDays * 1.5);
+    const minStock = leadTimeDemand + Math.ceil(demand * 0.3); // +30% buffer
 
-    // Price: 50 to 500
-    let unitPrice = 50 + Math.floor(rPrice * 450);
+    // Price: Derived from base, slightly randomized
+    // We don't have base price in Product interface, so infer from category
+    let unitPrice = 50 + Math.floor(rMisc * 100);
     if (isElectronics) {
-      // Ensure electronics are at least 20,000 TL, going up to ~45,000 TL
-      unitPrice = 20000 + Math.floor(rPrice * 25000);
+      unitPrice = 15000 + Math.floor(rMisc * 25000); // 15k - 40k
+    } else if (['et', 'bal', 'fistik', 'yag'].some((k) => slug.includes(k))) {
+      unitPrice = 300 + Math.floor(rMisc * 500); // Premium food
     }
 
     let status: string = 'In Stock';
@@ -1490,15 +1035,15 @@ export function generateInventoryItems(
     else if (stock > demand * 1.5) status = 'Overstock';
 
     return {
-      id: `INV-${p.value}`, // Stable ID based on unique value
-      sku: `SKU-${slug.toUpperCase()}-${1000 + Math.floor(rMisc * 1000)}`, // Stable SKU
+      id: `INV-${p.value}`,
+      sku: `SKU-${slug.toUpperCase()}-${1000 + Math.floor(rMisc * 1000)}`,
       productName: p.label,
       category: category,
       productKey: p.value,
       stockLevel: stock,
       minStockLevel: minStock,
       maxStockLevel: minStock * 4,
-      reorderPoint: minStock + Math.ceil(dailyDemand * 7), // Safety stock + 1 week demand
+      reorderPoint: minStock + Math.ceil(dailyDemand * 7),
       forecastedDemand: demand,
       stockValue: stock * unitPrice,
       daysOfCoverage:
@@ -1626,7 +1171,6 @@ export const generateSingleProductStockTrends = (
 
   // Calculate parameters based on actual product data
   const safetyStockLevel = item.minStockLevel;
-  const reorderPoint = item.reorderPoint;
   const restockAmount = Math.round(avgDailyDemand * 7); // Order 7 days worth
   const maxStockLevel = item.maxStockLevel;
 
@@ -1752,15 +1296,6 @@ export function generateStorePerformance(
 }
 
 // Alerts Mock Data - Recalculated based on filters
-const ALL_CATEGORIES = [
-  'gida',
-  'icecek',
-  'temizlik',
-  'kisisel_bakim',
-  'elektronik',
-  'teknoloji',
-];
-
 export const generateInventoryAlerts = (
   regions: string[],
   stores: string[],

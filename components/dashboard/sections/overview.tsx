@@ -30,6 +30,7 @@ import {
   getRevenueChartData,
   getHistoricalChartData,
   getPromotions,
+  generateInventoryAlerts,
 } from '@/data/mock-data';
 
 export function OverviewSection() {
@@ -76,6 +77,11 @@ export function OverviewSection() {
   );
 
   const promotions = useMemo(() => getPromotions(), []);
+
+  const inventoryAlerts = useMemo(
+    () => generateInventoryAlerts(selectedRegions, selectedStores),
+    [selectedRegions, selectedStores],
+  );
 
   // Sync with Dashboard Context
   const { setSection, setFilters, setMetrics } = useDashboardContext();
@@ -256,7 +262,10 @@ export function OverviewSection() {
                     7
                   </span>
                 </div>
-                <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
+                <Link
+                  href='/dashboard?section=inventory_planning'
+                  className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'
+                >
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
@@ -272,12 +281,12 @@ export function OverviewSection() {
                     </TooltipContent>
                   </Tooltip>
                   <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
-                    Kritik Stok
+                    Stok uyarıları
                   </span>
                   <span className='text-2xl 2xl:text-3xl font-bold text-red-600'>
-                    3
+                    {inventoryAlerts.length}
                   </span>
-                </div>
+                </Link>
               </div>
             </div>
           </div>
