@@ -61,6 +61,8 @@ import {
   CheckCircle2,
   Copy,
   Eye,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import {
   Tooltip as UITooltip,
@@ -147,10 +149,10 @@ const CustomizedAxisTick = (props: any) => {
 
 export function ForecastingSection() {
   // Inputs
-  const [magazaKodu, setMagazaKodu] = useState<string[]>(['1001']);
+  const [magazaKodu, setMagazaKodu] = useState<string[]>([]);
   const [bolge, setBolge] = useState<string[]>([]);
   const [reyon, setReyon] = useState<string[]>([]);
-  const [urunKodu, setUrunKodu] = useState<string[]>(['30000332']);
+  const [urunKodu, setUrunKodu] = useState<string[]>([]);
 
   const [startDate, setStartDate] = useState<Date | undefined>(
     new Date('2026-01-06'),
@@ -168,6 +170,12 @@ export function ForecastingSection() {
 
   const [promosyon, setPromosyon] = useState('INTERNET_INDIRIMI');
   const [promosyonIndirimOrani, setPromosyonIndirimOrani] = useState('9');
+  
+  // Base values (Component Scope)
+  const baseSatisFiyati = 87.45;
+  const baseHamFiyat = 67.67;
+  const birimKar = baseSatisFiyati - baseHamFiyat;
+  const marj = (birimKar / baseSatisFiyati) * 100;
 
   // NEW STATES
   const [pricingMode, setPricingMode] = useState<'discount' | 'price'>(
@@ -175,6 +183,8 @@ export function ForecastingSection() {
   );
   const [targetPrice, setTargetPrice] = useState<string>('');
   const [budget, setBudget] = useState<string>('');
+  const [budgetMode, setBudgetMode] = useState<'budget' | 'units'>('budget');
+  const [isZoomed, setIsZoomed] = useState(false);
 
   // State
   const [isLoading, setIsLoading] = useState(false);
@@ -265,10 +275,7 @@ export function ForecastingSection() {
 
     // Base values
     // Base values - Moved out for shared access if needed, or kept here but consistent
-    const baseSatisFiyati = 87.45;
-    const baseHamFiyat = 67.67;
-    const birimKar = baseSatisFiyati - baseHamFiyat;
-    const marj = (birimKar / baseSatisFiyati) * 100;
+    // Base values - Moved to component scope
 
     // Determine discount based on mode
     let discount = 0;
@@ -281,6 +288,9 @@ export function ForecastingSection() {
       discount = parseFloat(promosyonIndirimOrani) || 0;
     }
 
+    // Initialize Stock (Mock) - 4-digit sales (Units)
+    let currentStock = 3500;
+
     for (let i = 0; i < days; i++) {
       const currentDate = addDays(startDate, i);
 
@@ -292,35 +302,33 @@ export function ForecastingSection() {
         }
       }
 
-      // Random forecast variation
-      const baseForecast = 50 + Math.floor(Math.random() * 15);
+      // 1. Calculate Unconstrained Demand (Potansiyel Talep)
+      // Base forecast in UNITS (approx 170 units * 87.45 TL ~= 14,800 TL -> 5 digits)
+      const baseForecast = 140 + Math.floor(Math.random() * 40);
+      const patternBase = createSpecificPattern(i, days, baseForecast);
+      
+      // Values in Revenue (TL) for Chart
+      const baselineRevenue = patternBase * baseSatisFiyati;
+
       const lift = isPromoActive ? 1 + discount / 100 : 1;
-      const tahminVal = Math.round(baseForecast * lift);
-      const baseline = baseForecast;
+      const dailyDemand = Math.round(patternBase * lift); // This is what customers WANT to buy (Units)
 
-      // Secondary metric (Yellow line)
-      const ciro_adedi =
-        Math.floor(Math.random() * 10) + 5 + (isPromoActive ? 5 : 0);
-
-      // Better mock:
-      const dailyDrop = 300; // Aggressive sales
-      let simulatedStock = 3800 - i * dailyDrop;
-      if (simulatedStock < 0) simulatedStock = 0;
-
-      // Logic for Lost Sales
-      // If stock is 0, we lose the sales
-      const demand = tahminVal;
-      let actualSales = demand;
+      // 2. Apply Constraints (Stock)
+      let actualSales = dailyDemand;
       let lostSales = 0;
 
-      if (simulatedStock < demand) {
-        actualSales = simulatedStock;
-        lostSales = demand - actualSales;
+      if (currentStock < dailyDemand) {
+        actualSales = currentStock;     // Sell whatever is left
+        lostSales = dailyDemand - actualSales; // The rest is lost
       }
 
-      // If lost sales, actual sales is reduced
-      const finalTahmin = actualSales;
+      // 3. Update Stock
+      currentStock = Math.max(0, currentStock - actualSales);
 
+      // Secondary metric (Yellow line visual logic)
+      const ciro_adedi = 0;
+
+      const finalTahmin = actualSales;
       const ciro = finalTahmin * baseSatisFiyati;
       const gunluk_kar = finalTahmin * birimKar;
 
@@ -332,15 +340,15 @@ export function ForecastingSection() {
 
       data.push({
         tarih: format(currentDate, "yyyy-MM-dd'T'00:00:00"),
-        baseline: createSpecificPattern(i, days, baseline),
-        tahmin: isPromoActive ? finalTahmin : null,
-        unconstrained_demand: isPromoActive ? demand : null, // The potential
+        baseline: parseFloat(baselineRevenue.toFixed(0)), // TL
+        tahmin: isPromoActive ? parseFloat((finalTahmin * baseSatisFiyati).toFixed(0)) : null, // TL
+        unconstrained_demand: lostSales > 0 ? parseFloat((dailyDemand * baseSatisFiyati).toFixed(0)) : null, // TL (Potential Revenue)
         lost_sales: lostSales,
         ciro_adedi: ciro_adedi,
         benim_promom: isPromoActive ? [promosyon] : [],
         benim_promom_yuzde: isPromoActive ? discount : 0,
         ciro: parseFloat(ciro.toFixed(2)),
-        stok: simulatedStock,
+        stok: currentStock, // Yellow line (Actual Stock)
         satisFiyati: baseSatisFiyati,
         ham_fiyat: baseHamFiyat,
         birim_kar: parseFloat(birimKar.toFixed(2)),
@@ -363,26 +371,68 @@ export function ForecastingSection() {
     return base;
   };
 
+  // FILTER DATA FOR ROI & STOCK CALCULATIONS (Based on Promo Period)
+  const promoPeriodData = useMemo(() => {
+    if (!forecastData || !startPromosyon || !endPromosyon) return [];
+    return forecastData.filter((d) => {
+      const date = new Date(d.tarih);
+      return date >= startPromosyon && date <= endPromosyon;
+    });
+  }, [forecastData, startPromosyon, endPromosyon]);
+
   const totalForecast =
-    forecastData?.reduce((acc, curr) => acc + (curr.tahmin || 0), 0) || 0;
+    promoPeriodData?.reduce((acc, curr) => acc + (curr.tahmin || 0), 0) || 0;
 
   // Calculate potential forecast (unconstrained)
   const totalPotentialForecast =
-    forecastData?.reduce(
+    promoPeriodData?.reduce(
       (acc, curr) => acc + (curr.unconstrained_demand || curr.tahmin || 0),
       0,
     ) || 0;
 
   const totalRevenue =
-    forecastData?.reduce((acc, curr) => acc + curr.ciro, 0) || 0;
+    promoPeriodData?.reduce((acc, curr) => acc + curr.ciro, 0) || 0;
 
   // Financial Logic
-  const promoCost = budget ? parseFloat(budget) : totalForecast * 0.15 * 87.45; // Fallback mock cost if no budget
-  const grossProfit = totalRevenue * 0.22; // Mock margin 22%
+  // baseHamFiyat and baseSatisFiyati are now in component scope
+  
+  // totalForecast is now in TL (Revenue), so we derive units
+  const totalPromoUnits = totalForecast / baseSatisFiyati;
+
+  
+
+  
+  // Calculate Promo Cost based on Mode
+  let promoCost = 0;
+  if(budget) {
+      if(budgetMode === 'budget') {
+          // Input is TL
+          promoCost = parseFloat(budget);
+      } else {
+          // Input is Units -> Convert to Cost (TL)
+          promoCost = parseFloat(budget) * baseHamFiyat;
+      }
+  } else {
+      // Fallback if no budget input
+      promoCost = totalForecast * 0.15;
+  }
+  
+  const totalCOGS = totalPromoUnits * baseHamFiyat; // Total Cost of Goods Sold (Units * Cost)
+  
+  // Calculate Gross Profit only on the Promo Revenue (since we use totalForecast/totalPromoUnits)
+  // If we want Total Period ROI, we should use totalRevenue.
+  // Assuming user wants ROI of the Promotion itself:
+  const grossProfit = totalForecast - totalCOGS; // Revenue (Promo) - COGS (Promo)
+  
   const netProfit = grossProfit - promoCost;
   const calculatedROI = promoCost > 0 ? (netProfit / promoCost) * 100 : 0;
 
-  const lostSalesVolume = totalPotentialForecast - totalForecast;
+  const avgLift = 12.5;
+  // Calculate directly from unit-based lost_sales property (Filtered by Promo Period)
+  const totalLostSalesUnits = promoPeriodData?.reduce((acc, curr) => acc + (curr.lost_sales || 0), 0) || 0;
+  
+  // Calculate Revenue Loss from the mismatch (or just Units * Price)
+  const estimatedRevenueLoss = totalLostSalesUnits * baseSatisFiyati;
 
   return (
     <div className='space-y-2 2xl:space-y-4'>
@@ -695,32 +745,69 @@ export function ForecastingSection() {
                 </div>
               </div>
 
-              <div className='space-y-0.5'>
-                <div className='flex items-center gap-1'>
-                  <Label className='text-[10px] 2xl:text-xs'>
-                    Planlanan Bütçe (Opsiyonel)
-                  </Label>
-                  <UITooltip>
-                    <UITooltipTrigger>
-                      <Info className='h-3 w-3 text-muted-foreground/60 hover:text-indigo-600 cursor-help' />
-                    </UITooltipTrigger>
-                    <UITooltipContent>
-                      <p>
-                        Maksimum kampanya bütçesi. ROI hesabında kullanılır.
-                      </p>
-                    </UITooltipContent>
-                  </UITooltip>
+              <div className='bg-muted/30 p-2 rounded-lg border space-y-2 mt-2'>
+                <div className='flex items-center justify-between'>
+                  <div className='flex items-center gap-1'>
+                    <Label className='text-[10px] 2xl:text-xs font-semibold'>
+                      Kısıtlar & Bütçe
+                    </Label>
+                    <UITooltip>
+                        <UITooltipTrigger>
+                          <Info className='h-3 w-3 text-muted-foreground/60 hover:text-indigo-600 cursor-help' />
+                        </UITooltipTrigger>
+                        <UITooltipContent>
+                          <p>Kampanya bütçesi veya hedef satış adedi.</p>
+                        </UITooltipContent>
+                      </UITooltip>
+                  </div>
                 </div>
+
+                <div className='flex bg-muted rounded-md p-0.5 h-6'>
+                    <button
+                      onClick={() => setBudgetMode('budget')}
+                      className={`flex-1 text-[9px] rounded-sm font-medium transition-all ${
+                        budgetMode === 'budget'
+                          ? 'bg-white shadow-sm text-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Bütçe (TL)
+                    </button>
+                    <button
+                      onClick={() => setBudgetMode('units')}
+                      className={`flex-1 text-[9px] rounded-sm font-medium transition-all ${
+                        budgetMode === 'units'
+                          ? 'bg-white shadow-sm text-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Adet
+                    </button>
+                </div>
+
                 <Input
                   type='number'
-                  placeholder='Örn: 50000'
+                  placeholder={
+                    budgetMode === 'budget' ? 'Örn: 50000 TL' : 'Örn: 1000 Adet'
+                  }
                   className='h-7 2xl:h-9 text-xs'
                   value={budget}
                   onChange={(e) => setBudget(e.target.value)}
                 />
-                <p className='text-[10px] text-muted-foreground'>
-                  ROI hesaplaması için kullanılır.
-                </p>
+                
+                {budget && parseFloat(budget) > 0 && (
+                    <div className='text-[10px] text-muted-foreground px-1'>
+                      {budgetMode === 'budget' ? (
+                          <span>
+                            ~{Math.round(parseFloat(budget) / baseHamFiyat).toLocaleString()} adet ürün (Maliyet: {baseHamFiyat} TL)
+                          </span>
+                      ) : (
+                          <span>
+                            ~{(parseFloat(budget) * baseHamFiyat).toLocaleString()} TL bütçe gereksinimi
+                          </span>
+                      )}
+                    </div>
+                )}
               </div>
 
               <Button
@@ -903,7 +990,7 @@ export function ForecastingSection() {
                 ].map((event, i) => (
                   <div
                     key={i}
-                    className='flex items-center justify-between p-2 rounded-lg border bg-card hover:bg-accent/50 transition-all cursor-default group'
+                    className='flex items-center justify-between p-2 rounded-lg border bg-white hover:shadow-sm transition-shadow cursor-default group'
                   >
                     <div className='grid gap-1'>
                       <span className='font-semibold text-sm 2xl:text-base group-hover:text-primary transition-colors'>
@@ -1049,13 +1136,13 @@ export function ForecastingSection() {
               </CardHeader>
               <CardContent className='pb-2 2xl:pb-3'>
                 <div
-                  className={`text-lg 2xl:text-xl font-bold ${lostSalesVolume > 0 ? 'text-red-600' : 'text-emerald-600'}`}
+                  className={`text-lg 2xl:text-xl font-bold ${totalLostSalesUnits > 0 ? 'text-red-600' : 'text-emerald-600'}`}
                 >
-                  {lostSalesVolume > 0 ? 'Riskli' : 'Güvenli'}
+                  {totalLostSalesUnits > 0 ? 'Riskli' : 'Güvenli'}
                 </div>
                 <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
-                  {lostSalesVolume > 0
-                    ? `-${lostSalesVolume} OOS`
+                  {totalLostSalesUnits > 0
+                    ? `-${totalLostSalesUnits} OOS`
                     : 'Yeterli Stok'}
                 </p>
               </CardContent>
@@ -1117,6 +1204,7 @@ export function ForecastingSection() {
                         Temel
                       </span>
                     </div>
+
                     <div className='flex items-center gap-1.5'>
                       <span className='w-2 h-2 rounded-full bg-[#22c55e]' />
                       <span className='text-muted-foreground font-medium'>
@@ -1132,15 +1220,43 @@ export function ForecastingSection() {
                         Kaçan
                       </span>
                     </div>
+                     <div className='flex items-center gap-1.5'>
+                      <span className='w-2 h-2 rounded-full bg-[#FFB840]' />
+                      <span className='text-muted-foreground font-medium'>Stok Adedi</span>
+                    </div>
+
+                    {/* Zoom Controls */}
+                    <div className="flex items-center gap-1 ml-2 border-l pl-3">
+                         <span className="text-[10px] text-muted-foreground mr-1">Zoom:</span>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            className={`h-6 w-6 ${isZoomed ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : ''}`}
+                            onClick={() => setIsZoomed(true)}
+                            title="Yaklaş (Scroll)"
+                        >
+                            <ZoomIn className="h-3 w-3" />
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            className={`h-6 w-6 ${!isZoomed ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : ''}`}
+                            onClick={() => setIsZoomed(false)}
+                            title="Sığdır"
+                        >
+                            <ZoomOut className="h-3 w-3" />
+                        </Button>
+                    </div>
                   </div>
                 </div>
 
                 <div className='pl-0 pb-2 px-2 pt-2 2xl:pb-4'>
                   <div className='w-full overflow-x-auto pb-1'>
                     <div
+                      className={`transition-all duration-300 ease-in-out ${isZoomed ? 'cursor-grab active:cursor-grabbing' : ''}`}
                       style={{
-                        width: '100%',
-                        minWidth: `${Math.max(100, (forecastData?.length || 0) * 40)}px`,
+                        width: isZoomed ? '200%' : '100%',
+                        minWidth: isZoomed ? '1200px' : '100%',
                         height: 320,
                       }}
                     >
@@ -1226,13 +1342,13 @@ export function ForecastingSection() {
                             }
                             formatter={(value: number, name: string) => {
                               if (name === 'tahmin')
-                                return [value, 'Promosyon Tahmini (Adet)'];
+                                return [value, 'Promosyon Tahmini (TL)'];
                               if (name === 'baseline')
-                                return [value, 'Temel Satış (Adet)'];
-                              if (name === 'ciro_adedi')
-                                return [value, 'Ciro Adedi'];
+                                return [value, 'Temel Satış (TL)'];
+                                if (name === 'stok' || name === 'Stok Adedi')
+                                return [value, 'Stok Adedi'];
                               if (name === 'unconstrained_demand')
-                                return [value, 'Potansiyel Talep (Stok olsa)'];
+                                return [value, 'Potansiyel Talep (TL)'];
                               if (name === 'lost_sales' && value > 0)
                                 return [value, 'Kaçırılan Satış'];
                               return [value, name];
@@ -1251,7 +1367,7 @@ export function ForecastingSection() {
                             stroke='#0D1E3A'
                             strokeWidth={2}
                             dot={false}
-                            name='Baseline Forecast'
+                            name='Temel Tahmin'
                           />
                           <Line
                             type='monotone'
@@ -1260,7 +1376,7 @@ export function ForecastingSection() {
                             strokeWidth={4}
                             dot={{ r: 4, fill: '#22c55e', strokeWidth: 0 }}
                             activeDot={{ r: 6 }}
-                            name='Realized Sales'
+                            name='Gerçekleşen Satış'
                             connectNulls={false}
                           />
                           <Line
@@ -1275,11 +1391,11 @@ export function ForecastingSection() {
                           />
                           <Line
                             type='monotone'
-                            dataKey='ciro_adedi'
+                            dataKey='stok'
                             stroke='#FFB840'
                             strokeWidth={2}
                             dot={false}
-                            name='Revenue Count'
+                            name='Stok Adedi'
                           />
                         </ComposedChart>
                       </ResponsiveContainer>
@@ -1372,8 +1488,8 @@ export function ForecastingSection() {
                     </div>
                     <div className='flex items-baseline gap-2'>
                       <span className='text-xl 2xl:text-2xl font-black text-red-600 tracking-tighter'>
-                        {lostSalesVolume > 0
-                          ? `${lostSalesVolume} Adet`
+                        {totalLostSalesUnits > 0
+                          ? `${totalLostSalesUnits.toLocaleString()} Adet`
                           : '0 Adet'}
                       </span>
                       <span className='text-[10px] 2xl:text-xs text-muted-foreground font-medium'>
@@ -1381,13 +1497,13 @@ export function ForecastingSection() {
                       </span>
                     </div>
                     <p className='text-red-700 text-[10px] 2xl:text-xs mt-0.5 leading-tight'>
-                      {lostSalesVolume > 0
-                        ? `Tahmini ₺${((lostSalesVolume * 87.45) / 1000).toFixed(1)}k ciro kaybı.`
+                      {totalLostSalesUnits > 0
+                        ? `Tahmini ₺${(estimatedRevenueLoss / 1000).toFixed(1)}k ciro kaybı.`
                         : 'Stok riski bulunmuyor.'}
                     </p>
                     {/* Financial Warning */}
                     <div className='mt-1 text-[10px] bg-red-100/50 p-1 rounded text-red-800 font-medium'>
-                      Stok Maliyeti: ₺{(lostSalesVolume * 15).toFixed(0)}
+                      Stok Maliyeti: ₺{(totalLostSalesUnits * 15).toLocaleString()}
                       <span className='block font-normal opacity-80'>
                         (Acil sipariş farkı)
                       </span>
