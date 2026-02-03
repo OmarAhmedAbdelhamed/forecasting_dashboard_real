@@ -35,7 +35,7 @@ export function MetricCard({
 
       <div className='relative flex flex-col justify-between h-full'>
         <div className='flex flex-row items-center justify-between pb-0 pt-2 2xl:pt-3 px-3 2xl:px-3'>
-          <span className='text-[11px] 2xl:text-sm font-medium text-muted-foreground truncate'>
+          <span className='text-xs 2xl:text-sm font-medium text-muted-foreground truncate'>
             {title}
           </span>
           <div className='w-6 h-6 2xl:w-8 2xl:h-8 rounded-md bg-accent/10 flex items-center justify-center shrink-0 transition-colors duration-300'>
@@ -51,7 +51,7 @@ export function MetricCard({
             {change && (
               <div
                 className={cn(
-                  'flex items-center gap-0.5 text-[9px] 2xl:text-xs font-medium mb-0.5',
+                  'flex items-center gap-0.5 text-xs 2xl:text-sm font-medium mb-0.5',
                   changeType === 'positive' && 'text-success',
                   changeType === 'negative' && 'text-destructive',
                   changeType === 'neutral' && 'text-muted-foreground',
@@ -68,12 +68,12 @@ export function MetricCard({
             )}
           </div>
           {secondaryValue && (
-            <p className='text-[9px] md:text-[10px] 2xl:text-sm font-semibold text-muted-foreground mt-0.5'>
+            <p className='text-xs md:text-sm 2xl:text-base font-semibold text-muted-foreground mt-0.5'>
               {secondaryValue}
             </p>
           )}
           {subtext && (
-            <p className='text-[9px] md:text-[10px] 2xl:text-sm text-muted-foreground mt-0.5'>
+            <p className='text-xs md:text-sm 2xl:text-base text-muted-foreground mt-0.5'>
               {subtext}
             </p>
           )}

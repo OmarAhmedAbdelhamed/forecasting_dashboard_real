@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Sidebar } from '@/components/dashboard/sidebar';
 import { Header } from '@/components/dashboard/header';
 import { OverviewSection } from '@/components/dashboard/sections/overview';
@@ -13,7 +13,11 @@ import type { Section } from '@/types/types';
 
 export default function Dashboard() {
   const router = useRouter();
-  const [activeSection, setActiveSection] = useState<Section>('overview');
+  const searchParams = useSearchParams();
+
+  // Get section from URL or default to 'overview'
+  const initialSection = (searchParams.get('section') as Section) || 'overview';
+  const [activeSection, setActiveSection] = useState<Section>(initialSection);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   const handleSectionChange = (section: Section) => {
@@ -21,6 +25,8 @@ export default function Dashboard() {
       router.push('/alert-center');
     } else {
       setActiveSection(section);
+      // Update URL without page reload
+      router.push(`/dashboard?section=${section}`, { scroll: false });
     }
   };
 

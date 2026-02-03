@@ -51,6 +51,7 @@ export function InventoryTable({
     productName: true,
     price: true,
     stockLevel: true,
+    minStockLevel: true,
     stockValue: true,
     forecastedDemand: true,
     daysOfCoverage: true,
@@ -296,6 +297,12 @@ export function InventoryTable({
                 Stok
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
+                checked={visibleColumns.minStockLevel}
+                onCheckedChange={() => toggleColumn('minStockLevel')}
+              >
+                Güvenlik Stoğu
+              </DropdownMenuCheckboxItem>
+              <DropdownMenuCheckboxItem
                 checked={visibleColumns.stockValue}
                 onCheckedChange={() => toggleColumn('stockValue')}
               >
@@ -392,6 +399,27 @@ export function InventoryTable({
                       </TooltipTrigger>
                       <TooltipContent>
                         <p>Depodaki anlık fiziksel stok adedi</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TableHead>
+              )}
+              {visibleColumns.minStockLevel && (
+                <TableHead
+                  className='cursor-pointer text-center'
+                  onClick={() => handleSort('minStockLevel')}
+                >
+                  <div className='flex items-center justify-center gap-1'>
+                    Güvenlik Stoğu
+                    {sortColumn === 'minStockLevel' && (
+                      <ArrowUpDown className='inline h-3 w-3' />
+                    )}
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <CircleAlert className='h-3 w-3 text-muted-foreground/50 hover:text-foreground transition-colors' />
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Minimum stok seviyesi - kritik eşik değeri</p>
                       </TooltipContent>
                     </Tooltip>
                   </div>
@@ -506,6 +534,11 @@ export function InventoryTable({
                   {visibleColumns.stockLevel && (
                     <TableCell className='text-center'>
                       {item.stockLevel.toLocaleString('tr-TR')}
+                    </TableCell>
+                  )}
+                  {visibleColumns.minStockLevel && (
+                    <TableCell className='text-center text-orange-600 font-medium'>
+                      {item.minStockLevel.toLocaleString('tr-TR')}
                     </TableCell>
                   )}
                   {visibleColumns.stockValue && (

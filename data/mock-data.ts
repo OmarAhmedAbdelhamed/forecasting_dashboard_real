@@ -1099,7 +1099,7 @@ export function getMetrics(
 
   // Base values derived from actual total
   const baseAccuracy = 92;
-  const baseForecastVal = totalValue * 1.1; // Forecast slightly higher than current stock
+  const baseForecastVal = (totalValue * 1.1) / 10; // Forecast slightly higher than current stock, divided by 10
   const baseForecastUnit = items.reduce(
     (sum, item) => sum + item.forecastedDemand,
     0,
@@ -1111,7 +1111,7 @@ export function getMetrics(
     forecastValue: baseForecastVal,
     forecastUnit: baseForecastUnit,
     forecastChange: rand * 10, // 0% - 10%
-    ytdValue: baseForecastVal * 5 * (0.9 + rand * 0.2), // Simplify YTD
+    ytdValue: baseForecastVal * 5 * (0.9 + rand * 0.2), // Simplify YTD (baseForecastVal already divided by 10)
     ytdChange: 10 + rand * 5,
     gapToSales: -1 - rand * 2, // -1% to -3%
     gapToSalesChange: -0.5 + rand * 1,
@@ -1462,8 +1462,20 @@ export function generateInventoryItems(
       stock = Math.round(stock * 1.5); // Higher stock count for electronics
     }
 
-    const minStock = 50 + Math.floor(rMin * 100);
     const demand = 100 + Math.floor(rDemand * 900);
+
+    // Lead time: 3 to 13 days
+    const rMisc = seededRandom(p.value + '_misc');
+    const leadTimeDays = 3 + Math.floor(rMisc * 10);
+
+    // Calculate Safety Stock based on demand and lead time
+    // Formula: Safety Stock = (Daily Demand × Lead Time × 1.5) + Buffer
+    // Buffer is 30-50% of monthly demand for variability protection
+    const dailyDemand = demand / 30;
+    const leadTimeDemand = Math.ceil(dailyDemand * leadTimeDays * 1.5); // 1.5x multiplier for safety
+    const bufferPercentage = 0.3 + rMin * 0.2; // 30-50% buffer
+    const variabilityBuffer = Math.ceil(demand * bufferPercentage);
+    const minStock = leadTimeDemand + variabilityBuffer;
 
     // Price: 50 to 500
     let unitPrice = 50 + Math.floor(rPrice * 450);
@@ -1477,8 +1489,6 @@ export function generateInventoryItems(
     else if (stock < minStock) status = 'Low Stock';
     else if (stock > demand * 1.5) status = 'Overstock';
 
-    const rMisc = seededRandom(p.value + '_misc');
-
     return {
       id: `INV-${p.value}`, // Stable ID based on unique value
       sku: `SKU-${slug.toUpperCase()}-${1000 + Math.floor(rMisc * 1000)}`, // Stable SKU
@@ -1488,7 +1498,7 @@ export function generateInventoryItems(
       stockLevel: stock,
       minStockLevel: minStock,
       maxStockLevel: minStock * 4,
-      reorderPoint: minStock + 20,
+      reorderPoint: minStock + Math.ceil(dailyDemand * 7), // Safety stock + 1 week demand
       forecastedDemand: demand,
       stockValue: stock * unitPrice,
       daysOfCoverage:
@@ -1499,7 +1509,7 @@ export function generateInventoryItems(
         subDays(new Date(), Math.floor(rMisc * 30)),
         'yyyy-MM-dd',
       ),
-      leadTimeDays: 3 + Math.floor(rMisc * 10),
+      leadTimeDays: leadTimeDays,
       quantityOnOrder: stock < minStock ? minStock * 2 : 0,
       todaysSales: Math.max(
         0,
@@ -1598,6 +1608,65 @@ export const generateStockTrends = (
   }
 
   // Reverse to get chronological order (Day -29 -> Today)
+  return points.reverse();
+};
+
+// Single Product Stock Trends - For product detail modal
+export const generateSingleProductStockTrends = (
+  item: InventoryItem,
+  days: number = 15,
+): StockTrendPoint[] => {
+  const seed = item.sku || item.id;
+  const today = new Date();
+
+  // Use the actual product's stock and demand
+  const currentStock = item.stockLevel;
+  const monthlyDemand = item.forecastedDemand;
+  const avgDailyDemand = monthlyDemand / 30;
+
+  // Calculate parameters based on actual product data
+  const safetyStockLevel = item.minStockLevel;
+  const reorderPoint = item.reorderPoint;
+  const restockAmount = Math.round(avgDailyDemand * 7); // Order 7 days worth
+  const maxStockLevel = item.maxStockLevel;
+
+  const points: StockTrendPoint[] = [];
+  let currentSimulatedStock = currentStock;
+
+  // Backward simulation from today
+  for (let i = 0; i < days; i++) {
+    const reverseIndex = i;
+    const date = subDays(today, reverseIndex);
+    const daySeed = seed + format(date, 'yyyy-MM-dd');
+
+    // Generate daily demand with variation (±30%)
+    const variance = seededRandom(daySeed) * 0.6 + 0.7; // 0.7 to 1.3
+    const dailyDemand = Math.round(avgDailyDemand * variance);
+
+    // Backward step: Yesterday's stock = Today's stock + Today's consumption
+    let prevStock = currentSimulatedStock + dailyDemand;
+
+    // Check if we need to un-apply a restock event
+    if (prevStock > maxStockLevel) {
+      prevStock -= restockAmount;
+      if (prevStock < 0) prevStock = safetyStockLevel;
+    }
+
+    // Ensure stock doesn't go negative
+    if (currentSimulatedStock < 0) currentSimulatedStock = 0;
+
+    points.push({
+      date: format(date, 'MMM dd'),
+      actualStock: Math.max(0, Math.round(currentSimulatedStock)),
+      forecastDemand: dailyDemand,
+      safetyStock: safetyStockLevel,
+    });
+
+    // Move to previous day
+    currentSimulatedStock = prevStock;
+  }
+
+  // Reverse to get chronological order
   return points.reverse();
 };
 
@@ -1719,18 +1788,14 @@ export const generateInventoryAlerts = (
 
   items.forEach((item) => {
     // Derive store name from productKey (format: region_storeVal_slug)
-    let derivedStoreName = 'Merkez Depo';
-    // @ts-ignore
+    let storeName = 'Merkez Depo';
     if (item.productKey) {
-      // @ts-ignore
       const parts = item.productKey.split('_');
       if (parts.length >= 2) {
         const storeVal = parts[1];
-        derivedStoreName = storeMap.get(storeVal) || `Mağaza ${storeVal}`;
+        storeName = storeMap.get(storeVal) || `Mağaza ${storeVal}`;
       }
     }
-    // @ts-ignore
-    const storeName = item.storeName || derivedStoreName;
 
     // 1. Stockout Logic (High Severity)
     if (item.stockLevel === 0) {
@@ -1919,7 +1984,7 @@ export interface SimilarCampaign {
 export const SIMILAR_CAMPAIGNS: SimilarCampaign[] = [
   {
     id: 'SC-1',
-    name: 'İnternet\'e Özel İndirim Günleri',
+    name: "İnternet'e Özel İndirim Günleri",
     date: 'Nisan 2024',
     similarityScore: 95,
     type: 'INTERNET_INDIRIMI',
@@ -1988,4 +2053,3 @@ export const SIMILAR_CAMPAIGNS: SimilarCampaign[] = [
     stockOutDays: 3,
   },
 ];
-

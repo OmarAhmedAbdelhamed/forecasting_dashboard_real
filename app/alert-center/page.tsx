@@ -14,7 +14,7 @@ export default function AlertCenterPage() {
   // Handle navigation back to dashboard sections
   const handleSectionChange = (section: Section) => {
     if (section !== 'alert_center') {
-      router.push('/dashboard');
+      router.push(`/dashboard?section=${section}`);
     }
   };
 

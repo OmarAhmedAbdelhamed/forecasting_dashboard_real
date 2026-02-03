@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { FilterBar } from '@/components/ui/shared/filter-bar';
 import { MetricCard } from '@/components/dashboard/metric-card';
 import { RevenueTargetChart } from '@/components/dashboard/charts/revenue-target-chart';
 import { HistoricalUnitsChart } from '@/components/dashboard/charts/historical-units-chart';
 import { UpcomingPromotions } from '@/components/dashboard/tables/upcoming-promotions';
 import { Button } from '@/components/ui/shared/button';
+import { useDashboardContext } from '@/contexts/dashboard-context';
 import {
   Tooltip,
   TooltipContent,
@@ -75,6 +76,32 @@ export function OverviewSection() {
   );
 
   const promotions = useMemo(() => getPromotions(), []);
+
+  // Sync with Dashboard Context
+  const { setSection, setFilters, setMetrics } = useDashboardContext();
+
+  useEffect(() => {
+    setSection('Genel Bakış');
+    setFilters({
+      regions: selectedRegions,
+      stores: selectedStores,
+      categories: selectedCategories,
+    });
+    setMetrics({
+      'Model Doğruluğu': `${metrics.accuracy.toFixed(1)}%`,
+      'Gelecek 30 Günlük Tahmin': `${(metrics.forecastValue / 1000000).toFixed(1)}M TL (${(metrics.forecastUnit / 1000).toFixed(0)}K Adet)`,
+      'YTD Başarı': `${(metrics.ytdValue / 1000000).toFixed(1)}M TL`,
+      'Tahmin Sapması': `${metrics.gapToSales.toFixed(1)}%`,
+    });
+  }, [
+    selectedRegions,
+    selectedStores,
+    selectedCategories,
+    metrics,
+    setSection,
+    setFilters,
+    setMetrics,
+  ]);
 
   // Reset child selections when parent changes
   const handleRegionChange = (regions: string[]) => {

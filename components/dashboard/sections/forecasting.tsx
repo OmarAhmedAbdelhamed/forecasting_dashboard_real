@@ -9,6 +9,7 @@ import {
   TabsTrigger,
 } from '@/components/ui/shared/tabs';
 import { Switch } from '@/components/ui/shared/switch';
+import { useDashboardContext } from '@/contexts/dashboard-context';
 
 // ... existing imports ...
 
@@ -208,6 +209,49 @@ export function ForecastingSection() {
     return () => window.removeEventListener('resize', checkScreenSize);
   }, []);
 
+  // Sync with Dashboard Context
+  const { setSection, setFilters, setMetrics } = useDashboardContext();
+
+  useEffect(() => {
+    setSection('Fiyatlandırma & Promosyon');
+
+    setFilters({
+      regions: bolge,
+      stores: magazaKodu,
+      categories: reyon,
+      products: urunKodu,
+    });
+
+    // Only update metrics if we have forecast data
+    if (forecastData && forecastData.length > 0) {
+      const totalF = forecastData.reduce(
+        (acc, curr) => acc + (curr.tahmin || 0),
+        0,
+      );
+      const totalRev = forecastData.reduce((acc, curr) => acc + curr.ciro, 0);
+
+      setMetrics({
+        'Toplam Tahmin': `${(totalF / 1000).toFixed(1)}K Adet`,
+        'Toplam Ciro': `${(totalRev / 1000).toFixed(1)}K TL`,
+        Promosyon: promosyon,
+        'İndirim Oranı': `%${promosyonIndirimOrani}`,
+        ROI: `${(((totalRev * 0.22 - (budget ? parseFloat(budget) : totalF * 0.15 * 87.45)) / (budget ? parseFloat(budget) : totalF * 0.15 * 87.45)) * 100).toFixed(1)}%`,
+      });
+    }
+  }, [
+    bolge,
+    magazaKodu,
+    reyon,
+    urunKodu,
+    forecastData,
+    promosyon,
+    promosyonIndirimOrani,
+    budget,
+    setSection,
+    setFilters,
+    setMetrics,
+  ]);
+
   const handleAnalyze = async () => {
     if (!startDate || !endDate) return;
 
@@ -259,15 +303,8 @@ export function ForecastingSection() {
       const ciro_adedi =
         Math.floor(Math.random() * 10) + 5 + (isPromoActive ? 5 : 0);
 
-      // Determine stock dynamically based on sales to show OOS
-      // For simulation, let's say we have initial stock 2500
       const initialStock = 2500;
       let currentStock = initialStock;
-      // We need to track stock day by day, but here we are in a loop i=0..days
-      // We'll simulate a linear drop for simplicity but strictly check limits
-      // Mock logic: Stock drops by cumulative sales.
-      // Since specific pattern usage, let's just use the mock `stok` calculation but make it reach 0
-
       // Better mock:
       const dailyDrop = 300; // Aggressive sales
       let simulatedStock = 3800 - i * dailyDrop;
