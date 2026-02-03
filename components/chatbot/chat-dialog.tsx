@@ -139,7 +139,7 @@ export function ChatDialog({ open, onOpenChange }: ChatDialogProps) {
               className={cn(
                 'max-w-[75%] rounded-2xl px-4 py-2.5 shadow-xs transition-all',
                 message.role === 'user'
-                  ? 'bg-slate-900 text-slate-50 rounded-tr-none'
+                  ? 'bg-sidebar text-slate-50 rounded-tr-none'
                   : 'bg-white text-slate-800 border border-slate-100 rounded-tl-none',
               )}
             >

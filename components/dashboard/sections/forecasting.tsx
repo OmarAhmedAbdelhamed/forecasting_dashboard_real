@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/purity */
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -8,7 +9,7 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/shared/tabs';
-import { Switch } from '@/components/ui/shared/switch';
+
 import { useDashboardContext } from '@/contexts/dashboard-context';
 
 // ... existing imports ...
@@ -37,7 +38,6 @@ import {
 import {
   ComposedChart,
   Line,
-  Area,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
@@ -58,7 +58,6 @@ import {
   LayoutGrid,
   Calendar as CalendarIcon,
   HardDriveDownload,
-  ArrowRight,
   CheckCircle2,
   Copy,
   Eye,
@@ -97,13 +96,13 @@ import {
   PROMOTIONS,
   REGIONS_FLAT as REGIONS,
   CATEGORIES,
-  PROMOTION_HISTORY_DATA,
   SIMILAR_CAMPAIGNS,
+  type SimilarCampaign,
+  PROMOTION_HISTORY_DATA,
 } from '@/data/mock-data';
 import { ExportPromotionModal } from '@/components/dashboard/modals/export-promotion-modal';
 import { PromotionCalendar } from '@/components/dashboard/visualizations/promotion-calendar';
 import { CampaignDetailModal } from '@/components/dashboard/modals/campaign-detail-modal';
-import { SimilarCampaign } from '@/data/mock-data';
 
 // Custom X-Axis Tick Component for Weather
 const CustomizedAxisTick = (props: any) => {
@@ -303,8 +302,6 @@ export function ForecastingSection() {
       const ciro_adedi =
         Math.floor(Math.random() * 10) + 5 + (isPromoActive ? 5 : 0);
 
-      const initialStock = 2500;
-      let currentStock = initialStock;
       // Better mock:
       const dailyDrop = 300; // Aggressive sales
       let simulatedStock = 3800 - i * dailyDrop;
@@ -328,6 +325,7 @@ export function ForecastingSection() {
       const gunluk_kar = finalTahmin * birimKar;
 
       // Random weather
+      // eslint-disable-next-line react-hooks/purity
       const weatherRoll = Math.random();
       const weather =
         weatherRoll > 0.7 ? 'rain' : weatherRoll > 0.4 ? 'cloud' : 'sun';
@@ -384,7 +382,6 @@ export function ForecastingSection() {
   const netProfit = grossProfit - promoCost;
   const calculatedROI = promoCost > 0 ? (netProfit / promoCost) * 100 : 0;
 
-  const avgLift = 12.5;
   const lostSalesVolume = totalPotentialForecast - totalForecast;
 
   return (

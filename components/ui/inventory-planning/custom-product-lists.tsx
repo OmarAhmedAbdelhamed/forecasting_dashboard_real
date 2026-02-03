@@ -17,7 +17,7 @@ import {
   Check,
 } from 'lucide-react';
 import { generateInventoryItems } from '@/data/mock-data';
-import { useCustomLists } from '@/context/custom-lists-context';
+import { useCustomLists } from '@/contexts/custom-lists-context';
 import { ScrollArea } from '@/components/ui/shared/scroll-area';
 import {
   DropdownMenu,

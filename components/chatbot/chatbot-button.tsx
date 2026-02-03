@@ -17,8 +17,8 @@ export function ChatbotButton() {
         className={cn(
           'fixed bottom-6 right-6 z-50 flex items-center gap-2 px-4 py-3 rounded-full shadow-2xl transition-all duration-300 transform hover:scale-105 active:scale-95 group',
           isOpen
-            ? 'bg-slate-900 text-white'
-            : 'bg-white border border-slate-200 text-slate-900 hover:border-slate-300',
+            ? 'bg-sidebar text-white'
+            : 'bg-white border border-slate-200 text-sidebar hover:border-slate-300',
         )}
         aria-label={isOpen ? 'Close AI Assistant' : 'Open AI Assistant'}
       >

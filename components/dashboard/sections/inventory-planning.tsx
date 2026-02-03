@@ -47,60 +47,67 @@ export function InventoryPlanningSection() {
     [selectedRegions],
   );
 
+  const effectiveSelectedStores = useMemo(() => {
+    const validValues = new Set(storeOptions.map((s) => s.value));
+    return selectedStores.filter((s) => validValues.has(s));
+  }, [selectedStores, storeOptions]);
+
   const categoryOptions = useMemo(
-    () => getCategoriesByStores(selectedStores, selectedRegions),
-    [selectedStores, selectedRegions],
+    () => getCategoriesByStores(effectiveSelectedStores, selectedRegions),
+    [effectiveSelectedStores, selectedRegions],
   );
+
+  const effectiveSelectedCategories = useMemo(() => {
+    const validValues = new Set(categoryOptions.map((c) => c.value));
+    return selectedCategories.filter((c) => validValues.has(c));
+  }, [selectedCategories, categoryOptions]);
 
   const productOptions = useMemo(
     () =>
-      getProductsByContext(selectedRegions, selectedStores, selectedCategories),
-    [selectedRegions, selectedStores, selectedCategories],
+      getProductsByContext(
+        selectedRegions,
+        effectiveSelectedStores,
+        effectiveSelectedCategories,
+      ),
+    [selectedRegions, effectiveSelectedStores, effectiveSelectedCategories],
   );
 
-  // Cascading Selection Resets
-  useEffect(() => {
-    const validStoreValues = storeOptions.map((s) => s.value);
-    setSelectedStores((prev) =>
-      prev.filter((s) => validStoreValues.includes(s)),
-    );
-  }, [storeOptions]);
-
-  useEffect(() => {
-    const validCategoryValues = categoryOptions.map((c) => c.value);
-    setSelectedCategories((prev) =>
-      prev.filter((c) => validCategoryValues.includes(c)),
-    );
-  }, [categoryOptions]);
-
-  useEffect(() => {
-    const validProductValues = productOptions.map((p) => p.value);
-    setSelectedProducts((prev) =>
-      prev.filter((p) => validProductValues.includes(p)),
-    );
-  }, [productOptions]);
+  const effectiveSelectedProducts = useMemo(() => {
+    const validValues = new Set(productOptions.map((p) => p.value));
+    return selectedProducts.filter((p) => validValues.has(p));
+  }, [selectedProducts, productOptions]);
 
   // Derived Data based on ALL filters
   const kpis = useMemo(
     () =>
       getInventoryKPIs(
         selectedRegions,
-        selectedStores,
-        selectedCategories,
-        selectedProducts,
+        effectiveSelectedStores,
+        effectiveSelectedCategories,
+        effectiveSelectedProducts,
       ),
-    [selectedRegions, selectedStores, selectedCategories, selectedProducts],
+    [
+      selectedRegions,
+      effectiveSelectedStores,
+      effectiveSelectedCategories,
+      effectiveSelectedProducts,
+    ],
   );
 
   const inventoryItems = useMemo(
     () =>
       generateInventoryItems(
         selectedRegions,
-        selectedStores,
-        selectedCategories,
-        selectedProducts,
+        effectiveSelectedStores,
+        effectiveSelectedCategories,
+        effectiveSelectedProducts,
       ),
-    [selectedRegions, selectedStores, selectedCategories, selectedProducts],
+    [
+      selectedRegions,
+      effectiveSelectedStores,
+      effectiveSelectedCategories,
+      effectiveSelectedProducts,
+    ],
   );
 
   const stockTrends = useMemo(
@@ -108,45 +115,40 @@ export function InventoryPlanningSection() {
       generateStockTrends(
         30,
         selectedRegions,
-        selectedStores,
-        selectedCategories,
-        selectedProducts,
+        effectiveSelectedStores,
+        effectiveSelectedCategories,
+        effectiveSelectedProducts,
       ),
-    [selectedRegions, selectedStores, selectedCategories, selectedProducts],
+    [
+      selectedRegions,
+      effectiveSelectedStores,
+      effectiveSelectedCategories,
+      effectiveSelectedProducts,
+    ],
   );
 
   const storePerformance = useMemo(
     () =>
       generateStorePerformance(
         selectedRegions,
-        selectedStores,
-        selectedProducts,
-        selectedCategories,
+        effectiveSelectedStores,
+        effectiveSelectedProducts,
+        effectiveSelectedCategories,
       ),
-    [selectedRegions, selectedStores, selectedProducts, selectedCategories],
+    [
+      selectedRegions,
+      effectiveSelectedStores,
+      effectiveSelectedProducts,
+      effectiveSelectedCategories,
+    ],
   );
 
-  const inventoryAlerts = useMemo(
-    () => {
-      // Assuming selectedRegion and selectedStore are meant to be derived from selectedRegions and selectedStores
-      // and that the intent is to pass only the first selected region/store if available, or empty arrays.
-      // This interpretation aligns with the provided Code Edit's structure,
-      // while correcting the syntax and variable names to match existing state.
-      const selectedRegion =
-        selectedRegions.length > 0 ? selectedRegions[0] : undefined;
-      const selectedStore =
-        selectedStores.length > 0 ? selectedStores[0] : undefined;
-
-      return generateInventoryAlerts(
-        selectedRegion ? [selectedRegion] : [],
-        selectedStore ? [selectedStore] : [],
-      );
-    },
-    [selectedRegions, selectedStores], // Dependency array updated to reflect actual dependencies
-  );
+  const inventoryAlerts = useMemo(() => {
+    return generateInventoryAlerts(selectedRegions, effectiveSelectedStores);
+  }, [selectedRegions, effectiveSelectedStores]);
 
   const hasChartSelection =
-    selectedStores.length > 0 || selectedProducts.length > 0;
+    effectiveSelectedStores.length > 0 || effectiveSelectedProducts.length > 0;
 
   const handleSeeAllPerformance = (filterType: 'fast' | 'slow') => {
     setTablePerformanceFilter(filterType);
@@ -184,9 +186,9 @@ export function InventoryPlanningSection() {
     setSection('Envanter Planlama');
     setFilters({
       regions: selectedRegions,
-      stores: selectedStores,
-      categories: selectedCategories,
-      products: selectedProducts,
+      stores: effectiveSelectedStores,
+      categories: effectiveSelectedCategories,
+      products: effectiveSelectedProducts,
     });
 
     if (kpis && inventoryAlerts) {
@@ -200,9 +202,9 @@ export function InventoryPlanningSection() {
     }
   }, [
     selectedRegions,
-    selectedStores,
-    selectedCategories,
-    selectedProducts,
+    effectiveSelectedStores,
+    effectiveSelectedCategories,
+    effectiveSelectedProducts,
     kpis,
     inventoryAlerts,
     setSection,
@@ -219,13 +221,13 @@ export function InventoryPlanningSection() {
         selectedRegions={selectedRegions}
         onRegionChange={setSelectedRegions}
         storeOptions={storeOptions}
-        selectedStores={selectedStores}
+        selectedStores={effectiveSelectedStores}
         onStoreChange={setSelectedStores}
         categoryOptions={categoryOptions}
-        selectedCategories={selectedCategories}
+        selectedCategories={effectiveSelectedCategories}
         onCategoryChange={setSelectedCategories}
         productOptions={productOptions}
-        selectedProducts={selectedProducts}
+        selectedProducts={effectiveSelectedProducts}
         onProductChange={setSelectedProducts}
       />
 
