@@ -34,9 +34,22 @@ import {
 } from '@/data/mock-data';
 import { InventoryItem } from '@/types/inventory';
 
+import { usePermissions } from '@/hooks/use-permissions';
+
 export function InventoryPlanningSection() {
   // Get user permissions and data scope
-  const { dataScope, userRole, isLoading: permissionsLoading } = usePermissions();
+  const {
+    dataScope,
+    userRole,
+    isLoading: permissionsLoading,
+  } = usePermissions();
+
+  const filteredRegionOptions = useMemo(() => {
+    if (dataScope.regions.length > 0) {
+      return REGIONS_FLAT.filter((r) => dataScope.regions.includes(r.value));
+    }
+    return REGIONS_FLAT;
+  }, [dataScope.regions]);
 
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
@@ -97,32 +110,28 @@ export function InventoryPlanningSection() {
     string | undefined
   >(undefined);
 
-  // Sync Chart Product Selection with Global Filters
-  useEffect(() => {
-    // 1. If global filter has exactly 1 product, force chart to match
-    // Only update if not already matching to avoid loops
-    if (
-      effectiveSelectedProducts.length === 1 &&
-      chartSelectedProductId !== effectiveSelectedProducts[0]
-    ) {
-      setChartSelectedProductId(effectiveSelectedProducts[0]);
-    }
-    // 2. If current chart selection is invalid or empty, pick the first available option
-    else if (productOptions.length > 0) {
-      const isValid =
-        chartSelectedProductId &&
-        productOptions.some((p) => p.value === chartSelectedProductId);
+  // 1. If global filter has exactly 1 product, force chart to match
+  if (
+    effectiveSelectedProducts.length === 1 &&
+    chartSelectedProductId !== effectiveSelectedProducts[0]
+  ) {
+    setChartSelectedProductId(effectiveSelectedProducts[0]);
+  }
+  // 2. If current chart selection is invalid or empty, pick the first available option
+  else if (productOptions.length > 0) {
+    const isValid =
+      chartSelectedProductId &&
+      productOptions.some((p) => p.value === chartSelectedProductId);
 
-      if (!isValid && chartSelectedProductId !== productOptions[0].value) {
-        setChartSelectedProductId(productOptions[0].value);
-      }
-    } else if (
-      productOptions.length === 0 &&
-      chartSelectedProductId !== undefined
-    ) {
-      setChartSelectedProductId(undefined);
+    if (!isValid && chartSelectedProductId !== productOptions[0].value) {
+      setChartSelectedProductId(productOptions[0].value);
     }
-  }, [effectiveSelectedProducts, productOptions, chartSelectedProductId]);
+  } else if (
+    productOptions.length === 0 &&
+    chartSelectedProductId !== undefined
+  ) {
+    setChartSelectedProductId(undefined);
+  }
 
   // Derived Data based on ALL filters
   const kpis = useMemo(

@@ -36,12 +36,8 @@ export default function LoginPage() {
   }, [user, authLoading, router]);
 
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState(
-    process.env.NEXT_PUBLIC_TEST_EMAIL || 'admin@bee2.ai',
-  );
-  const [password, setPassword] = useState(
-    process.env.NEXT_PUBLIC_TEST_PASSWORD || 'test123',
-  );
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<FormErrors>({});
   const [touched, setTouched] = useState<{
     email?: boolean;
@@ -99,7 +95,8 @@ export default function LoginPage() {
     const result = await login(email, password);
 
     if (result.success) {
-      router.push('/dashboard');
+      // Force hard redirect to ensure state is clean
+      window.location.href = '/dashboard';
     } else {
       setErrors((prev) => ({
         ...prev,
@@ -140,7 +137,10 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className='space-y-4 2xl:space-y-5'>
+          <form
+            onSubmit={(e) => void handleLogin(e)}
+            className='space-y-4 2xl:space-y-5'
+          >
             <div className='space-y-2'>
               <Label htmlFor='email' className='2xl:text-base'>
                 E-posta
@@ -150,8 +150,12 @@ export default function LoginPage() {
                 type='email'
                 placeholder='ornek@sirket.com'
                 value={email}
-                onChange={(e) => { setEmail(e.target.value); }}
-                onBlur={() => { handleBlur('email'); }}
+                onChange={(e) => {
+                  setEmail(e.target.value);
+                }}
+                onBlur={() => {
+                  handleBlur('email');
+                }}
                 className={`bg-white border-slate-200 focus:border-primary focus:ring-primary/20 2xl:h-12 2xl:text-base ${
                   touched.email && errors.email
                     ? 'border-red-500 focus:border-red-500'
@@ -181,8 +185,12 @@ export default function LoginPage() {
                   id='password'
                   type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={(e) => { setPassword(e.target.value); }}
-                  onBlur={() => { handleBlur('password'); }}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                  }}
+                  onBlur={() => {
+                    handleBlur('password');
+                  }}
                   className={`bg-white border-slate-200 focus:border-primary focus:ring-primary/20 pr-10 2xl:h-12 2xl:text-base ${
                     touched.password && errors.password
                       ? 'border-red-500 focus:border-red-500'
@@ -191,7 +199,9 @@ export default function LoginPage() {
                 />
                 <button
                   type='button'
-                  onClick={() => { setShowPassword(!showPassword); }}
+                  onClick={() => {
+                    setShowPassword(!showPassword);
+                  }}
                   className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none'
                 >
                   {showPassword ? (

@@ -45,15 +45,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Listen to Supabase auth state changes
   useEffect(() => {
+    // Check active session immediately on mount
+    const checkSession = async () => {
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession();
+        if (session?.user) {
+          console.log(
+            '[AuthProvider] Valid session found:',
+            session.user.email,
+          );
+          setAuth(session.user);
+        } else {
+          console.log('[AuthProvider] No valid session found');
+          clearAuth();
+        }
+      } catch (error) {
+        console.error('[AuthProvider] Session check failed:', error);
+        clearAuth();
+      }
+    };
+
+    void checkSession();
+
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
         clearAuth();
         return;
       }
 
-      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
+      if (
+        (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') &&
+        session?.user
+      ) {
         // Use Supabase user directly - no API call needed
         setAuth(session.user);
         return;
@@ -87,7 +114,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         userProfile: useAuthStore((state) => state.userProfile),
         permissions: useAuthStore((state) => state.permissions),
         userRole: useAuthStore((state) => state.userRole),
-        isLoading: useAuthStore((state) => state.loading || state.profileLoading),
+        isLoading: useAuthStore(
+          (state) => state.loading || state.profileLoading,
+        ),
         profileLoading: useAuthStore((state) => state.profileLoading),
         profileError: useAuthStore((state) => state.profileError),
         login: async (email: string, password: string) => {
@@ -95,7 +124,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             await useAuthStore.getState().login(email, password);
             return { success: true };
           } catch (error) {
-            const message = error instanceof Error ? error.message : 'Authentication failed';
+            const message =
+              error instanceof Error ? error.message : 'Authentication failed';
             return { success: false, error: message };
           }
         },

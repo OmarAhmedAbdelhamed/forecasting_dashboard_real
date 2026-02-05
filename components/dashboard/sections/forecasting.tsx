@@ -66,12 +66,10 @@ import {
   Sparkles,
   Calendar as CalendarIcon,
   HardDriveDownload,
-
   Copy,
   Eye,
   ZoomIn,
   ZoomOut,
-
   Flag,
   Plus,
 } from 'lucide-react';
@@ -127,7 +125,13 @@ import { PromotionCalendar } from '@/components/dashboard/visualizations/promoti
 import { useToast } from '@/components/ui/shared/use-toast';
 
 // Custom X-Axis Tick Component for Weather
-const CustomizedAxisTick = (props: { x?: number; y?: number; payload?: { value: string }; data: ForecastData[]; fontSize?: number }) => {
+const CustomizedAxisTick = (props: {
+  x?: number;
+  y?: number;
+  payload?: { value: string };
+  data: ForecastData[];
+  fontSize?: number;
+}) => {
   const { x, y, payload, data, fontSize } = props;
   if (!payload) return null;
   const dateStr = payload.value;
@@ -170,10 +174,44 @@ const CustomizedAxisTick = (props: { x?: number; y?: number; payload?: { value: 
 
 export function ForecastingSection() {
   // Permissions hook
-  const { dataScope, roleConfig, hasAnyRole, hasRole, isLoading: permissionsLoading } = usePermissions();
+  const {
+    dataScope,
+    roleConfig,
+    hasAnyRole,
+    hasRole,
+    isLoading: permissionsLoading,
+  } = usePermissions();
 
   // Visibility hook for role-based UI control
-  const { canSeeKpi, canSeeChart, canSeeTable, canSeeAction } = useVisibility('pricing-promotion');
+  const { canSeeKpi, canSeeChart, canSeeTable, canSeeAction } =
+    useVisibility('pricing-promotion');
+
+  // Filter options based on permissions
+  const filteredRegions = useMemo(() => {
+    if (dataScope.regions.length > 0) {
+      return REGIONS.filter((r) => dataScope.regions.includes(r.value));
+    }
+    return REGIONS;
+  }, [dataScope.regions]);
+
+  const filteredStores = useMemo(() => {
+    if (dataScope.stores.length > 0) {
+      return STORES.filter((s) => dataScope.stores.includes(s.value));
+    }
+    return STORES;
+  }, [dataScope.stores]);
+
+  const filteredCategories = useMemo(() => {
+    if (dataScope.categories.length > 0) {
+      return CATEGORIES.filter((c) => dataScope.categories.includes(c.value));
+    }
+    return CATEGORIES;
+  }, [dataScope.categories]);
+
+  const filteredProducts = useMemo(() => {
+    // Products could potentially be filtered by category if we wanted dependency
+    return PRODUCTS;
+  }, []);
 
   // Inputs
   const [magazaKodu, setMagazaKodu] = useState<string[]>([]);
@@ -197,7 +235,7 @@ export function ForecastingSection() {
 
   const [promosyon, setPromosyon] = useState('INTERNET_INDIRIMI');
   const [promosyonIndirimOrani, setPromosyonIndirimOrani] = useState('9');
-  
+
   // Base values (Component Scope)
   const baseSatisFiyati = 87.45;
   const baseHamFiyat = 67.67;
@@ -235,7 +273,9 @@ export function ForecastingSection() {
     // If user selected generic 'KATALOG', show KATALOG campaigns. etc.
     // For demo purposes, if no direct match, show top 3 by score.
     const matches = SIMILAR_CAMPAIGNS.filter((c) => c.type === promosyon);
-    if (matches.length > 0) {return matches;}
+    if (matches.length > 0) {
+      return matches;
+    }
     return SIMILAR_CAMPAIGNS.slice(0, 3); // Fallback
   }, [promosyon]);
 
@@ -245,7 +285,9 @@ export function ForecastingSection() {
     };
     checkScreenSize();
     window.addEventListener('resize', checkScreenSize);
-    return () => { window.removeEventListener('resize', checkScreenSize); };
+    return () => {
+      window.removeEventListener('resize', checkScreenSize);
+    };
   }, []);
 
   // Sync with Dashboard Context
@@ -292,7 +334,9 @@ export function ForecastingSection() {
   ]);
 
   const handleAnalyze = async () => {
-    if (!startDate || !endDate) {return;}
+    if (!startDate || !endDate) {
+      return;
+    }
 
     setIsLoading(true);
 
@@ -313,7 +357,9 @@ export function ForecastingSection() {
       discount =
         ((baseSatisFiyati - parseFloat(targetPrice)) / baseSatisFiyati) * 100;
       // Safety check
-      if (discount < 0) {discount = 0;}
+      if (discount < 0) {
+        discount = 0;
+      }
     } else {
       discount = parseFloat(promosyonIndirimOrani) || 0;
     }
@@ -322,10 +368,10 @@ export function ForecastingSection() {
     let currentStock = 300;
 
     for (let i = 0; i < days; i++) {
-        // Restock every 3 days (simulated delivery)
-        if(i > 0 && i % 2 === 0) {
-            currentStock += 350;
-        }
+      // Restock every 3 days (simulated delivery)
+      if (i > 0 && i % 2 === 0) {
+        currentStock += 350;
+      }
 
       const currentDate = addDays(startDate, i);
 
@@ -341,9 +387,8 @@ export function ForecastingSection() {
       // Base forecast in UNITS (approx 170 units * 87.45 TL ~= 14,800 TL -> 5 digits)
       const baseForecast = 140 + Math.floor(Math.random() * 40);
       const patternBase = createSpecificPattern(i, days, baseForecast);
-      
-      // Values in Revenue (TL) for Chart
 
+      // Values in Revenue (TL) for Chart
 
       const lift = isPromoActive ? 1 + discount / 100 : 1;
       const dailyDemand = Math.round(patternBase * lift); // This is what customers WANT to buy (Units)
@@ -353,7 +398,7 @@ export function ForecastingSection() {
       let lostSales = 0;
 
       if (currentStock < dailyDemand) {
-        actualSales = currentStock;     // Sell whatever is left
+        actualSales = currentStock; // Sell whatever is left
         lostSales = dailyDemand - actualSales; // The rest is lost
       }
 
@@ -376,7 +421,8 @@ export function ForecastingSection() {
         tarih: format(currentDate, "yyyy-MM-dd'T'00:00:00"),
         baseline: parseFloat(patternBase.toFixed(0)), // Units
         tahmin: isPromoActive ? parseFloat(finalTahmin.toFixed(0)) : null, // Units
-        unconstrained_demand: lostSales > 0 ? parseFloat(dailyDemand.toFixed(0)) : null, // Units (Potential Sales)
+        unconstrained_demand:
+          lostSales > 0 ? parseFloat(dailyDemand.toFixed(0)) : null, // Units (Potential Sales)
         lost_sales: lostSales,
         ciro_adedi: ciro_adedi,
         benim_promom: isPromoActive ? [promosyon] : [],
@@ -401,7 +447,9 @@ export function ForecastingSection() {
     total: number,
     base: number,
   ) => {
-    if (index % 7 === 5 || index % 7 === 6) {return Math.round(base * 1.2);}
+    if (index % 7 === 5 || index % 7 === 6) {
+      return Math.round(base * 1.2);
+    }
     return base;
   };
 
@@ -419,36 +467,31 @@ export function ForecastingSection() {
 
   // Calculate potential forecast (unconstrained)
 
-
   const totalRevenue =
     promoPeriodData?.reduce((acc, curr) => acc + curr.ciro, 0) || 0;
 
   // Financial Logic
   // baseHamFiyat and baseSatisFiyati are now in component scope
-  
-
-
-  
-
-  
-
-
-
 
   // Calculate directly from unit-based lost_sales property (Filtered by Promo Period)
-  const totalLostSalesUnits = promoPeriodData?.reduce((acc, curr) => acc + (curr.lost_sales || 0), 0) || 0;
-  
+  const totalLostSalesUnits =
+    promoPeriodData?.reduce((acc, curr) => acc + (curr.lost_sales || 0), 0) ||
+    0;
+
   // Calculate Revenue Loss
   const estimatedRevenueLoss = totalLostSalesUnits * baseSatisFiyati;
-  
+
   // Calculate Baseline Revenue (since baseline in chart is now Units)
   // We need to re-calculate it or derive it
-  const totalBaselineUnits = forecastData ? forecastData.reduce((acc, curr) => acc + (curr.baseline || 0), 0) : 0;
+  const totalBaselineUnits = forecastData
+    ? forecastData.reduce((acc, curr) => acc + (curr.baseline || 0), 0)
+    : 0;
   const totalBaselineRevenue = totalBaselineUnits * baseSatisFiyati;
 
   // 1. Lift Calculation
   const liftAmount = totalRevenue - totalBaselineRevenue;
-  const liftPercentage = totalBaselineRevenue > 0 ? (liftAmount / totalBaselineRevenue) * 100 : 0;
+  const liftPercentage =
+    totalBaselineRevenue > 0 ? (liftAmount / totalBaselineRevenue) * 100 : 0;
 
   return (
     <div className='space-y-2 2xl:space-y-4'>
@@ -464,27 +507,26 @@ export function ForecastingSection() {
             </p>
           </div>
 
-          
-            <div className="flex items-center gap-2">
-               <Button
-                disabled={!forecastData}
-                className={`h-9 2xl:h-10 text-xs 2xl:text-sm shadow-sm transition-all ${forecastData ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-muted text-muted-foreground'}`}
-                onClick={() => setIsPlanningModalOpen(true)}
-              >
-                 <Plus className="w-4 h-4 mr-1.5" />
-                 Kampanyayı Oluştur
-              </Button>
+          <div className='flex items-center gap-2'>
+            <Button
+              disabled={!forecastData}
+              className={`h-9 2xl:h-10 text-xs 2xl:text-sm shadow-sm transition-all ${forecastData ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-muted text-muted-foreground'}`}
+              onClick={() => setIsPlanningModalOpen(true)}
+            >
+              <Plus className='w-4 h-4 mr-1.5' />
+              Kampanyayı Oluştur
+            </Button>
 
-              <Button
-                variant='outline'
-                size='icon'
-                onClick={() => setIsExportModalOpen(true)}
-                className='h-9 w-9 2xl:h-10 2xl:w-10 border-[#FFB840] bg-[#FFB840]/10 text-[#0D1E3A] hover:bg-[#FFB840] hover:text-[#0D1E3A] transition-all duration-200'
-                title='Verileri Dışa Aktar'
-              >
-                <HardDriveDownload className='h-4 w-4 2xl:h-5 2xl:w-5' />
-              </Button>
-            </div>
+            <Button
+              variant='outline'
+              size='icon'
+              onClick={() => setIsExportModalOpen(true)}
+              className='h-9 w-9 2xl:h-10 2xl:w-10 border-[#FFB840] bg-[#FFB840]/10 text-[#0D1E3A] hover:bg-[#FFB840] hover:text-[#0D1E3A] transition-all duration-200'
+              title='Verileri Dışa Aktar'
+            >
+              <HardDriveDownload className='h-4 w-4 2xl:h-5 2xl:w-5' />
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -669,9 +711,9 @@ export function ForecastingSection() {
 
                 <Tabs
                   value={pricingMode}
-                  onValueChange={(v) =>
-                    { setPricingMode(v as 'discount' | 'price'); }
-                  }
+                  onValueChange={(v) => {
+                    setPricingMode(v as 'discount' | 'price');
+                  }}
                   className='w-full'
                 >
                   <TabsList className='grid w-full grid-cols-2 h-7'>
@@ -780,37 +822,37 @@ export function ForecastingSection() {
                       Kısıtlar & Bütçe
                     </Label>
                     <UITooltip>
-                        <UITooltipTrigger>
-                          <Info className='h-3 w-3 text-muted-foreground/60 hover:text-indigo-600 cursor-help' />
-                        </UITooltipTrigger>
-                        <UITooltipContent>
-                          <p>Kampanya bütçesi veya hedef satış adedi.</p>
-                        </UITooltipContent>
-                      </UITooltip>
+                      <UITooltipTrigger>
+                        <Info className='h-3 w-3 text-muted-foreground/60 hover:text-indigo-600 cursor-help' />
+                      </UITooltipTrigger>
+                      <UITooltipContent>
+                        <p>Kampanya bütçesi veya hedef satış adedi.</p>
+                      </UITooltipContent>
+                    </UITooltip>
                   </div>
                 </div>
 
                 <div className='flex bg-muted rounded-md p-0.5 h-6'>
-                    <button
-                      onClick={() => setBudgetMode('budget')}
-                      className={`flex-1 text-[9px] rounded-sm font-medium transition-all ${
-                        budgetMode === 'budget'
-                          ? 'bg-white shadow-sm text-foreground'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      Bütçe (TL)
-                    </button>
-                    <button
-                      onClick={() => setBudgetMode('units')}
-                      className={`flex-1 text-[9px] rounded-sm font-medium transition-all ${
-                        (budgetMode as string) === 'units'
-                          ? 'bg-white shadow-sm text-foreground'
-                          : 'text-muted-foreground hover:text-foreground'
-                      }`}
-                    >
-                      Adet
-                    </button>
+                  <button
+                    onClick={() => setBudgetMode('budget')}
+                    className={`flex-1 text-[9px] rounded-sm font-medium transition-all ${
+                      budgetMode === 'budget'
+                        ? 'bg-white shadow-sm text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Bütçe (TL)
+                  </button>
+                  <button
+                    onClick={() => setBudgetMode('units')}
+                    className={`flex-1 text-[9px] rounded-sm font-medium transition-all ${
+                      (budgetMode as string) === 'units'
+                        ? 'bg-white shadow-sm text-foreground'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    Adet
+                  </button>
                 </div>
 
                 <Input
@@ -822,19 +864,24 @@ export function ForecastingSection() {
                   value={budget}
                   onChange={(e) => setBudget(e.target.value)}
                 />
-                
+
                 {budget && parseFloat(budget) > 0 && (
-                    <div className='text-[10px] text-muted-foreground px-1'>
-                      {budgetMode === 'budget' ? (
-                          <span>
-                            ~{Math.round(parseFloat(budget) / baseHamFiyat).toLocaleString()} adet ürün (Maliyet: {baseHamFiyat} TL)
-                          </span>
-                      ) : (
-                          <span>
-                            ~{(parseFloat(budget) * baseHamFiyat).toLocaleString()} TL bütçe gereksinimi
-                          </span>
-                      )}
-                    </div>
+                  <div className='text-[10px] text-muted-foreground px-1'>
+                    {budgetMode === 'budget' ? (
+                      <span>
+                        ~
+                        {Math.round(
+                          parseFloat(budget) / baseHamFiyat,
+                        ).toLocaleString()}{' '}
+                        adet ürün (Maliyet: {baseHamFiyat} TL)
+                      </span>
+                    ) : (
+                      <span>
+                        ~{(parseFloat(budget) * baseHamFiyat).toLocaleString()}{' '}
+                        TL bütçe gereksinimi
+                      </span>
+                    )}
+                  </div>
                 )}
               </div>
 
@@ -881,81 +928,98 @@ export function ForecastingSection() {
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-2 p-3'>
-              <Tabs defaultValue="success" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-2">
-                  <TabsTrigger value="success" className="text-[10px] 2xl:text-xs h-7 data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700">
+              <Tabs defaultValue='success' className='w-full'>
+                <TabsList className='grid w-full grid-cols-2 mb-2'>
+                  <TabsTrigger
+                    value='success'
+                    className='text-[10px] 2xl:text-xs h-7 data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700'
+                  >
                     Başarı Hikayeleri
                   </TabsTrigger>
-                  <TabsTrigger value="failure" className="text-[10px] 2xl:text-xs h-7 data-[state=active]:bg-red-50 data-[state=active]:text-red-700">
+                  <TabsTrigger
+                    value='failure'
+                    className='text-[10px] 2xl:text-xs h-7 data-[state=active]:bg-red-50 data-[state=active]:text-red-700'
+                  >
                     Kayıp Fırsatlar
                   </TabsTrigger>
                 </TabsList>
-                
+
                 {['success', 'failure'].map((tab) => (
-                  <TabsContent key={tab} value={tab} className="space-y-2 mt-0">
+                  <TabsContent key={tab} value={tab} className='space-y-2 mt-0'>
                     {filteredCampaigns
-                      .filter(c => {
+                      .filter((c) => {
                         // Classification Logic
-                        const isSuccess = (c.actualRevenue / c.targetRevenue >= 0.95) && 
-                                          (Math.abs(c.plannedStockDays - c.actualStockDays) <= 3);
-                         if (tab === 'success') return isSuccess;
-                         return !isSuccess;
+                        const isSuccess =
+                          c.actualRevenue / c.targetRevenue >= 0.95 &&
+                          Math.abs(c.plannedStockDays - c.actualStockDays) <= 3;
+                        if (tab === 'success') return isSuccess;
+                        return !isSuccess;
                       })
                       .map((camp) => {
-                         const achievement = (camp.actualRevenue / camp.targetRevenue) * 100;
-                         const isStockIssue = camp.stockOutDays > camp.plannedStockDays / 2;
-                         
-                         return (
-                        <div
-                          key={camp.id}
-                          className={`bg-white border rounded-lg p-2 hover:shadow-sm transition-shadow ${tab === 'success' ? 'border-l-4 border-l-emerald-500' : 'border-l-4 border-l-red-500'}`}
-                        >
-                          <div className='flex justify-between items-start mb-1'>
-                            <div>
-                              <div className='font-semibold text-xs text-indigo-950'>
-                                {camp.name}
-                              </div>
-                              <div className='text-[10px] text-muted-foreground'>
-                                {camp.date}
-                              </div>
-                            </div>
-                            <Button
-                              variant='ghost'
-                              size='icon'
-                              className='h-5 w-5'
-                              onClick={() => {
-                                setSelectedCampaign(camp);
-                                setIsDetailModalOpen(true);
-                              }}
-                            >
-                              <Eye className='h-3 w-3 text-muted-foreground' />
-                            </Button>
-                          </div>
+                        const achievement =
+                          (camp.actualRevenue / camp.targetRevenue) * 100;
+                        const isStockIssue =
+                          camp.stockOutDays > camp.plannedStockDays / 2;
 
-                          <div className='flex items-center gap-2 mt-2'>
-                             {tab === 'success' ? (
-                                <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
-                                   %{achievement.toFixed(0)} Hedef Tutma
+                        return (
+                          <div
+                            key={camp.id}
+                            className={`bg-white border rounded-lg p-2 hover:shadow-sm transition-shadow ${tab === 'success' ? 'border-l-4 border-l-emerald-500' : 'border-l-4 border-l-red-500'}`}
+                          >
+                            <div className='flex justify-between items-start mb-1'>
+                              <div>
+                                <div className='font-semibold text-xs text-indigo-950'>
+                                  {camp.name}
+                                </div>
+                                <div className='text-[10px] text-muted-foreground'>
+                                  {camp.date}
+                                </div>
+                              </div>
+                              <Button
+                                variant='ghost'
+                                size='icon'
+                                className='h-5 w-5'
+                                onClick={() => {
+                                  setSelectedCampaign(camp);
+                                  setIsDetailModalOpen(true);
+                                }}
+                              >
+                                <Eye className='h-3 w-3 text-muted-foreground' />
+                              </Button>
+                            </div>
+
+                            <div className='flex items-center gap-2 mt-2'>
+                              {tab === 'success' ? (
+                                <span className='text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full'>
+                                  %{achievement.toFixed(0)} Hedef Tutma
                                 </span>
-                             ) : (
-                                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${isStockIssue ? 'text-red-700 bg-red-50' : 'text-orange-700 bg-orange-50'}`}>
-                                   {isStockIssue ? 'Erken Tükendi (OOS)' : `%${achievement.toFixed(0)} Hedef Altı`}
+                              ) : (
+                                <span
+                                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${isStockIssue ? 'text-red-700 bg-red-50' : 'text-orange-700 bg-orange-50'}`}
+                                >
+                                  {isStockIssue
+                                    ? 'Erken Tükendi (OOS)'
+                                    : `%${achievement.toFixed(0)} Hedef Altı`}
                                 </span>
-                             )}
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )})}
-                      
-                      {filteredCampaigns.filter(c => {
-                          const isSuccess = (c.actualRevenue / c.targetRevenue >= 0.95) && 
-                                          (Math.abs(c.plannedStockDays - c.actualStockDays) <= 3);
-                         if (tab === 'success') return isSuccess;
-                         return !isSuccess;
-                      }).length === 0 && (
-                        <div className="text-center text-[10px] text-muted-foreground py-4">
-                           {tab === 'success' ? 'Kriterlere uygun başarı hikayesi bulunamadı.' : 'Kayıp fırsat bulunamadı.'}
-                        </div>
-                      )}
+                        );
+                      })}
+
+                    {filteredCampaigns.filter((c) => {
+                      const isSuccess =
+                        c.actualRevenue / c.targetRevenue >= 0.95 &&
+                        Math.abs(c.plannedStockDays - c.actualStockDays) <= 3;
+                      if (tab === 'success') return isSuccess;
+                      return !isSuccess;
+                    }).length === 0 && (
+                      <div className='text-center text-[10px] text-muted-foreground py-4'>
+                        {tab === 'success'
+                          ? 'Kriterlere uygun başarı hikayesi bulunamadı.'
+                          : 'Kayıp fırsat bulunamadı.'}
+                      </div>
+                    )}
                   </TabsContent>
                 ))}
               </Tabs>
@@ -1131,7 +1195,7 @@ export function ForecastingSection() {
                     </UITooltipTrigger>
                     <UITooltipContent>
                       <p className='max-w-xs'>
-                         Promosyonun sağladığı ekstra ciro. (Beklenen - Temel)
+                        Promosyonun sağladığı ekstra ciro. (Beklenen - Temel)
                       </p>
                     </UITooltipContent>
                   </UITooltip>
@@ -1142,14 +1206,16 @@ export function ForecastingSection() {
                 <div className='text-lg 2xl:text-xl font-bold'>
                   {isLoading ? '-' : `₺${(liftAmount / 1000).toFixed(1)}k`}
                 </div>
-                 <div className='flex items-center gap-2 mt-0.5 text-[10px] 2xl:text-xs'>
-                     <span className={`font-medium ${liftPercentage >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-                        {liftPercentage > 0 ? '+' : ''}%{liftPercentage.toFixed(1)}
-                     </span>
-                      <span className='text-muted-foreground'>
-                        Temel Satışa Göre
-                      </span>
-                 </div>
+                <div className='flex items-center gap-2 mt-0.5 text-[10px] 2xl:text-xs'>
+                  <span
+                    className={`font-medium ${liftPercentage >= 0 ? 'text-emerald-600' : 'text-red-600'}`}
+                  >
+                    {liftPercentage > 0 ? '+' : ''}%{liftPercentage.toFixed(1)}
+                  </span>
+                  <span className='text-muted-foreground'>
+                    Temel Satışa Göre
+                  </span>
+                </div>
               </CardContent>
             </Card>
 
@@ -1194,7 +1260,9 @@ export function ForecastingSection() {
                 variant={viewMode === 'chart' ? 'secondary' : 'ghost'}
                 size='sm'
                 className='h-7 text-xs gap-2'
-                onClick={() => { setViewMode('chart'); }}
+                onClick={() => {
+                  setViewMode('chart');
+                }}
               >
                 <LayoutGrid className='h-3.5 w-3.5' /> Grafik
               </Button>
@@ -1202,7 +1270,9 @@ export function ForecastingSection() {
                 variant={viewMode === 'calendar' ? 'secondary' : 'ghost'}
                 size='sm'
                 className='h-7 text-xs gap-2'
-                onClick={() => { setViewMode('calendar'); }}
+                onClick={() => {
+                  setViewMode('calendar');
+                }}
               >
                 <CalendarIcon className='h-3.5 w-3.5' /> Takvim
               </Button>
@@ -1258,32 +1328,36 @@ export function ForecastingSection() {
                         Kaçan
                       </span>
                     </div>
-                     <div className='flex items-center gap-1.5'>
+                    <div className='flex items-center gap-1.5'>
                       <span className='w-2 h-2 rounded-full bg-[#FFB840]' />
-                      <span className='text-muted-foreground font-medium'>Stok Adedi</span>
+                      <span className='text-muted-foreground font-medium'>
+                        Stok Adedi
+                      </span>
                     </div>
 
                     {/* Zoom Controls */}
-                    <div className="flex items-center gap-1 ml-2 border-l pl-3">
-                         <span className="text-[10px] text-muted-foreground mr-1">Zoom:</span>
-                        <Button
-                            variant="outline"
-                            size="icon"
-                            className={`h-6 w-6 ${isZoomed ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : ''}`}
-                            onClick={() => setIsZoomed(true)}
-                            title="Yaklaş (Scroll)"
-                        >
-                            <ZoomIn className="h-3 w-3" />
-                        </Button>
-                        <Button
-                            variant="outline"
-                            size="icon"
-                            className={`h-6 w-6 ${!isZoomed ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : ''}`}
-                            onClick={() => setIsZoomed(false)}
-                            title="Sığdır"
-                        >
-                            <ZoomOut className="h-3 w-3" />
-                        </Button>
+                    <div className='flex items-center gap-1 ml-2 border-l pl-3'>
+                      <span className='text-[10px] text-muted-foreground mr-1'>
+                        Zoom:
+                      </span>
+                      <Button
+                        variant='outline'
+                        size='icon'
+                        className={`h-6 w-6 ${isZoomed ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : ''}`}
+                        onClick={() => setIsZoomed(true)}
+                        title='Yaklaş (Scroll)'
+                      >
+                        <ZoomIn className='h-3 w-3' />
+                      </Button>
+                      <Button
+                        variant='outline'
+                        size='icon'
+                        className={`h-6 w-6 ${!isZoomed ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : ''}`}
+                        onClick={() => setIsZoomed(false)}
+                        title='Sığdır'
+                      >
+                        <ZoomOut className='h-3 w-3' />
+                      </Button>
                     </div>
                   </div>
                 </div>
@@ -1379,16 +1453,18 @@ export function ForecastingSection() {
                               format(new Date(value), 'PPP')
                             }
                             formatter={(value: number, name: string) => {
-                              if (name === 'tahmin')
-                                {return [value, 'Promosyon Tahmini (Adet)'];}
+                              if (name === 'tahmin') {
+                                return [value, 'Promosyon Tahmini (Adet)'];
+                              }
                               if (name === 'baseline')
                                 return [value, 'Temel Satış (Adet)'];
-                                if (name === 'stok' || name === 'Stok Adedi')
+                              if (name === 'stok' || name === 'Stok Adedi')
                                 return [value, 'Stok Adedi'];
                               if (name === 'unconstrained_demand')
                                 return [value, 'Potansiyel Talep (Adet)'];
-                              if (name === 'lost_sales' && value > 0)
-                                {return [value, 'Kaçırılan Satış'];}
+                              if (name === 'lost_sales' && value > 0) {
+                                return [value, 'Kaçırılan Satış'];
+                              }
                               return [value, name];
                             }}
                             label={
@@ -1483,14 +1559,28 @@ export function ForecastingSection() {
                     </div>
                     <div className='flex items-baseline gap-2'>
                       <span className='text-xl 2xl:text-2xl font-black text-emerald-600 tracking-tighter'>
-                        +{totalBaselineRevenue > 0 ? (((totalRevenue - totalBaselineRevenue) / totalBaselineRevenue) * 100).toFixed(0) : 0}%
+                        +
+                        {totalBaselineRevenue > 0
+                          ? (
+                              ((totalRevenue - totalBaselineRevenue) /
+                                totalBaselineRevenue) *
+                              100
+                            ).toFixed(0)
+                          : 0}
+                        %
                       </span>
                       <span className='text-[10px] 2xl:text-xs text-muted-foreground font-medium'>
                         Lift
                       </span>
                     </div>
                     <p className='text-emerald-700 text-[10px] 2xl:text-xs mt-0.5 leading-tight'>
-                      ₺{((totalRevenue - totalBaselineRevenue) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} net ciro artışı sağladı.
+                      ₺
+                      {(
+                        totalRevenue - totalBaselineRevenue || 0
+                      ).toLocaleString(undefined, {
+                        maximumFractionDigits: 0,
+                      })}{' '}
+                      net ciro artışı sağladı.
                     </p>
                   </div>
                 </CardContent>
@@ -1540,24 +1630,30 @@ export function ForecastingSection() {
                     </p>
                     {/* Financial Warning */}
                     <div className='mt-1 text-[10px] bg-red-100/50 p-1 rounded text-red-800 font-medium'>
-                      Stok Maliyeti: ₺{(totalLostSalesUnits * 15).toLocaleString()}
+                      Stok Maliyeti: ₺
+                      {(totalLostSalesUnits * 15).toLocaleString()}
                       <span className='block font-normal opacity-80'>
                         (Acil sipariş farkı)
                       </span>
                     </div>
 
-                    <div className="mt-2 pt-2 border-t border-red-200">
-                         <div className="text-[10px] text-red-700 font-medium mb-1.5">
-                            Uyarı: Promosyonun en optimal şekilde gerçekleşmesi için günlük stoğun min <span className="font-bold">750</span> olması gerekiyor.
-                         </div>
-                        <Button 
-                            size="sm" 
-                            variant="destructive" 
-                            className="w-full h-6 text-[10px] bg-red-100 text-red-700 hover:bg-red-200 border-none shadow-none"
-                            onClick={() => window.location.href = '/dashboard?section=inventory_planning'}
-                        >
-                            Envanter Planlamaya Git
-                        </Button>
+                    <div className='mt-2 pt-2 border-t border-red-200'>
+                      <div className='text-[10px] text-red-700 font-medium mb-1.5'>
+                        Uyarı: Promosyonun en optimal şekilde gerçekleşmesi için
+                        günlük stoğun min <span className='font-bold'>750</span>{' '}
+                        olması gerekiyor.
+                      </div>
+                      <Button
+                        size='sm'
+                        variant='destructive'
+                        className='w-full h-6 text-[10px] bg-red-100 text-red-700 hover:bg-red-200 border-none shadow-none'
+                        onClick={() =>
+                          (window.location.href =
+                            '/dashboard?section=inventory_planning')
+                        }
+                      >
+                        Envanter Planlamaya Git
+                      </Button>
                     </div>
                   </div>
                 </CardContent>
@@ -1638,8 +1734,8 @@ export function ForecastingSection() {
               <CardContent className='pt-1 pb-2'>
                 {/* Simplified Visualization using simple bars for now */}
                 <div className='space-y-2'>
-                      {/* Revenue Share Visualization - Pie Chart Logic represented as Bars for now per request style */}
-                     {[
+                  {/* Revenue Share Visualization - Pie Chart Logic represented as Bars for now per request style */}
+                  {[
                     {
                       type: 'INTERNET_INDIRIMI',
                       share: 45,
@@ -1649,19 +1745,19 @@ export function ForecastingSection() {
                     {
                       type: 'ALISVERIS_INDIRIMI_500',
                       share: 25,
-                       value: '100k',
+                      value: '100k',
                       color: 'bg-blue-500',
                     },
                     {
                       type: 'COKLU_ALIM',
                       share: 20,
-                       value: '80k',
+                      value: '80k',
                       color: 'bg-indigo-500',
                     },
                     {
                       type: 'OZEL_GUN_INDIRIMI',
                       share: 10,
-                       value: '40k',
+                      value: '40k',
                       color: 'bg-amber-500',
                     },
                   ].map((item, i) => (
@@ -1735,7 +1831,7 @@ export function ForecastingSection() {
           </div>
 
           {/* 3. Detailed History Table with Advanced Metrics */}
-            {/* 3. Detailed History Table with Advanced Metrics */}
+          {/* 3. Detailed History Table with Advanced Metrics */}
           <Card>
             <CardHeader className='py-2 pb-1 2xl:py-3 flex flex-row items-center justify-between'>
               <div className='space-y-0.5'>
@@ -1754,12 +1850,16 @@ export function ForecastingSection() {
                     <tr>
                       <th className='p-2 2xl:p-3 w-[100px]'>Tarih</th>
                       <th className='p-2 2xl:p-3'>Kampanya / Tip</th>
-                      <th className='p-2 2xl:p-3 w-[100px] text-center'>Durum</th>
+                      <th className='p-2 2xl:p-3 w-[100px] text-center'>
+                        Durum
+                      </th>
                       <th className='p-2 2xl:p-3 text-right'>
                         Ciro Artışı (Lift)
                       </th>
-                      <th className='p-2 2xl:p-3 text-right'>Brüt Kar Etkisi</th>
-                    <th className='p-2 2xl:p-3 text-center'>Stok Durumu</th>
+                      <th className='p-2 2xl:p-3 text-right'>
+                        Brüt Kar Etkisi
+                      </th>
+                      <th className='p-2 2xl:p-3 text-center'>Stok Durumu</th>
                       <th className='p-2 2xl:p-3 text-right'>
                         Tahmin Doğruluğu
                       </th>
@@ -1769,183 +1869,227 @@ export function ForecastingSection() {
                   <tbody className='divide-y'>
                     {[...PROMOTION_HISTORY_DATA]
                       .sort((a, b) => {
-                           // Logic: Future (Pending > Draft > Approved) -> Past
-                           // First, simplified date comparison (assuming string dates are chronological or need parsing)
-                           // For Mock purposes, let's prioritize by Status Priority
-                           const statusOrder = { pending: 0, draft: 1, approved: 2, completed: 3 };
-                           return (statusOrder[a.status as keyof typeof statusOrder] ?? 4) - (statusOrder[b.status as keyof typeof statusOrder] ?? 4);
+                        // Logic: Future (Pending > Draft > Approved) -> Past
+                        // First, simplified date comparison (assuming string dates are chronological or need parsing)
+                        // For Mock purposes, let's prioritize by Status Priority
+                        const statusOrder = {
+                          pending: 0,
+                          draft: 1,
+                          approved: 2,
+                          completed: 3,
+                        };
+                        return (
+                          (statusOrder[a.status as keyof typeof statusOrder] ??
+                            4) -
+                          (statusOrder[b.status as keyof typeof statusOrder] ??
+                            4)
+                        );
                       })
                       .map((row, i) => (
-                      <tr
-                        key={i}
-                        className='group hover:bg-muted/30 transition-colors cursor-pointer'
-                        onClick={() => {
+                        <tr
+                          key={i}
+                          className='group hover:bg-muted/30 transition-colors cursor-pointer'
+                          onClick={() => {
                             // Unified handler for all statuses
                             setIsDetailModalOpen(true);
-                            
+
                             if (row.status === 'completed') {
-                                setSelectedCampaign({
-                                    id: 'mock-history-1',
-                                    name: row.name,
-                                    date: row.date,
-                                    type: row.type, 
-                                    similarityScore: 85,
-                                    lift: 15,
-                                    roi: 120,
-                                    targetRevenue: 110000,
-                                    actualRevenue: 124500,
-                                    plannedStockDays: 14,
-                                    actualStockDays: 12,
-                                    stockOutDays: 2,
-                                    sellThrough: 98,
-                                    markdownCost: 4200,
-                                    status: 'completed'
-                                } as SimilarCampaign);
+                              setSelectedCampaign({
+                                id: 'mock-history-1',
+                                name: row.name,
+                                date: row.date,
+                                type: row.type,
+                                similarityScore: 85,
+                                lift: 15,
+                                roi: 120,
+                                targetRevenue: 110000,
+                                actualRevenue: 124500,
+                                plannedStockDays: 14,
+                                actualStockDays: 12,
+                                stockOutDays: 2,
+                                sellThrough: 98,
+                                markdownCost: 4200,
+                                status: 'completed',
+                              } as SimilarCampaign);
                             } else {
-                                // For Future (Draft, Pending, Approved)
-                                setSelectedCampaign({
-                                    id: 'mock-future-1',
-                                    name: row.name,
-                                    date: row.date,
-                                    type: row.type,
-                                    similarityScore: 90,
-                                    lift: 22, // Projected Lift
-                                    roi: 135, // Projected ROI
-                                    targetRevenue: 145000, 
-                                    actualRevenue: 0, // Not started
-                                    plannedStockDays: 14,
-                                    actualStockDays: 0,
-                                    stockOutDays: 0,
-                                    sellThrough: 0,
-                                    markdownCost: 4500, // Budget
-                                    status: row.status // key to differentiate view
-                                } as SimilarCampaign);
+                              // For Future (Draft, Pending, Approved)
+                              setSelectedCampaign({
+                                id: 'mock-future-1',
+                                name: row.name,
+                                date: row.date,
+                                type: row.type,
+                                similarityScore: 90,
+                                lift: 22, // Projected Lift
+                                roi: 135, // Projected ROI
+                                targetRevenue: 145000,
+                                actualRevenue: 0, // Not started
+                                plannedStockDays: 14,
+                                actualStockDays: 0,
+                                stockOutDays: 0,
+                                sellThrough: 0,
+                                markdownCost: 4500, // Budget
+                                status: row.status, // key to differentiate view
+                              } as SimilarCampaign);
                             }
-                        }}
-                      >
-                        <td className='p-2 2xl:p-3 font-medium text-gray-700'>
-                          {row.date}
-                        </td>
-                        <td className='p-2 2xl:p-3'>
-                          <div className='font-semibold text-gray-900'>
-                            {row.name}
-                          </div>
-                          <div className='text-[10px] text-muted-foreground bg-muted w-fit px-1.5 py-0.5 rounded'>
-                            {row.type}
-                          </div>
-                        </td>
-                        <td className='p-2 2xl:p-3 text-center'>
-                           {/* Status Badge */}
-                           {(() => {
-                               switch(row.status) {
-                                   case 'draft': return <span className="bg-[#e0e0e0] text-[#333] px-1.5 py-0.5 rounded font-semibold text-[9px] border border-gray-300">TASLAK</span>
-                                   case 'pending': return <span className="bg-[#fff3cd] text-[#856404] px-1.5 py-0.5 rounded font-semibold text-[9px] border border-yellow-200">ONAY BEKLİYOR</span>
-                                   case 'approved': return <span className="bg-[#d4edda] text-[#155724] px-1.5 py-0.5 rounded font-semibold text-[9px] border border-green-200">ONAYLANDI</span>
-                                   case 'completed': return <span className="bg-[#d1ecf1] text-[#0c5460] px-1.5 py-0.5 rounded font-semibold text-[9px] border border-cyan-200">TAMAMLANDI</span>
-                                   default: return <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[9px]">BİLİNMİYOR</span>
-                               }
-                           })()}
-                        </td>
-                        <td className='p-2 2xl:p-3 text-right'>
-                          <div className='font-bold text-gray-900'>
-                            {row.uplift}
-                          </div>
-                          <div className='text-[10px] text-muted-foreground'>
-                            {row.upliftVal}
-                          </div>
-                        </td>
-                        <td className='p-2 2xl:p-3 text-right font-medium'>
-                          <span
-                            className={
-                              row.profit.startsWith('-')
-                                ? 'text-red-600'
-                                : 'text-emerald-600'
-                            }
-                          >
-                            {row.profit}
-                          </span>
-                        </td>
-                        
-                        <td className='p-2 2xl:p-3 text-center'>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                              row.stock === 'OK'
-                                ? 'bg-green-50 text-green-700 border-green-200'
+                          }}
+                        >
+                          <td className='p-2 2xl:p-3 font-medium text-gray-700'>
+                            {row.date}
+                          </td>
+                          <td className='p-2 2xl:p-3'>
+                            <div className='font-semibold text-gray-900'>
+                              {row.name}
+                            </div>
+                            <div className='text-[10px] text-muted-foreground bg-muted w-fit px-1.5 py-0.5 rounded'>
+                              {row.type}
+                            </div>
+                          </td>
+                          <td className='p-2 2xl:p-3 text-center'>
+                            {/* Status Badge */}
+                            {(() => {
+                              switch (row.status) {
+                                case 'draft':
+                                  return (
+                                    <span className='bg-[#e0e0e0] text-[#333] px-1.5 py-0.5 rounded font-semibold text-[9px] border border-gray-300'>
+                                      TASLAK
+                                    </span>
+                                  );
+                                case 'pending':
+                                  return (
+                                    <span className='bg-[#fff3cd] text-[#856404] px-1.5 py-0.5 rounded font-semibold text-[9px] border border-yellow-200'>
+                                      ONAY BEKLİYOR
+                                    </span>
+                                  );
+                                case 'approved':
+                                  return (
+                                    <span className='bg-[#d4edda] text-[#155724] px-1.5 py-0.5 rounded font-semibold text-[9px] border border-green-200'>
+                                      ONAYLANDI
+                                    </span>
+                                  );
+                                case 'completed':
+                                  return (
+                                    <span className='bg-[#d1ecf1] text-[#0c5460] px-1.5 py-0.5 rounded font-semibold text-[9px] border border-cyan-200'>
+                                      TAMAMLANDI
+                                    </span>
+                                  );
+                                default:
+                                  return (
+                                    <span className='bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[9px]'>
+                                      BİLİNMİYOR
+                                    </span>
+                                  );
+                              }
+                            })()}
+                          </td>
+                          <td className='p-2 2xl:p-3 text-right'>
+                            <div className='font-bold text-gray-900'>
+                              {row.uplift}
+                            </div>
+                            <div className='text-[10px] text-muted-foreground'>
+                              {row.upliftVal}
+                            </div>
+                          </td>
+                          <td className='p-2 2xl:p-3 text-right font-medium'>
+                            <span
+                              className={
+                                row.profit.startsWith('-')
+                                  ? 'text-red-600'
+                                  : 'text-emerald-600'
+                              }
+                            >
+                              {row.profit}
+                            </span>
+                          </td>
+
+                          <td className='p-2 2xl:p-3 text-center'>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                row.stock === 'OK'
+                                  ? 'bg-green-50 text-green-700 border-green-200'
+                                  : row.stock === 'OOS'
+                                    ? 'bg-red-50 text-red-700 border-red-200'
+                                    : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                              }`}
+                            >
+                              {row.stock === 'OK'
+                                ? row.status === 'completed'
+                                  ? 'YETERLİ'
+                                  : 'GÜVENLİ'
                                 : row.stock === 'OOS'
-                                  ? 'bg-red-50 text-red-700 border-red-200'
-                                  : 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                            }`}
-                          >
-                            {row.stock === 'OK'
-                              ? (row.status === 'completed' ? 'YETERLİ' : 'GÜVENLİ')
-                              : row.stock === 'OOS'
-                                ? (row.status === 'completed' ? 'TÜKENDİ' : 'RİSKLİ')
-                                : 'AŞIRI STOK'}
-                          </span>
-                        </td>
-                        <td className='p-2 2xl:p-3 text-right text-gray-600'>
-                          {row.status === 'completed' ? row.forecast : '--'}
-                        </td>
-                        <td className='p-2 2xl:p-3 text-right'>
-                             {row.status === 'completed' ? (
-                                <Button variant="ghost" size="sm" className="h-6 text-[10px] hover:bg-indigo-50 hover:text-indigo-600">
-                                    <BarChart3 className="w-3 h-3 mr-1" /> Rapor
+                                  ? row.status === 'completed'
+                                    ? 'TÜKENDİ'
+                                    : 'RİSKLİ'
+                                  : 'AŞIRI STOK'}
+                            </span>
+                          </td>
+                          <td className='p-2 2xl:p-3 text-right text-gray-600'>
+                            {row.status === 'completed' ? row.forecast : '--'}
+                          </td>
+                          <td className='p-2 2xl:p-3 text-right'>
+                            {row.status === 'completed' ? (
+                              <Button
+                                variant='ghost'
+                                size='sm'
+                                className='h-6 text-[10px] hover:bg-indigo-50 hover:text-indigo-600'
+                              >
+                                <BarChart3 className='w-3 h-3 mr-1' /> Rapor
+                              </Button>
+                            ) : (
+                              <div className='flex justify-end gap-1'>
+                                <Button
+                                  variant='ghost'
+                                  size='sm'
+                                  className='h-6 w-6 p-0 hover:bg-blue-50 hover:text-blue-600'
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setIsDetailModalOpen(true);
+                                    setSelectedCampaign({
+                                      id: 'mock-future-1',
+                                      name: row.name,
+                                      date: row.date,
+                                      type: row.type,
+                                      similarityScore: 90,
+                                      lift: 22,
+                                      roi: 135,
+                                      targetRevenue: 145000,
+                                      actualRevenue: 0,
+                                      plannedStockDays: 14,
+                                      actualStockDays: 0,
+                                      stockOutDays: 0,
+                                      sellThrough: 0,
+                                      markdownCost: 4500,
+                                      status: row.status,
+                                    } as SimilarCampaign);
+                                  }}
+                                >
+                                  <Eye className='w-3 h-3' />
                                 </Button>
-                             ) : (
-                                <div className="flex justify-end gap-1">
-                                    <Button 
-                                        variant="ghost" 
-                                        size="sm" 
-                                        className="h-6 w-6 p-0 hover:bg-blue-50 hover:text-blue-600"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            setIsDetailModalOpen(true);
-                                            setSelectedCampaign({
-                                                id: 'mock-future-1',
-                                                name: row.name,
-                                                date: row.date,
-                                                type: row.type,
-                                                similarityScore: 90,
-                                                lift: 22, 
-                                                roi: 135,
-                                                targetRevenue: 145000, 
-                                                actualRevenue: 0,
-                                                plannedStockDays: 14,
-                                                actualStockDays: 0,
-                                                stockOutDays: 0,
-                                                sellThrough: 0,
-                                                markdownCost: 4500,
-                                                status: row.status 
-                                            } as SimilarCampaign);
-                                        }}
-                                    >
-                                        <Eye className="w-3 h-3" />
-                                    </Button>
-                                     <Button 
-                                        variant="ghost" 
-                                        size="sm" 
-                                        className="h-6 w-6 p-0 hover:bg-red-50 hover:text-red-600"
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            // Copy logic would go here
-                                            toast({
-                                                title: "Kopyalandı",
-                                                description: "Kampanya detayları panoya kopyalandı.",
-                                            });
-                                        }}
-                                    >
-                                        <Copy className="w-3 h-3" />
-                                    </Button>
-                                </div>
-                             )}
-                        </td>
-                      </tr>
-                    ))}
+                                <Button
+                                  variant='ghost'
+                                  size='sm'
+                                  className='h-6 w-6 p-0 hover:bg-red-50 hover:text-red-600'
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Copy logic would go here
+                                    toast({
+                                      title: 'Kopyalandı',
+                                      description:
+                                        'Kampanya detayları panoya kopyalandı.',
+                                    });
+                                  }}
+                                >
+                                  <Copy className='w-3 h-3' />
+                                </Button>
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       </div>
       <ExportPromotionModal
@@ -1955,301 +2099,579 @@ export function ForecastingSection() {
       />
 
       <CampaignCreationModal
-         open={isPlanningModalOpen}
-         onOpenChange={setIsPlanningModalOpen}
-         simulationMetrics={{
-             targetRevenue: forecastData ? `₺${(forecastData.reduce((acc, curr) => acc + (curr.tahmin || 0), 0) * baseSatisFiyati / 1000).toFixed(1)}k` : '-',
-             lift: forecastData ? '+' + (((forecastData.reduce((acc, curr) => acc + curr.ciro, 0) - (forecastData.reduce((acc, curr) => acc + (curr.baseline || 0), 0) * baseSatisFiyati)) / (forecastData.reduce((acc, curr) => acc + (curr.baseline || 0), 0) * baseSatisFiyati)) * 100).toFixed(0) + '%' : '-',
-             stockStatus: 'Optimal' // Mocked for now
-         }}
-         campaignContext={{
-             regions: bolge,
-             stores: magazaKodu,
-             products: urunKodu,
-             startDate: startPromosyon,
-             endDate: endPromosyon,
-             duration: startPromosyon && endPromosyon ? differenceInDays(endPromosyon, startPromosyon) + 1 : 0
-         }}
-         onSave={(data) => {
-             toast({
-                 title: "Kampanya Başarıyla Oluşturuldu",
-                 description: `${data.name} isimli kampanya ${data.status === 'active' ? 'yayına alındı' : 'taslak olarak kaydedildi'}.`,
-                 className: "bg-emerald-50 border-emerald-200 text-emerald-800",
-             });
-         }}
+        open={isPlanningModalOpen}
+        onOpenChange={setIsPlanningModalOpen}
+        simulationMetrics={{
+          targetRevenue: forecastData
+            ? `₺${((forecastData.reduce((acc, curr) => acc + (curr.tahmin || 0), 0) * baseSatisFiyati) / 1000).toFixed(1)}k`
+            : '-',
+          lift: forecastData
+            ? '+' +
+              (
+                ((forecastData.reduce((acc, curr) => acc + curr.ciro, 0) -
+                  forecastData.reduce(
+                    (acc, curr) => acc + (curr.baseline || 0),
+                    0,
+                  ) *
+                    baseSatisFiyati) /
+                  (forecastData.reduce(
+                    (acc, curr) => acc + (curr.baseline || 0),
+                    0,
+                  ) *
+                    baseSatisFiyati)) *
+                100
+              ).toFixed(0) +
+              '%'
+            : '-',
+          stockStatus: 'Optimal', // Mocked for now
+        }}
+        campaignContext={{
+          regions: bolge,
+          stores: magazaKodu,
+          products: urunKodu,
+          startDate: startPromosyon,
+          endDate: endPromosyon,
+          duration:
+            startPromosyon && endPromosyon
+              ? differenceInDays(endPromosyon, startPromosyon) + 1
+              : 0,
+        }}
+        onSave={(data) => {
+          toast({
+            title: 'Kampanya Başarıyla Oluşturuldu',
+            description: `${data.name} isimli kampanya ${data.status === 'active' ? 'yayına alındı' : 'taslak olarak kaydedildi'}.`,
+            className: 'bg-emerald-50 border-emerald-200 text-emerald-800',
+          });
+        }}
       />
 
       {/* Modal - Conditional Render: Scorecard vs Approval Form */}
       {selectedCampaign && (
         <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
-            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                {/* 
+          <DialogContent className='max-w-3xl max-h-[90vh] overflow-y-auto'>
+            {/* 
                   =============================================================================
                   VIEW A: COMPLETED CAMPAIGNS (SCORECARD)
                   =============================================================================
                 */}
-                {(selectedCampaign as SimilarCampaign).status === 'completed' ? (
-                <>
-                 <DialogHeader>
-                    <div className="flex items-center gap-3 mb-2">
-                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-r pr-3 mr-1">{selectedCampaign.date}</span>
-                         {/* Stamp Logic */}
-                         {(() => {
-                            const achievement = 1.12; // Mock: 112%
-                            const isOOS = true; // Mock: Stockout happened
-                            
-                            if(achievement >= 0.95 && !isOOS) return <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-200">BAŞARILI (%92)</span>
-                            if(isOOS) return <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded border border-red-200">STOK SORUNU</span>
-                            return <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-200">TAMAMLANDI</span>
-                         })()}
-                    </div>
-                    <div className="flex items-center justify-between">
-                        <DialogTitle className="text-xl">{selectedCampaign.name}</DialogTitle>
-                    </div>
-                    <DialogDescription>
-                        Kampanya Performans Karnesi ve Sonuç Analizi
-                    </DialogDescription>
-                 </DialogHeader>
-                 
-                 <div className="space-y-4 mt-2">
-                    {/* KPI Cards */}
-                    <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-muted/30 p-3 rounded-lg border">
-                            <div className="text-[10px] text-muted-foreground uppercase font-semibold mb-1">Gerçekleşen Ciro</div>
-                            <div className="text-2xl font-bold text-gray-900">₺124.5k</div>
-                            <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2 overflow-hidden">
-                                <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: '100%' }}></div>
-                            </div>
-                            <div className="text-[10px] font-medium text-emerald-600 mt-1">
-                                Hedefin %112&apos;si
-                            </div>
-                        </div>
-                        <div className="bg-muted/30 p-3 rounded-lg border">
-                            <div className="text-[10px] text-muted-foreground uppercase font-semibold mb-1">Satılan Adet</div>
-                            <div className="text-2xl font-bold text-gray-900">5.200 <span className="text-sm font-normal text-muted-foreground">Adet</span></div>
-                            <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2 overflow-hidden">
-                                <div className="bg-red-500 h-1.5 rounded-full" style={{ width: '98%' }}></div>
-                            </div>
-                             <div className="text-[10px] font-medium text-red-600 mt-1">
-                                Stokların %98&apos;i tükendi (Sell-Through)
-                            </div>
-                        </div>
-                        <div className="bg-muted/30 p-3 rounded-lg border">
-                            <div className="text-[10px] text-muted-foreground uppercase font-semibold mb-1">İndirim Maliyeti (Markdown)</div>
-                            <div className="text-2xl font-bold text-gray-900">₺4.2k</div>
-                             <div className="h-1.5 mt-2"></div>
-                             <div className="text-[10px] text-muted-foreground mt-1">
-                                Birim başı ₺0.8 maliyet
-                            </div>
-                        </div>
-                    </div>
+            {(selectedCampaign as SimilarCampaign).status === 'completed' ? (
+              <>
+                <DialogHeader>
+                  <div className='flex items-center gap-3 mb-2'>
+                    <span className='text-xs font-semibold text-muted-foreground uppercase tracking-wider border-r pr-3 mr-1'>
+                      {selectedCampaign.date}
+                    </span>
+                    {/* Stamp Logic */}
+                    {(() => {
+                      const achievement = 1.12; // Mock: 112%
+                      const isOOS = true; // Mock: Stockout happened
 
-                    {/* Chart Area */}
-                     <div className="h-56 w-full bg-white p-3 rounded-lg border shadow-sm">
-                        <div className="flex items-center justify-between mb-4">
-                             <h4 className="text-sm font-semibold text-gray-700">Satış Performansı: Normal vs Promosyonlu</h4>
-                             <div className="flex gap-4 text-[10px]">
-                                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-gray-400"></div>Normal Satış (Tahmin)</div>
-                                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-600"></div>Gerçekleşen</div>
-                             </div>
-                        </div>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <LineChart data={[
-                                    { day: 'Gn 1', baseline: 4000, actual: 4200 },
-                                    { day: 'Gn 2', baseline: 4200, actual: 4800 },
-                                    { day: 'Gn 3', baseline: 4100, actual: 6500 },
-                                    { day: 'Gn 4', baseline: 3800, actual: 7200 },
-                                    { day: 'Gn 5', baseline: 4500, actual: 8900 },
-                                    { day: 'Gn 6', baseline: 4600, actual: 12000 },
-                                    { day: 'Gn 7', baseline: 5000, actual: 5500 }, 
-                                ]}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#6b7280'}} />
-                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#6b7280'}} tickFormatter={(value) => `₺${value/1000}k`} />
-                                <Tooltip 
-                                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
-                                    cursor={{ stroke: '#9ca3af', strokeWidth: 1, strokeDasharray: '4 4' }}
-                                />
-                                <Line type="monotone" dataKey="baseline" stroke="#9ca3af" strokeWidth={2} dot={false} strokeDasharray="5 5" />
-                                <Line type="monotone" dataKey="actual" stroke="#059669" strokeWidth={3} dot={{ r: 3, fill: '#059669', strokeWidth: 0 }} activeDot={{ r: 6 }} />
-                            </LineChart>
-                        </ResponsiveContainer>
-                    </div>
+                      if (achievement >= 0.95 && !isOOS)
+                        return (
+                          <span className='bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-200'>
+                            BAŞARILI (%92)
+                          </span>
+                        );
+                      if (isOOS)
+                        return (
+                          <span className='bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded border border-red-200'>
+                            STOK SORUNU
+                          </span>
+                        );
+                      return (
+                        <span className='bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-200'>
+                          TAMAMLANDI
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <div className='flex items-center justify-between'>
+                    <DialogTitle className='text-xl'>
+                      {selectedCampaign.name}
+                    </DialogTitle>
+                  </div>
+                  <DialogDescription>
+                    Kampanya Performans Karnesi ve Sonuç Analizi
+                  </DialogDescription>
+                </DialogHeader>
 
-                    {/* Analysis */}
-                    <div className="bg-indigo-50/50 p-4 rounded-lg border border-indigo-100 flex gap-3">
-                        <div className="shrink-0 mt-0.5">
-                            <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center">
-                                <Sparkles className="h-4 w-4 text-indigo-600" />
-                            </div>
-                        </div>
-                        <div>
-                            <h4 className="text-sm font-bold text-indigo-900 mb-1">Sonuç Analizi</h4>
-                            <p className="text-xs leading-relaxed text-indigo-800">
-                                Kampanya hedeflenen cironun üzerine çıktı <span className="font-bold">(+%12)</span>. Ancak <span className="font-bold border-b border-indigo-300">Stok Planlaması yetersiz kaldı</span>; ürünler son 2 gün kala tükendiği için tahmini 15.000 TL ciro kaybı (Lost Sales) oluştu.
-                                <br/><br/>
-                                <span className="font-bold">Öneri:</span> Gelecek sene benzer dönemde stok adedini %20 artırarak planlama yapılması önerilir.
-                            </p>
-                        </div>
+                <div className='space-y-4 mt-2'>
+                  {/* KPI Cards */}
+                  <div className='grid grid-cols-3 gap-3'>
+                    <div className='bg-muted/30 p-3 rounded-lg border'>
+                      <div className='text-[10px] text-muted-foreground uppercase font-semibold mb-1'>
+                        Gerçekleşen Ciro
+                      </div>
+                      <div className='text-2xl font-bold text-gray-900'>
+                        ₺124.5k
+                      </div>
+                      <div className='w-full bg-gray-200 rounded-full h-1.5 mt-2 overflow-hidden'>
+                        <div
+                          className='bg-emerald-500 h-1.5 rounded-full'
+                          style={{ width: '100%' }}
+                        ></div>
+                      </div>
+                      <div className='text-[10px] font-medium text-emerald-600 mt-1'>
+                        Hedefin %112&apos;si
+                      </div>
                     </div>
-                 </div>
-                 
-                <DialogFooter className="gap-2 sm:gap-0 mt-2">
-                     <Button variant="outline" onClick={() => setIsDetailModalOpen(false)}>Kapat</Button>
-                     <Button 
-                        variant="destructive" 
-                        className="bg-red-600 hover:bg-red-700" 
-                        onClick={() => window.location.href='/alert-center?report=campaign_issue'}
-                     >
-                        <Flag className="w-4 h-4 mr-2" />
-                        Sorun Bildir / Raporla
-                     </Button>
+                    <div className='bg-muted/30 p-3 rounded-lg border'>
+                      <div className='text-[10px] text-muted-foreground uppercase font-semibold mb-1'>
+                        Satılan Adet
+                      </div>
+                      <div className='text-2xl font-bold text-gray-900'>
+                        5.200{' '}
+                        <span className='text-sm font-normal text-muted-foreground'>
+                          Adet
+                        </span>
+                      </div>
+                      <div className='w-full bg-gray-200 rounded-full h-1.5 mt-2 overflow-hidden'>
+                        <div
+                          className='bg-red-500 h-1.5 rounded-full'
+                          style={{ width: '98%' }}
+                        ></div>
+                      </div>
+                      <div className='text-[10px] font-medium text-red-600 mt-1'>
+                        Stokların %98&apos;i tükendi (Sell-Through)
+                      </div>
+                    </div>
+                    <div className='bg-muted/30 p-3 rounded-lg border'>
+                      <div className='text-[10px] text-muted-foreground uppercase font-semibold mb-1'>
+                        İndirim Maliyeti (Markdown)
+                      </div>
+                      <div className='text-2xl font-bold text-gray-900'>
+                        ₺4.2k
+                      </div>
+                      <div className='h-1.5 mt-2'></div>
+                      <div className='text-[10px] text-muted-foreground mt-1'>
+                        Birim başı ₺0.8 maliyet
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Chart Area */}
+                  <div className='h-56 w-full bg-white p-3 rounded-lg border shadow-sm'>
+                    <div className='flex items-center justify-between mb-4'>
+                      <h4 className='text-sm font-semibold text-gray-700'>
+                        Satış Performansı: Normal vs Promosyonlu
+                      </h4>
+                      <div className='flex gap-4 text-[10px]'>
+                        <div className='flex items-center gap-1'>
+                          <div className='w-2 h-2 rounded-full bg-gray-400'></div>
+                          Normal Satış (Tahmin)
+                        </div>
+                        <div className='flex items-center gap-1'>
+                          <div className='w-2 h-2 rounded-full bg-emerald-600'></div>
+                          Gerçekleşen
+                        </div>
+                      </div>
+                    </div>
+                    <ResponsiveContainer width='100%' height='100%'>
+                      <LineChart
+                        data={[
+                          { day: 'Gn 1', baseline: 4000, actual: 4200 },
+                          { day: 'Gn 2', baseline: 4200, actual: 4800 },
+                          { day: 'Gn 3', baseline: 4100, actual: 6500 },
+                          { day: 'Gn 4', baseline: 3800, actual: 7200 },
+                          { day: 'Gn 5', baseline: 4500, actual: 8900 },
+                          { day: 'Gn 6', baseline: 4600, actual: 12000 },
+                          { day: 'Gn 7', baseline: 5000, actual: 5500 },
+                        ]}
+                      >
+                        <CartesianGrid
+                          strokeDasharray='3 3'
+                          vertical={false}
+                          stroke='#e5e7eb'
+                        />
+                        <XAxis
+                          dataKey='day'
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 10, fill: '#6b7280' }}
+                        />
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 10, fill: '#6b7280' }}
+                          tickFormatter={(value) => `₺${value / 1000}k`}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            borderRadius: '8px',
+                            border: 'none',
+                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
+                          }}
+                          cursor={{
+                            stroke: '#9ca3af',
+                            strokeWidth: 1,
+                            strokeDasharray: '4 4',
+                          }}
+                        />
+                        <Line
+                          type='monotone'
+                          dataKey='baseline'
+                          stroke='#9ca3af'
+                          strokeWidth={2}
+                          dot={false}
+                          strokeDasharray='5 5'
+                        />
+                        <Line
+                          type='monotone'
+                          dataKey='actual'
+                          stroke='#059669'
+                          strokeWidth={3}
+                          dot={{ r: 3, fill: '#059669', strokeWidth: 0 }}
+                          activeDot={{ r: 6 }}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Analysis */}
+                  <div className='bg-indigo-50/50 p-4 rounded-lg border border-indigo-100 flex gap-3'>
+                    <div className='shrink-0 mt-0.5'>
+                      <div className='h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center'>
+                        <Sparkles className='h-4 w-4 text-indigo-600' />
+                      </div>
+                    </div>
+                    <div>
+                      <h4 className='text-sm font-bold text-indigo-900 mb-1'>
+                        Sonuç Analizi
+                      </h4>
+                      <p className='text-xs leading-relaxed text-indigo-800'>
+                        Kampanya hedeflenen cironun üzerine çıktı{' '}
+                        <span className='font-bold'>(+%12)</span>. Ancak{' '}
+                        <span className='font-bold border-b border-indigo-300'>
+                          Stok Planlaması yetersiz kaldı
+                        </span>
+                        ; ürünler son 2 gün kala tükendiği için tahmini 15.000
+                        TL ciro kaybı (Lost Sales) oluştu.
+                        <br />
+                        <br />
+                        <span className='font-bold'>Öneri:</span> Gelecek sene
+                        benzer dönemde stok adedini %20 artırarak planlama
+                        yapılması önerilir.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <DialogFooter className='gap-2 sm:gap-0 mt-2'>
+                  <Button
+                    variant='outline'
+                    onClick={() => setIsDetailModalOpen(false)}
+                  >
+                    Kapat
+                  </Button>
+                  <Button
+                    variant='destructive'
+                    className='bg-red-600 hover:bg-red-700'
+                    onClick={() =>
+                      (window.location.href =
+                        '/alert-center?report=campaign_issue')
+                    }
+                  >
+                    <Flag className='w-4 h-4 mr-2' />
+                    Sorun Bildir / Raporla
+                  </Button>
                 </DialogFooter>
-                </>
-                ) : (
-                <>
+              </>
+            ) : (
+              <>
                 {/* 
                   =============================================================================
                   VIEW B: FUTURE CAMPAIGNS (APPROVAL & PREVIEW)
                   =============================================================================
                 */}
-                 <DialogHeader>
-                    <div className="flex items-center gap-3 mb-2">
-                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-r pr-3 mr-1">{selectedCampaign.date}</span>
-                         {/* Status Badge */}
-                         {(() => {
-                             const s = (selectedCampaign as SimilarCampaign).status;
-                             if(s === 'pending') return <span className="bg-[#fff3cd] text-[#856404] px-2 py-0.5 rounded border border-yellow-200 text-[10px] font-bold">ONAY BEKLİYOR</span>
-                             if(s === 'draft') return <span className="bg-[#e0e0e0] text-[#333] px-2 py-0.5 rounded border border-gray-300 text-[10px] font-bold">TASLAK</span>
-                             if(s === 'approved') return <span className="bg-[#d4edda] text-[#155724] px-2 py-0.5 rounded border border-green-200 text-[10px] font-bold">ONAYLANDI</span>
-                             return null;
-                         })()}
-                    </div>
-                    <div className="flex items-center justify-between">
-                        <DialogTitle className="text-xl">{selectedCampaign.name}</DialogTitle>
-                    </div>
-                    <DialogDescription>
-                        Fizibilite Raporu ve Onay Formu
-                    </DialogDescription>
-                 </DialogHeader>
+                <DialogHeader>
+                  <div className='flex items-center gap-3 mb-2'>
+                    <span className='text-xs font-semibold text-muted-foreground uppercase tracking-wider border-r pr-3 mr-1'>
+                      {selectedCampaign.date}
+                    </span>
+                    {/* Status Badge */}
+                    {(() => {
+                      const s = (selectedCampaign as SimilarCampaign).status;
+                      if (s === 'pending')
+                        return (
+                          <span className='bg-[#fff3cd] text-[#856404] px-2 py-0.5 rounded border border-yellow-200 text-[10px] font-bold'>
+                            ONAY BEKLİYOR
+                          </span>
+                        );
+                      if (s === 'draft')
+                        return (
+                          <span className='bg-[#e0e0e0] text-[#333] px-2 py-0.5 rounded border border-gray-300 text-[10px] font-bold'>
+                            TASLAK
+                          </span>
+                        );
+                      if (s === 'approved')
+                        return (
+                          <span className='bg-[#d4edda] text-[#155724] px-2 py-0.5 rounded border border-green-200 text-[10px] font-bold'>
+                            ONAYLANDI
+                          </span>
+                        );
+                      return null;
+                    })()}
+                  </div>
+                  <div className='flex items-center justify-between'>
+                    <DialogTitle className='text-xl'>
+                      {selectedCampaign.name}
+                    </DialogTitle>
+                  </div>
+                  <DialogDescription>
+                    Fizibilite Raporu ve Onay Formu
+                  </DialogDescription>
+                </DialogHeader>
 
-                 <div className="space-y-4 mt-2">
-                    {/* KPI Cards (Expectations) */}
-                    <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-white p-3 rounded-lg border shadow-sm">
-                            <div className="text-[10px] text-muted-foreground uppercase font-semibold mb-1">Beklenen Ciro & Lift</div>
-                            <div className="text-2xl font-bold text-indigo-900">₺145.0k</div>
-                            <div className="text-[10px] font-medium text-emerald-600 mt-1 flex items-center gap-1">
-                                <TrendingUp className="w-3 h-3" />
-                                +₺32k Lift Beklentisi
-                            </div>
-                        </div>
-                        <div className="bg-white p-3 rounded-lg border shadow-sm">
-                            <div className="text-[10px] text-muted-foreground uppercase font-semibold mb-1">Yatırım Maliyeti</div>
-                            <div className="text-2xl font-bold text-gray-900">₺4.5k</div>
-                            <div className="text-[10px] font-medium text-muted-foreground mt-1">
-                                %9 İndirim Oranı ile
-                            </div>
-                        </div>
-                        <div className="bg-white p-3 rounded-lg border shadow-sm">
-                            <div className="text-[10px] text-muted-foreground uppercase font-semibold mb-1">Stok Yeterliliği</div>
-                            <div className="text-2xl font-bold text-emerald-600">%100</div>
-                             <div className="text-[10px] font-medium text-muted-foreground mt-1">
-                                Gerekli: 5.0k / Mevcut: 5.2k
-                            </div>
-                        </div>
+                <div className='space-y-4 mt-2'>
+                  {/* KPI Cards (Expectations) */}
+                  <div className='grid grid-cols-3 gap-3'>
+                    <div className='bg-white p-3 rounded-lg border shadow-sm'>
+                      <div className='text-[10px] text-muted-foreground uppercase font-semibold mb-1'>
+                        Beklenen Ciro & Lift
+                      </div>
+                      <div className='text-2xl font-bold text-indigo-900'>
+                        ₺145.0k
+                      </div>
+                      <div className='text-[10px] font-medium text-emerald-600 mt-1 flex items-center gap-1'>
+                        <TrendingUp className='w-3 h-3' />
+                        +₺32k Lift Beklentisi
+                      </div>
                     </div>
+                    <div className='bg-white p-3 rounded-lg border shadow-sm'>
+                      <div className='text-[10px] text-muted-foreground uppercase font-semibold mb-1'>
+                        Yatırım Maliyeti
+                      </div>
+                      <div className='text-2xl font-bold text-gray-900'>
+                        ₺4.5k
+                      </div>
+                      <div className='text-[10px] font-medium text-muted-foreground mt-1'>
+                        %9 İndirim Oranı ile
+                      </div>
+                    </div>
+                    <div className='bg-white p-3 rounded-lg border shadow-sm'>
+                      <div className='text-[10px] text-muted-foreground uppercase font-semibold mb-1'>
+                        Stok Yeterliliği
+                      </div>
+                      <div className='text-2xl font-bold text-emerald-600'>
+                        %100
+                      </div>
+                      <div className='text-[10px] font-medium text-muted-foreground mt-1'>
+                        Gerekli: 5.0k / Mevcut: 5.2k
+                      </div>
+                    </div>
+                  </div>
 
-                    {/* Simulation Chart */}
-                     <div className="h-56 w-full bg-slate-50 p-3 rounded-lg border border-slate-200">
-                        <div className="flex items-center justify-between mb-4">
-                             <h4 className="text-sm font-semibold text-slate-700">Simülasyon: Satış & Stok Riski</h4>
-                             <div className="flex gap-4 text-[10px]">
-                                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-gray-400"></div>Baseline</div>
-                                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-600"></div>Forecast (Kampanyalı)</div>
-                        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-yellow-400"></div>Stok Limiti</div>
-                             </div>
+                  {/* Simulation Chart */}
+                  <div className='h-56 w-full bg-slate-50 p-3 rounded-lg border border-slate-200'>
+                    <div className='flex items-center justify-between mb-4'>
+                      <h4 className='text-sm font-semibold text-slate-700'>
+                        Simülasyon: Satış & Stok Riski
+                      </h4>
+                      <div className='flex gap-4 text-[10px]'>
+                        <div className='flex items-center gap-1'>
+                          <div className='w-2 h-2 rounded-full bg-gray-400'></div>
+                          Baseline
                         </div>
-                        <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart data={[
-                                    { day: 'Gn 1', baseline: 4000, forecast: 4200, stock: 8000 },
-                                    { day: 'Gn 2', baseline: 4200, forecast: 4800, stock: 7500 },
-                                    { day: 'Gn 3', baseline: 4100, forecast: 7500, stock: 7000 }, // Peak
-                                    { day: 'Gn 4', baseline: 3800, forecast: 6200, stock: 6500 },
-                                    { day: 'Gn 5', baseline: 4500, forecast: 5900, stock: 6000 },
-                                    { day: 'Gn 6', baseline: 4600, forecast: 6000, stock: 5500 },
-                                    { day: 'Gn 7', baseline: 5000, forecast: 5500, stock: 5200 },
-                                ]}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#64748b'}} />
-                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#64748b'}} tickFormatter={(value) => `₺${value/1000}k`} />
-                                <Tooltip />
-                                <Bar dataKey="stock" fill="#fde68a" fillOpacity={0.3} barSize={999} /> {/* Background area hack or use ReferenceArea */}
-                                <Line type="monotone" dataKey="baseline" stroke="#94a3b8" strokeWidth={2} dot={false} strokeDasharray="5 5" />
-                                <Line type="monotone" dataKey="forecast" stroke="#059669" strokeWidth={3} dot={{ r: 3, fill: '#059669' }} strokeDasharray="5 5" />
-                            </ComposedChart>
-                        </ResponsiveContainer>
+                        <div className='flex items-center gap-1'>
+                          <div className='w-2 h-2 rounded-full bg-emerald-600'></div>
+                          Forecast (Kampanyalı)
+                        </div>
+                        <div className='flex items-center gap-1'>
+                          <div className='w-2 h-2 rounded-full bg-yellow-400'></div>
+                          Stok Limiti
+                        </div>
+                      </div>
                     </div>
-                    
-                    {/* Risk Analysis */}
-                    <div className="flex items-start gap-3 bg-emerald-50 p-4 rounded-lg border border-emerald-100">
-                         <div className="shrink-0 pt-1">
-                             <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-sm animate-pulse"></div>
-                         </div>
-                         <div className="space-y-1">
-                             <div className="flex items-center gap-2">
-                                <h4 className="text-sm font-bold text-emerald-900">DÜŞÜK RİSK</h4>
-                                <span className="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">AI Güven Skoru: 95/100</span>
-                             </div>
-                             <p className="text-xs text-emerald-800 leading-relaxed">
-                                 Bu kampanya planı, mevsimsellik verilerine göre uygun görünüyor. Stok seviyesi talebi karşılamak için yeterli (%100 doluluk). Simüle edilen brüt kar marjı hedefin üzerinde.
-                             </p>
-                         </div>
+                    <ResponsiveContainer width='100%' height='100%'>
+                      <ComposedChart
+                        data={[
+                          {
+                            day: 'Gn 1',
+                            baseline: 4000,
+                            forecast: 4200,
+                            stock: 8000,
+                          },
+                          {
+                            day: 'Gn 2',
+                            baseline: 4200,
+                            forecast: 4800,
+                            stock: 7500,
+                          },
+                          {
+                            day: 'Gn 3',
+                            baseline: 4100,
+                            forecast: 7500,
+                            stock: 7000,
+                          }, // Peak
+                          {
+                            day: 'Gn 4',
+                            baseline: 3800,
+                            forecast: 6200,
+                            stock: 6500,
+                          },
+                          {
+                            day: 'Gn 5',
+                            baseline: 4500,
+                            forecast: 5900,
+                            stock: 6000,
+                          },
+                          {
+                            day: 'Gn 6',
+                            baseline: 4600,
+                            forecast: 6000,
+                            stock: 5500,
+                          },
+                          {
+                            day: 'Gn 7',
+                            baseline: 5000,
+                            forecast: 5500,
+                            stock: 5200,
+                          },
+                        ]}
+                      >
+                        <CartesianGrid
+                          strokeDasharray='3 3'
+                          vertical={false}
+                          stroke='#e2e8f0'
+                        />
+                        <XAxis
+                          dataKey='day'
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 10, fill: '#64748b' }}
+                        />
+                        <YAxis
+                          axisLine={false}
+                          tickLine={false}
+                          tick={{ fontSize: 10, fill: '#64748b' }}
+                          tickFormatter={(value) => `₺${value / 1000}k`}
+                        />
+                        <Tooltip />
+                        <Bar
+                          dataKey='stock'
+                          fill='#fde68a'
+                          fillOpacity={0.3}
+                          barSize={999}
+                        />{' '}
+                        {/* Background area hack or use ReferenceArea */}
+                        <Line
+                          type='monotone'
+                          dataKey='baseline'
+                          stroke='#94a3b8'
+                          strokeWidth={2}
+                          dot={false}
+                          strokeDasharray='5 5'
+                        />
+                        <Line
+                          type='monotone'
+                          dataKey='forecast'
+                          stroke='#059669'
+                          strokeWidth={3}
+                          dot={{ r: 3, fill: '#059669' }}
+                          strokeDasharray='5 5'
+                        />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+
+                  {/* Risk Analysis */}
+                  <div className='flex items-start gap-3 bg-emerald-50 p-4 rounded-lg border border-emerald-100'>
+                    <div className='shrink-0 pt-1'>
+                      <div className='h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-sm animate-pulse'></div>
                     </div>
+                    <div className='space-y-1'>
+                      <div className='flex items-center gap-2'>
+                        <h4 className='text-sm font-bold text-emerald-900'>
+                          DÜŞÜK RİSK
+                        </h4>
+                        <span className='text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded'>
+                          AI Güven Skoru: 95/100
+                        </span>
+                      </div>
+                      <p className='text-xs text-emerald-800 leading-relaxed'>
+                        Bu kampanya planı, mevsimsellik verilerine göre uygun
+                        görünüyor. Stok seviyesi talebi karşılamak için yeterli
+                        (%100 doluluk). Simüle edilen brüt kar marjı hedefin
+                        üzerinde.
+                      </p>
+                    </div>
+                  </div>
+                </div>
 
-                 </div>
-
-                 {/* Footer Actions */}
-                 <DialogFooter className="gap-2 sm:gap-0 mt-4 border-t pt-4">
-                     {/* Dynamic Buttons based on status */}
-                     {(() => {
-                         const s = (selectedCampaign as SimilarCampaign).status;
-                         if (s === 'draft') return (
-                             <>
-                                <Button variant="ghost" onClick={() => setIsDetailModalOpen(false)}>Vazgeç</Button>
-                                <div className="flex gap-2 w-full sm:w-auto">
-                                    <Button variant="outline" className="flex-1 sm:flex-none">Düzenle</Button>
-                                    <Button className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700">Onaya Gönder</Button>
-                                </div>
-                             </>
-                         )
-                         if (s === 'pending') return (
-                            <>
-                               <Button variant="outline" className="text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200">Reddet / Revize İste</Button>
-                               <Button className="bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto">
-                                   <CalendarIcon className="w-3.5 h-3.5 mr-2" />
-                                   Onayla ve Takvime İşle
-                               </Button>
-                            </>
-                        )
-                        if (s === 'approved') return (
-                            <>
-                               <Button variant="outline" className="text-red-600 border-red-200">İptal Et</Button>
-                               <div className="flex gap-2 w-full sm:w-auto">
-                                   <Button variant="outline">Düzenle</Button>
-                                   <Button variant="secondary" onClick={() => setIsDetailModalOpen(false)}>Kapat</Button>
-                               </div>
-                            </>
-                        )
-                         return <Button onClick={() => setIsDetailModalOpen(false)}>Kapat</Button>
-                     })()}
+                {/* Footer Actions */}
+                <DialogFooter className='gap-2 sm:gap-0 mt-4 border-t pt-4'>
+                  {/* Dynamic Buttons based on status */}
+                  {(() => {
+                    const s = (selectedCampaign as SimilarCampaign).status;
+                    if (s === 'draft')
+                      return (
+                        <>
+                          <Button
+                            variant='ghost'
+                            onClick={() => setIsDetailModalOpen(false)}
+                          >
+                            Vazgeç
+                          </Button>
+                          <div className='flex gap-2 w-full sm:w-auto'>
+                            <Button
+                              variant='outline'
+                              className='flex-1 sm:flex-none'
+                            >
+                              Düzenle
+                            </Button>
+                            <Button className='flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700'>
+                              Onaya Gönder
+                            </Button>
+                          </div>
+                        </>
+                      );
+                    if (s === 'pending')
+                      return (
+                        <>
+                          <Button
+                            variant='outline'
+                            className='text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200'
+                          >
+                            Reddet / Revize İste
+                          </Button>
+                          <Button className='bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto'>
+                            <CalendarIcon className='w-3.5 h-3.5 mr-2' />
+                            Onayla ve Takvime İşle
+                          </Button>
+                        </>
+                      );
+                    if (s === 'approved')
+                      return (
+                        <>
+                          <Button
+                            variant='outline'
+                            className='text-red-600 border-red-200'
+                          >
+                            İptal Et
+                          </Button>
+                          <div className='flex gap-2 w-full sm:w-auto'>
+                            <Button variant='outline'>Düzenle</Button>
+                            <Button
+                              variant='secondary'
+                              onClick={() => setIsDetailModalOpen(false)}
+                            >
+                              Kapat
+                            </Button>
+                          </div>
+                        </>
+                      );
+                    return (
+                      <Button onClick={() => setIsDetailModalOpen(false)}>
+                        Kapat
+                      </Button>
+                    );
+                  })()}
                 </DialogFooter>
-                </>
-                )}
-            </DialogContent>
+              </>
+            )}
+          </DialogContent>
         </Dialog>
       )}
     </div>
   );
 }
-

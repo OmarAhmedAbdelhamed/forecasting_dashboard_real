@@ -1,5 +1,7 @@
 import { createServerClient } from '@supabase/ssr';
+import { type SupabaseClient } from '@supabase/supabase-js';
 import { NextResponse, type NextRequest } from 'next/server';
+import { type Database } from './types/database.types';
 
 /**
  * In-memory rate limiter for API routes
@@ -88,29 +90,35 @@ function checkRateLimit(
 
 // Cleanup expired entries every 5 minutes
 if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
-    const now = Date.now();
-    for (const [key, entry] of rateLimitStore.entries()) {
-      if (entry.resetTime < now) {
-        rateLimitStore.delete(key);
+  setInterval(
+    () => {
+      const now = Date.now();
+      for (const [key, entry] of rateLimitStore.entries()) {
+        if (entry.resetTime < now) {
+          rateLimitStore.delete(key);
+        }
       }
-    }
-  }, 5 * 60 * 1000);
+    },
+    5 * 60 * 1000,
+  );
 }
 
 /**
  * End rate limiter
  */
 
-function getRequiredEnvVar(name: 'NEXT_PUBLIC_SUPABASE_URL' | 'NEXT_PUBLIC_SUPABASE_ANON_KEY'): string {
-  const value = name === 'NEXT_PUBLIC_SUPABASE_URL'
-    ? process.env.NEXT_PUBLIC_SUPABASE_URL
-    : process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+function getRequiredEnvVar(
+  name: 'NEXT_PUBLIC_SUPABASE_URL' | 'NEXT_PUBLIC_SUPABASE_ANON_KEY',
+): string {
+  const value =
+    name === 'NEXT_PUBLIC_SUPABASE_URL'
+      ? process.env.NEXT_PUBLIC_SUPABASE_URL
+      : process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!value) {
     throw new Error(
       `Environment variable "${name}" is required but was not found. ` +
-        'Please ensure it is set in your environment configuration.'
+        'Please ensure it is set in your environment configuration.',
     );
   }
   return value;
@@ -143,32 +151,43 @@ type DashboardSection =
  * Role configuration for section access control
  * Inline definition to avoid importing from types/permissions.ts which may use client-side features
  */
-const ROLE_CONFIGS: Record<UserRole, { allowedSections: DashboardSection[] }> = {
-  general_manager: {
-    allowedSections: ['overview', 'demand-forecasting', 'pricing-promotion'],
-  },
-  buyer: {
-    allowedSections: ['overview', 'demand-forecasting', 'inventory-planning'],
-  },
-  inventory_planner: {
-    allowedSections: ['overview', 'demand-forecasting', 'inventory-planning', 'pricing-promotion'],
-  },
-  regional_manager: {
-    allowedSections: ['overview', 'demand-forecasting', 'inventory-planning', 'pricing-promotion'],
-  },
-  store_manager: {
-    allowedSections: ['overview', 'inventory-planning'],
-  },
-  finance: {
-    allowedSections: ['overview', 'demand-forecasting', 'pricing-promotion'],
-  },
-  marketing: {
-    allowedSections: ['overview', 'pricing-promotion'],
-  },
-  production_planning: {
-    allowedSections: ['overview', 'demand-forecasting', 'inventory-planning'],
-  },
-};
+const ROLE_CONFIGS: Record<UserRole, { allowedSections: DashboardSection[] }> =
+  {
+    general_manager: {
+      allowedSections: ['overview', 'demand-forecasting', 'pricing-promotion'],
+    },
+    buyer: {
+      allowedSections: ['overview', 'demand-forecasting', 'inventory-planning'],
+    },
+    inventory_planner: {
+      allowedSections: [
+        'overview',
+        'demand-forecasting',
+        'inventory-planning',
+        'pricing-promotion',
+      ],
+    },
+    regional_manager: {
+      allowedSections: [
+        'overview',
+        'demand-forecasting',
+        'inventory-planning',
+        'pricing-promotion',
+      ],
+    },
+    store_manager: {
+      allowedSections: ['overview', 'inventory-planning'],
+    },
+    finance: {
+      allowedSections: ['overview', 'demand-forecasting', 'pricing-promotion'],
+    },
+    marketing: {
+      allowedSections: ['overview', 'pricing-promotion'],
+    },
+    production_planning: {
+      allowedSections: ['overview', 'demand-forecasting', 'inventory-planning'],
+    },
+  };
 
 /**
  * Maps URL path sections to their corresponding section identifiers
@@ -176,7 +195,9 @@ const ROLE_CONFIGS: Record<UserRole, { allowedSections: DashboardSection[] }> = 
 function getSectionFromPathname(pathname: string): DashboardSection | null {
   // Extract section from /overview, /demand-forecasting, etc.
   const match = /^\/dashboard\/([^/]+)/.exec(pathname);
-  if (!match) {return null;}
+  if (!match) {
+    return null;
+  }
 
   const section = match[1] as DashboardSection;
   const validSections: DashboardSection[] = [
@@ -194,18 +215,20 @@ function getSectionFromPathname(pathname: string): DashboardSection | null {
  * Fetches user profile with role from Supabase
  */
 async function getUserRole(
-  supabase: ReturnType<typeof createServerClient>,
-  userId: string
+  supabase: SupabaseClient<Database>,
+  userId: string,
 ): Promise<UserRole | null> {
   try {
     const { data, error } = await supabase
       .from('user_profiles')
-      .select(`
+      .select(
+        `
         role_id,
         roles (
           name
         )
-      `)
+      `,
+      )
       .eq('id', userId)
       .single();
 
@@ -222,7 +245,10 @@ async function getUserRole(
 /**
  * Checks if a user's role has access to a specific section
  */
-function hasSectionAccess(role: UserRole | null, section: DashboardSection): boolean {
+function hasSectionAccess(
+  role: UserRole | null,
+  section: DashboardSection,
+): boolean {
   // User with no role can only access overview
   if (!role) {
     return section === 'overview';
@@ -242,7 +268,9 @@ function hasSectionAccess(role: UserRole | null, section: DashboardSection): boo
  * Returns overview as fallback for users with no role
  */
 function getFirstAllowedSection(role: UserRole | null): DashboardSection {
-  if (!role) {return 'overview';}
+  if (!role) {
+    return 'overview';
+  }
 
   const roleConfig = ROLE_CONFIGS[role];
   return roleConfig?.allowedSections[0] || 'overview';
@@ -308,9 +336,18 @@ export async function proxy(request: NextRequest) {
     const rateLimitResult = checkRateLimit(identifier, rateLimitConfig);
 
     // Add rate limit headers to response
-    response.headers.set('X-RateLimit-Limit', String(rateLimitConfig.maxRequests));
-    response.headers.set('X-RateLimit-Remaining', String(rateLimitResult.remaining));
-    response.headers.set('X-RateLimit-Reset', String(Math.ceil(rateLimitResult.resetTime / 1000)));
+    response.headers.set(
+      'X-RateLimit-Limit',
+      String(rateLimitConfig.maxRequests),
+    );
+    response.headers.set(
+      'X-RateLimit-Remaining',
+      String(rateLimitResult.remaining),
+    );
+    response.headers.set(
+      'X-RateLimit-Reset',
+      String(Math.ceil(rateLimitResult.resetTime / 1000)),
+    );
 
     if (rateLimitResult.isRateLimited) {
       return NextResponse.json(
@@ -324,7 +361,9 @@ export async function proxy(request: NextRequest) {
           headers: {
             'X-RateLimit-Limit': String(rateLimitConfig.maxRequests),
             'X-RateLimit-Remaining': '0',
-            'X-RateLimit-Reset': String(Math.ceil(rateLimitResult.resetTime / 1000)),
+            'X-RateLimit-Reset': String(
+              Math.ceil(rateLimitResult.resetTime / 1000),
+            ),
             'Retry-After': String(rateLimitResult.retryAfter || 60),
           },
         },
@@ -336,49 +375,54 @@ export async function proxy(request: NextRequest) {
   const supabaseUrl = getRequiredEnvVar('NEXT_PUBLIC_SUPABASE_URL');
   const supabaseAnonKey = getRequiredEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY');
 
-  const supabase = createServerClient(
-    supabaseUrl,
-    supabaseAnonKey,
-    {
-      cookies: {
-        get(name: string) {
-          return request.cookies.get(name)?.value;
-        },
-        set(name: string, value: string, options: { path?: string; httpOnly?: boolean; secure?: boolean; sameSite?: 'strict' | 'lax' | 'none' }) {
-          request.cookies.set({
-            name,
-            value,
-            ...options,
-          });
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          });
-          response.cookies.set({
-            name,
-            value,
-            ...options,
-          });
-        },
-        remove(name: string, options: { path?: string }) {
-          request.cookies.delete({
-            name,
-            ...options,
-          });
-          response = NextResponse.next({
-            request: {
-              headers: request.headers,
-            },
-          });
-          response.cookies.delete({
-            name,
-            ...options,
-          });
-        },
+  const supabase = createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      get(name: string) {
+        return request.cookies.get(name)?.value;
       },
-    }
-  );
+      set(
+        name: string,
+        value: string,
+        options: {
+          path?: string;
+          httpOnly?: boolean;
+          secure?: boolean;
+          sameSite?: 'strict' | 'lax' | 'none';
+        },
+      ) {
+        request.cookies.set({
+          name,
+          value,
+          ...options,
+        });
+        response = NextResponse.next({
+          request: {
+            headers: request.headers,
+          },
+        });
+        response.cookies.set({
+          name,
+          value,
+          ...options,
+        });
+      },
+      remove(name: string, options: { path?: string }) {
+        request.cookies.delete({
+          name,
+          ...options,
+        });
+        response = NextResponse.next({
+          request: {
+            headers: request.headers,
+          },
+        });
+        response.cookies.delete({
+          name,
+          ...options,
+        });
+      },
+    },
+  });
 
   // Get authenticated user - validates the JWT with the server for security
   const {
