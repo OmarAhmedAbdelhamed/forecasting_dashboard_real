@@ -810,6 +810,7 @@ export interface PromotionHistoryItem {
   // NEW FIELDS
   stockCostIncrease?: string; // Tahmini Stok Maliyeti Artışı
   lostSalesVal?: string; // Kaçırılan Ciro (OOS durumunda)
+  status: 'draft' | 'pending' | 'approved' | 'completed';
 }
 
 export const PROMOTION_HISTORY_DATA: PromotionHistoryItem[] = [
@@ -825,6 +826,49 @@ export const PROMOTION_HISTORY_DATA: PromotionHistoryItem[] = [
     forecast: '92%',
     stockCostIncrease: '₺1.2k',
     lostSalesVal: '₺0',
+    status: 'completed',
+  },
+  {
+    date: '15-20 Haziran 2026',
+    name: 'Yaz Başlangıcı İndirimi',
+    type: 'INTERNET_INDIRIMI',
+    uplift: '+35% (Tahmin)',
+    upliftVal: '₺10.5k',
+    profit: '+₺2.8k',
+    roi: 130,
+    stock: 'OK',
+    forecast: '--',
+    stockCostIncrease: '₺900',
+    lostSalesVal: '₺0',
+    status: 'draft',
+  },
+  {
+    date: '01-05 Temmuz 2026',
+    name: 'Tatil Paketi Fırsatı',
+    type: 'COKLU_ALIM',
+    uplift: '+25% (Tahmin)',
+    upliftVal: '₺8.2k',
+    profit: '-₺500',
+    roi: 85,
+    stock: 'Over',
+    forecast: '--',
+    stockCostIncrease: '₺1.5k',
+    lostSalesVal: '₺0',
+    status: 'pending',
+  },
+  {
+    date: '10-15 Ağustos 2026',
+    name: 'Okula Dönüş Hazırlığı',
+    type: 'ALISVERIS_INDIRIMI_500',
+    uplift: '+40% (Tahmin)',
+    upliftVal: '₺15.0k',
+    profit: '+₺1.2k',
+    roi: 110,
+    stock: 'OOS',
+    forecast: '--',
+    stockCostIncrease: '₺500',
+    lostSalesVal: '₺2.5k',
+    status: 'approved',
   },
   {
     date: '05-12 Nisan 2025',
@@ -838,6 +882,7 @@ export const PROMOTION_HISTORY_DATA: PromotionHistoryItem[] = [
     forecast: '65%',
     stockCostIncrease: '₺450',
     lostSalesVal: '₺4.5k', // OOS caused lost sales
+    status: 'completed',
   },
   {
     date: '10-14 Şubat 2025',
@@ -851,6 +896,7 @@ export const PROMOTION_HISTORY_DATA: PromotionHistoryItem[] = [
     forecast: '88%',
     stockCostIncrease: '₺2.1k', // Excessive stock cost
     lostSalesVal: '₺0',
+    status: 'completed',
   },
   {
     date: '15-20 Ocak 2025',
@@ -864,6 +910,7 @@ export const PROMOTION_HISTORY_DATA: PromotionHistoryItem[] = [
     forecast: '95%',
     stockCostIncrease: '₺800',
     lostSalesVal: '₺0',
+    status: 'completed',
   },
   {
     date: '20-25 Aralık 2024',
@@ -877,6 +924,7 @@ export const PROMOTION_HISTORY_DATA: PromotionHistoryItem[] = [
     forecast: '94%',
     stockCostIncrease: '₺1.5k',
     lostSalesVal: '₺0',
+    status: 'completed',
   },
   {
     date: '24-28 Kasım 2024',
@@ -890,6 +938,7 @@ export const PROMOTION_HISTORY_DATA: PromotionHistoryItem[] = [
     forecast: '70%',
     stockCostIncrease: '₺300',
     lostSalesVal: '₺8.2k',
+    status: 'completed',
   },
 ];
 
@@ -1014,7 +1063,7 @@ export function generateInventoryItems(
     return productMatch && storeMatch;
   });
 
-  return filteredProductMetadata.map((p: any) => {
+  return filteredProductMetadata.map((p: Product & { categoryKey: string }) => {
     const [, , slug] = p.value.split('_');
 
     // Use specific seeds for each attribute to ensure stability regardless of index
@@ -1565,8 +1614,16 @@ export interface SimilarCampaign {
   similarityScore: number;
   type: string;
   lift: number;
-  roi: number;
+  roi: number; // Keeping for backward compatibility if needed, or derivation
   stockOutDays: number;
+  // New Fields
+  targetRevenue: number;
+  actualRevenue: number;
+  plannedStockDays: number;
+  actualStockDays: number;
+  sellThrough: number; // Percentage 0-100
+  markdownCost: number;
+  status?: string; // e.g. 'completed', 'draft', 'pending', 'approved'
 }
 
 export const SIMILAR_CAMPAIGNS: SimilarCampaign[] = [
@@ -1579,6 +1636,12 @@ export const SIMILAR_CAMPAIGNS: SimilarCampaign[] = [
     lift: 38,
     roi: 120,
     stockOutDays: 0,
+    targetRevenue: 100000,
+    actualRevenue: 125000,
+    plannedStockDays: 14,
+    actualStockDays: 14,
+    sellThrough: 92,
+    markdownCost: 5000,
   },
   {
     id: 'SC-2',
@@ -1589,6 +1652,12 @@ export const SIMILAR_CAMPAIGNS: SimilarCampaign[] = [
     lift: 45,
     roi: 110,
     stockOutDays: 2,
+    targetRevenue: 150000,
+    actualRevenue: 160000,
+    plannedStockDays: 14,
+    actualStockDays: 12, // Ended early
+    sellThrough: 100,
+    markdownCost: 7500,
   },
   {
     id: 'SC-3',
@@ -1599,6 +1668,12 @@ export const SIMILAR_CAMPAIGNS: SimilarCampaign[] = [
     lift: 22,
     roi: 40,
     stockOutDays: 0,
+    targetRevenue: 80000,
+    actualRevenue: 45000,
+    plannedStockDays: 10,
+    actualStockDays: 10,
+    sellThrough: 40, // Low sell-through
+    markdownCost: 2000,
   },
   {
     id: 'SC-4',
@@ -1608,7 +1683,13 @@ export const SIMILAR_CAMPAIGNS: SimilarCampaign[] = [
     type: 'ALISVERIS_INDIRIMI_500',
     lift: 55,
     roi: 145,
-    stockOutDays: 5,
+    stockOutDays: 5, // Significant OOS
+    targetRevenue: 200000,
+    actualRevenue: 195000, // Missed target slightly due to OOS
+    plannedStockDays: 21,
+    actualStockDays: 16,
+    sellThrough: 100,
+    markdownCost: 12000,
   },
   {
     id: 'SC-5',
@@ -1619,6 +1700,12 @@ export const SIMILAR_CAMPAIGNS: SimilarCampaign[] = [
     lift: 42,
     roi: 90,
     stockOutDays: 1,
+    targetRevenue: 120000,
+    actualRevenue: 110000,
+    plannedStockDays: 14,
+    actualStockDays: 13,
+    sellThrough: 85,
+    markdownCost: 6000,
   },
   {
     id: 'SC-6',
@@ -1629,6 +1716,12 @@ export const SIMILAR_CAMPAIGNS: SimilarCampaign[] = [
     lift: 15,
     roi: 30,
     stockOutDays: 0,
+    targetRevenue: 50000,
+    actualRevenue: 20000,
+    plannedStockDays: 3,
+    actualStockDays: 3,
+    sellThrough: 30, // Very low
+    markdownCost: 500,
   },
   {
     id: 'SC-7',
@@ -1639,5 +1732,43 @@ export const SIMILAR_CAMPAIGNS: SimilarCampaign[] = [
     lift: 70,
     roi: 65,
     stockOutDays: 3,
+    targetRevenue: 90000,
+    actualRevenue: 95000,
+    plannedStockDays: 7,
+    actualStockDays: 4, // Stockout
+    sellThrough: 100,
+    markdownCost: 8000,
+  },
+  {
+    id: 'SC-8',
+    name: 'Bahar Temizliği İndirimi',
+    date: 'Nisan 2023',
+    similarityScore: 55,
+    type: 'COKLU_ALIM',
+    lift: 10,
+    roi: 15,
+    stockOutDays: 0,
+    targetRevenue: 60000,
+    actualRevenue: 25000, // Result: 41% achievement (Fail)
+    plannedStockDays: 14,
+    actualStockDays: 14,
+    sellThrough: 35, // Low sell-through
+    markdownCost: 1500,
+  },
+  {
+    id: 'SC-9',
+    name: 'Flaş Gece İndirimi',
+    date: 'Kasım 2023',
+    similarityScore: 89,
+    type: 'INTERNET_INDIRIMI',
+    lift: 90,
+    roi: 160,
+    stockOutDays: 5, // Significant OOS
+    targetRevenue: 150000,
+    actualRevenue: 140000, // High revenue but missed potential due to OOS
+    plannedStockDays: 7,
+    actualStockDays: 2, // Stocked out in 2 days vs planned 7
+    sellThrough: 100,
+    markdownCost: 20000,
   },
 ];

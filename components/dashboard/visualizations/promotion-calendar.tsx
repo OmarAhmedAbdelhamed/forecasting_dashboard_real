@@ -2,8 +2,8 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/shared/card';
 import { Badge } from '@/components/ui/shared/badge';
-import { Calendar, Info } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/shared/tooltip';
+import { Calendar } from 'lucide-react';
+
 import { addDays, format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 

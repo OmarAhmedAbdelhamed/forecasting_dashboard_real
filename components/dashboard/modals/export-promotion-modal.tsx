@@ -108,6 +108,7 @@ const generateMockPromotionData = (count = 100) => {
       roi: roi,
       stock: stock,
       forecast: accuracy,
+      status: ['draft', 'pending', 'approved', 'completed'][Math.floor(Math.random() * 4)],
     };
   });
 };
@@ -116,6 +117,7 @@ type PromotionData = ReturnType<typeof generateMockPromotionData>[0];
 
 const ALL_COLUMNS = [
   { id: 'date', label: 'Tarih' },
+  { id: 'status', label: 'DURUM' },
   { id: 'name', label: 'Kampanya / Tip' },
   { id: 'type', label: 'Tip Kodu' },
   { id: 'region', label: 'Bölge' },
@@ -123,10 +125,17 @@ const ALL_COLUMNS = [
   { id: 'category', label: 'Reyon' },
   { id: 'uplift', label: 'Ciro Artışı (Lift)' },
   { id: 'upliftVal', label: 'Ciro Artış Değeri' },
-  { id: 'profit', label: 'Net Kar Etkisi' },
-  { id: 'roi', label: 'ROI (%)' },
+  { id: 'profit', label: 'Brüt Kar Etkisi (₺)' },
+  { id: 'roi', label: 'Satış Oranı (%)' },
   { id: 'stock', label: 'Stok Durumu' },
   { id: 'forecast', label: 'Tahmin Doğruluğu' },
+];
+
+const PROMO_STATUSES = [
+  { value: 'draft', label: 'Taslak' },
+  { value: 'pending', label: 'Onay Bekliyor' },
+  { value: 'approved', label: 'Onaylandı' },
+  { value: 'completed', label: 'Tamamlandı' },
 ];
 
 interface ExportPromotionModalProps {
@@ -141,6 +150,7 @@ export function ExportPromotionModal({
   initialData,
 }: ExportPromotionModalProps) {
   // Filters
+  const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
   const [selectedReyonlar, setSelectedReyonlar] = useState<string[]>([]);
@@ -192,6 +202,7 @@ export function ExportPromotionModal({
       roi: item.roi,
       stock: item.stock,
       forecast: parseFloat(item.forecast.replace('%', '')),
+      status: item.status || 'completed',
     }));
   };
 
@@ -232,7 +243,11 @@ export function ExportPromotionModal({
           return label && item.category === label;
         });
 
-      return matchesSearch && matchesRegion && matchesStore && matchesReyon;
+      const matchesStatus =
+        selectedStatuses.length === 0 ||
+        selectedStatuses.includes(item.status);
+
+      return matchesSearch && matchesStatus && matchesRegion && matchesStore && matchesReyon;
     });
 
     // Sorting
@@ -255,6 +270,7 @@ export function ExportPromotionModal({
   }, [
     MOCK_DATA,
     searchQuery,
+    selectedStatuses,
     selectedRegions,
     selectedStores,
     selectedReyonlar,
@@ -301,12 +317,18 @@ export function ExportPromotionModal({
     const rowsToExport = filteredData.filter((d) => selectedRows.has(d.id));
     if (rowsToExport.length === 0) return;
 
-    const headers = visibleColumns
-      .map((colId) => ALL_COLUMNS.find((c) => c.id === colId)?.label)
-      .join(',');
+    // Excel Logic: Add 'VERİ TİPİ' (Data Type)
+    // Header
+    const headers = [
+      'VERİ TİPİ',
+      ...visibleColumns.map((colId) => ALL_COLUMNS.find((c) => c.id === colId)?.label)
+    ].join(',');
 
     const csvRows = rowsToExport.map((row) => {
-      return visibleColumns
+      // Determine Data Type
+      const dataType = row.status === 'completed' ? 'Gerçekleşen' : 'Tahmin';
+      
+      const rowData = visibleColumns
         .map((colId) => {
           const val = row[colId as keyof PromotionData];
           return typeof val === 'string' && val.includes(',')
@@ -314,6 +336,8 @@ export function ExportPromotionModal({
             : val;
         })
         .join(',');
+      
+      return `${dataType},${rowData}`;
     });
 
     const csvContent = [headers, ...csvRows].join('\n');
@@ -393,6 +417,17 @@ export function ExportPromotionModal({
                 Filtreler
               </h3>
               <div className='space-y-3'>
+                <div className='space-y-1'>
+                  <Label className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>
+                    Durum
+                  </Label>
+                  <MultiSelect
+                    options={PROMO_STATUSES}
+                    selected={selectedStatuses}
+                    onChange={setSelectedStatuses}
+                    placeholder='Tüm Durumlar'
+                  />
+                </div>
                 <div className='space-y-1'>
                   <Label className='text-xs font-medium text-muted-foreground uppercase tracking-wider'>
                     Bölge
@@ -517,7 +552,7 @@ export function ExportPromotionModal({
                           tooltipText = 'Promosyonun net karlılığa etkisi.';
                         } else if (colId === 'roi') {
                           tooltipText =
-                            'Yatırım Getirisi (Return on Investment).';
+                            'Stok eritme başarısı (Sell-Through).';
                         } else if (colId === 'stock') {
                           tooltipText = 'Kampanya dönemi stok yeterliliği.';
                         }
@@ -654,21 +689,34 @@ export function ExportPromotionModal({
                                   isNumeric && 'text-center',
                                 )}
                               >
-                                {colId === 'uplift' ? (
-                                  <span className='text-green-600 font-medium'>
-                                    %{val}
-                                  </span>
+                                {colId === 'status' ? (
+                                  <Badge
+                                    className={cn(
+                                        'px-2 py-0.5 border text-[10px] font-bold uppercase',
+                                        val === 'completed' ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-50' :
+                                        val === 'approved' ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-50' :
+                                        val === 'pending' ? 'bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-50' :
+                                        'bg-gray-100 text-gray-700 border-gray-200 hover:bg-gray-100'
+                                    )}
+                                  >
+                                    {PROMO_STATUSES.find(s => s.value === val)?.label || val}
+                                  </Badge>
+                                ) : colId === 'uplift' ? (
+                                  <div className="flex flex-col items-center">
+                                      <span className='text-green-600 font-medium'>%{val}</span>
+                                      {row.status !== 'completed' && <span className="text-[9px] text-muted-foreground">(Tahmin)</span>}
+                                  </div>
                                 ) : colId === 'roi' ? (
                                   <Badge
                                     className={cn(
                                       'px-2 py-0.5',
-                                      (val as number) > 0
+                                        // Mock threshold logic for Sell-Through
+                                        (val as number) > 90
                                         ? 'bg-green-100 text-green-700 hover:bg-green-100'
-                                        : 'bg-red-100 text-red-700 hover:bg-red-100',
+                                        : 'bg-yellow-100 text-yellow-700 hover:bg-yellow-100',
                                     )}
                                   >
-                                    %{(val as number) > 0 ? '+' : ''}
-                                    {val}
+                                    %{val}
                                   </Badge>
                                 ) : colId === 'stock' ? (
                                   <span
@@ -681,7 +729,7 @@ export function ExportPromotionModal({
                                           : 'bg-yellow-100 text-yellow-800',
                                     )}
                                   >
-                                    {val}
+                                    {val === 'OK' ? 'Güvenli' : val === 'OOS' ? 'Riskli' : 'Aşırı'}
                                   </span>
                                 ) : colId === 'profit' ? (
                                   <span
