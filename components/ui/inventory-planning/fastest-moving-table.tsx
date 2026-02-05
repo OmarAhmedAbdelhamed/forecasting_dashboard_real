@@ -34,11 +34,13 @@ import { CardDescription } from '@/components/ui/shared/card';
 interface FastestMovingTableProps {
   items: InventoryItem[];
   onSeeAll?: (filterType: 'fast' | 'slow') => void;
+  period?: number;
 }
 
 export function FastestMovingTable({
   items = [],
   onSeeAll,
+  period = 30,
 }: FastestMovingTableProps) {
   const [activeTab, setActiveTab] = useState('fastest');
 
@@ -89,7 +91,7 @@ export function FastestMovingTable({
                     <Info className='h-3 w-3 text-muted-foreground hover:text-foreground cursor-help' />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Son 30 günlük ortalama satış adedi</p>
+                    <p>Son {period} günlük ortalama satış adedi</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -128,7 +130,7 @@ export function FastestMovingTable({
                   {item.stockLevel}
                 </TableCell>
                 <TableCell className='text-center text-xs py-3 text-emerald-600 font-medium'>
-                  {Math.round(item.forecastedDemand / 30)}
+                  {Math.round(item.forecastedDemand / period)}
                 </TableCell>
                 <TableCell className='text-center text-xs py-3'>
                   ₺{item.stockValue.toLocaleString('tr-TR')}

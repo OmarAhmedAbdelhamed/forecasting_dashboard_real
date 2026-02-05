@@ -32,12 +32,14 @@ interface InventoryTableProps {
   data: InventoryItem[];
   performanceFilter?: string;
   onPerformanceFilterChange?: (filter: string) => void;
+  period?: number;
 }
 
 export function InventoryTable({
   data = [],
   performanceFilter: externalPerformanceFilter,
   onPerformanceFilterChange,
+  period = 30,
 }: InventoryTableProps) {
   const [sortColumn, setSortColumn] = useState<keyof InventoryItem | null>(
     null,
@@ -462,7 +464,7 @@ export function InventoryTable({
                         <CircleAlert className='h-3 w-3 text-muted-foreground/50 hover:text-foreground transition-colors' />
                       </TooltipTrigger>
                       <TooltipContent>
-                        <p>Gelecek 30 gün için öngörülen satış adedi</p>
+                        <p>Gelecek {period} gün için öngörülen satış adedi</p>
                       </TooltipContent>
                     </Tooltip>
                   </div>

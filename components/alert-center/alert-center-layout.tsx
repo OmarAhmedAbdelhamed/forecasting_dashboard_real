@@ -61,7 +61,7 @@ export function AlertCenterLayout() {
       <div className='flex flex-col space-y-4'>
         {/* Title is now part of FilterBar as requested */}
         <FilterBar
-          title='Alert Center'
+          title='Uyarı Merkezi'
           selectedRegions={selectedRegions}
           onRegionChange={handleRegionChange}
           regionOptions={regionOptions}
@@ -77,9 +77,9 @@ export function AlertCenterLayout() {
       <Tabs defaultValue='low-growth' className='flex-1 flex flex-col'>
         <div className='flex items-center justify-between pointer-events-auto'>
           <TabsList className='grid w-full max-w-xl grid-cols-3'>
-            <TabsTrigger value='low-growth'>Low Growth</TabsTrigger>
-            <TabsTrigger value='high-growth'>High Growth</TabsTrigger>
-            <TabsTrigger value='forecast-error'>Forecast Hatalar</TabsTrigger>
+            <TabsTrigger value='low-growth'>Düşük Büyüme</TabsTrigger>
+            <TabsTrigger value='high-growth'>Yüksek Büyüme</TabsTrigger>
+            <TabsTrigger value='forecast-error'>Tahmin Hataları</TabsTrigger>
           </TabsList>
         </div>
 

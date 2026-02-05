@@ -10,6 +10,13 @@ import { InventoryTable } from '@/components/ui/inventory-planning/inventory-tab
 import { PlanningAlerts } from '@/components/ui/inventory-planning/planning-alerts';
 import { CustomProductLists } from '@/components/ui/inventory-planning/custom-product-lists';
 import { ProductDetailSheet } from '@/components/ui/inventory-planning/product-detail-sheet';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/shared/select';
 
 // Mock Options for Filters (matching overview style for consistency)
 import { SaleRateChart } from '@/components/ui/inventory-planning/sale-rate-chart';
@@ -21,7 +28,7 @@ import {
   getProductsByContext,
   getInventoryKPIs,
   generateInventoryItems,
-  generateStockTrends,
+  generateStockTrendsWithPeriod,
   generateStorePerformance,
   generateInventoryAlerts,
 } from '@/data/mock-data';
@@ -34,6 +41,11 @@ export function InventoryPlanningSection() {
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [tablePerformanceFilter, setTablePerformanceFilter] =
     useState<string>('all');
+
+  // Period Selection State
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('30');
+  const periodDays = parseInt(selectedPeriod, 10);
+
   const tableRef = useRef<HTMLDivElement>(null);
 
   // Product detail sheet state for planning alerts
@@ -77,6 +89,38 @@ export function InventoryPlanningSection() {
     return selectedProducts.filter((p) => validValues.has(p));
   }, [selectedProducts, productOptions]);
 
+  // --- Chart Selection Logic ---
+  const [chartSelectedProductId, setChartSelectedProductId] = useState<
+    string | undefined
+  >(undefined);
+
+  // Sync Chart Product Selection with Global Filters
+  useEffect(() => {
+    // 1. If global filter has exactly 1 product, force chart to match
+    // Only update if not already matching to avoid loops
+    if (
+      effectiveSelectedProducts.length === 1 &&
+      chartSelectedProductId !== effectiveSelectedProducts[0]
+    ) {
+      setChartSelectedProductId(effectiveSelectedProducts[0]);
+    }
+    // 2. If current chart selection is invalid or empty, pick the first available option
+    else if (productOptions.length > 0) {
+      const isValid =
+        chartSelectedProductId &&
+        productOptions.some((p) => p.value === chartSelectedProductId);
+
+      if (!isValid && chartSelectedProductId !== productOptions[0].value) {
+        setChartSelectedProductId(productOptions[0].value);
+      }
+    } else if (
+      productOptions.length === 0 &&
+      chartSelectedProductId !== undefined
+    ) {
+      setChartSelectedProductId(undefined);
+    }
+  }, [effectiveSelectedProducts, productOptions, chartSelectedProductId]);
+
   // Derived Data based on ALL filters
   const kpis = useMemo(
     () =>
@@ -94,36 +138,40 @@ export function InventoryPlanningSection() {
     ],
   );
 
-  const inventoryItems = useMemo(
+  // 2. Period-Aware Data (Lists & Charts)
+  const periodItems = useMemo(
     () =>
       generateInventoryItems(
         selectedRegions,
         effectiveSelectedStores,
         effectiveSelectedCategories,
         effectiveSelectedProducts,
+        periodDays, // Variable
       ),
     [
       selectedRegions,
       effectiveSelectedStores,
       effectiveSelectedCategories,
       effectiveSelectedProducts,
+      periodDays,
     ],
   );
 
   const stockTrends = useMemo(
     () =>
-      generateStockTrends(
-        30,
+      generateStockTrendsWithPeriod(
+        periodDays, // Variable
         selectedRegions,
         effectiveSelectedStores,
         effectiveSelectedCategories,
-        effectiveSelectedProducts,
+        chartSelectedProductId ? [chartSelectedProductId] : [],
       ),
     [
       selectedRegions,
       effectiveSelectedStores,
       effectiveSelectedCategories,
-      effectiveSelectedProducts,
+      chartSelectedProductId,
+      periodDays,
     ],
   );
 
@@ -134,21 +182,29 @@ export function InventoryPlanningSection() {
         effectiveSelectedStores,
         effectiveSelectedProducts,
         effectiveSelectedCategories,
+        periodDays, // Added period
       ),
     [
       selectedRegions,
       effectiveSelectedStores,
       effectiveSelectedProducts,
       effectiveSelectedCategories,
+      periodDays,
     ],
   );
 
   const inventoryAlerts = useMemo(() => {
-    return generateInventoryAlerts(selectedRegions, effectiveSelectedStores);
-  }, [selectedRegions, effectiveSelectedStores]);
+    return generateInventoryAlerts(
+      selectedRegions,
+      effectiveSelectedStores,
+      periodDays, // Added period
+    );
+  }, [selectedRegions, effectiveSelectedStores, periodDays]);
 
   const hasChartSelection =
-    effectiveSelectedStores.length > 0 || effectiveSelectedProducts.length > 0;
+    effectiveSelectedStores.length > 0 ||
+    effectiveSelectedCategories.length > 0 ||
+    !!chartSelectedProductId;
 
   const handleSeeAllPerformance = (filterType: 'fast' | 'slow') => {
     setTablePerformanceFilter(filterType);
@@ -169,14 +225,14 @@ export function InventoryPlanningSection() {
         setAlertSheetOpen(true);
       } else {
         // If not found in all items, try filtered items
-        const filteredItem = inventoryItems.find((item) => item.sku === sku);
+        const filteredItem = periodItems.find((item) => item.sku === sku);
         if (filteredItem) {
           setAlertSelectedItem(filteredItem);
           setAlertSheetOpen(true);
         }
       }
     },
-    [inventoryItems],
+    [periodItems],
   );
 
   // Sync with Dashboard Context
@@ -229,18 +285,47 @@ export function InventoryPlanningSection() {
         productOptions={productOptions}
         selectedProducts={effectiveSelectedProducts}
         onProductChange={setSelectedProducts}
-      />
+      >
+        <div className='w-full md:w-auto min-w-32'>
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger>
+              <SelectValue placeholder='Periyot' />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value='30'>30 Gün</SelectItem>
+              <SelectItem value='60'>60 Gün</SelectItem>
+              <SelectItem value='180'>180 Gün</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </FilterBar>
 
       <InventoryKpiSection data={kpis} />
 
       <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
         <div className='lg:col-span-1'>
-          <SaleRateChart items={inventoryItems} />
+          <SaleRateChart
+            items={periodItems}
+            selectedCategories={effectiveSelectedCategories}
+            onCategoryClick={(categoryValue) => {
+              // Simple toggle behavior since categories are now unique keys
+              setSelectedCategories((prev) => {
+                if (prev.includes(categoryValue)) {
+                  // Deselect
+                  return prev.filter((c) => c !== categoryValue);
+                }
+                // Select (single selection to match pie chart behavior, or append for multi-select)
+                // Let's support multi-select toggling
+                return [...prev, categoryValue];
+              });
+            }}
+          />
         </div>
         <div className='lg:col-span-2'>
           <FastestMovingTable
-            items={inventoryItems.slice(0, 8)}
+            items={periodItems.slice(0, 8)}
             onSeeAll={handleSeeAllPerformance}
+            period={periodDays}
           />
         </div>
       </div>
@@ -249,8 +334,9 @@ export function InventoryPlanningSection() {
         <PlanningAlerts
           data={inventoryAlerts}
           onActionClick={handleAlertActionClick}
+          period={periodDays}
         />
-        <StoreComparison data={storePerformance} />
+        <StoreComparison data={storePerformance} period={periodDays} />
       </div>
 
       <div className='grid grid-cols-1 lg:grid-cols-5 gap-6'>
@@ -258,6 +344,10 @@ export function InventoryPlanningSection() {
           <InventoryCharts
             data={stockTrends}
             hasSelection={hasChartSelection}
+            products={productOptions}
+            selectedProductId={chartSelectedProductId}
+            onProductChange={setChartSelectedProductId}
+            period={periodDays}
           />
         </div>
         <div className='lg:col-span-2'>
@@ -267,9 +357,10 @@ export function InventoryPlanningSection() {
 
       <div ref={tableRef}>
         <InventoryTable
-          data={inventoryItems}
+          data={periodItems}
           performanceFilter={tablePerformanceFilter}
           onPerformanceFilterChange={setTablePerformanceFilter}
+          period={periodDays}
         />
       </div>
 

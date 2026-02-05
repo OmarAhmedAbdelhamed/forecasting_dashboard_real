@@ -203,7 +203,7 @@ export function AlertList({
                 {type === 'high-growth' &&
                   'Beklenenden hızlı büyüyen ve stok takibi gereken ürünler.'}
                 {type === 'forecast-error' &&
-                  'AI tahmini ile gerçekleşen satış arasında yüksek fark olan ürünler.'}
+                  'Yapay zeka tahmini ile gerçekleşen satış arasında yüksek fark olan ürünler.'}
                 {type === 'inventory' &&
                   'Stok tükenme riski, fazla stok veya transfer ihtiyacı olan ürünler.'}
               </CardDescription>

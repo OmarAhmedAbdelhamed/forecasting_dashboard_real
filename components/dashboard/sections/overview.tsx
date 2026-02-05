@@ -183,7 +183,7 @@ export function OverviewSection() {
             <div className='pb-2 pt-3 px-4 flex items-center justify-between'>
               <div className='flex items-center gap-2 text-red-600'>
                 <AlertTriangle className='h-5 w-5' />
-                <span className='font-semibold'>Alert Center</span>
+                <span className='font-semibold'>Uyarı Merkezi</span>
               </div>
               <Button
                 variant='ghost'
@@ -191,7 +191,7 @@ export function OverviewSection() {
                 className='text-xs h-8 hover:bg-red-100 hover:text-red-700 text-red-600'
                 asChild
               >
-                <Link href='/alert-center'>See More</Link>
+                <Link href='/alert-center'>Daha Fazla</Link>
               </Button>
             </div>
             <div className='p-2 flex-1'>
@@ -212,7 +212,7 @@ export function OverviewSection() {
                     </TooltipContent>
                   </Tooltip>
                   <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
-                    Low Growth
+                    Düşük Büyüme
                   </span>
                   <span className='text-2xl 2xl:text-3xl font-bold text-red-600'>
                     4
@@ -234,7 +234,7 @@ export function OverviewSection() {
                     </TooltipContent>
                   </Tooltip>
                   <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
-                    High Growth
+                    Yüksek Büyüme
                   </span>
                   <span className='text-2xl 2xl:text-3xl font-bold text-green-600'>
                     12
@@ -256,7 +256,7 @@ export function OverviewSection() {
                     </TooltipContent>
                   </Tooltip>
                   <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
-                    Forecast Hatalar
+                    Tahmin Hataları
                   </span>
                   <span className='text-2xl 2xl:text-3xl font-bold text-orange-600'>
                     7

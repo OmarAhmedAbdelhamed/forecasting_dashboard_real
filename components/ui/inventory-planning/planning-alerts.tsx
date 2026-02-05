@@ -25,11 +25,13 @@ import { cn } from '@/lib/utils';
 interface PlanningAlertsProps {
   data: InventoryAlert[];
   onActionClick?: (sku: string) => void;
+  period?: number;
 }
 
 export function PlanningAlerts({
   data = [],
   onActionClick,
+  period = 30,
 }: PlanningAlertsProps) {
   return (
     <Card className='h-full flex flex-col shadow-sm'>
@@ -58,6 +60,7 @@ export function PlanningAlerts({
                   key={alert.id}
                   alert={alert}
                   onActionClick={onActionClick}
+                  period={period}
                 />
               ))
             ) : (
@@ -79,9 +82,10 @@ export function PlanningAlerts({
 interface AlertItemProps {
   alert: InventoryAlert;
   onActionClick?: (sku: string) => void;
+  period?: number;
 }
 
-function AlertItem({ alert, onActionClick }: AlertItemProps) {
+function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
   const getIcon = (type: string) => {
     switch (type) {
       case 'stockout':
@@ -192,7 +196,7 @@ function AlertItem({ alert, onActionClick }: AlertItemProps) {
           {alert.metrics.forecastedDemand !== undefined && (
             <div className='flex flex-col items-center justify-center p-2 rounded bg-slate-50'>
               <span className='text-[10px] text-slate-400 uppercase font-semibold'>
-                Tahmin (30G)
+                Tahmin ({period}G)
               </span>
               <span className='text-sm font-bold text-blue-600'>
                 {alert.metrics.forecastedDemand}
