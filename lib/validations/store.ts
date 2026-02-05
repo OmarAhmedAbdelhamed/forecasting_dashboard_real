@@ -17,35 +17,39 @@ const sanitizeAndValidateString = (fieldName: string) =>
       // Remove null bytes and sanitize text
       return removeNullBytes(sanitizeText(val.trim()));
     })
-    .refine((val) => val.length > 0, { message: `${fieldName} cannot be empty after sanitization` });
+    .refine((val) => val.length > 0, {
+      message: `${fieldName} cannot be empty after sanitization`,
+    });
 
 /**
  * Schema for creating a new store
  */
-export const createStoreSchema = z
-  .object({
-    name: sanitizeAndValidateString('Store name'),
-    region_id: z.string().uuid('Invalid region ID format'),
-    manager_id: z.string().uuid('Invalid manager ID format').optional(),
-    manager_ids: z.array(z.string().uuid('Invalid manager ID format')).optional(),
-  })
-  .refine(
-    (data) => {
-      // Either manager_id (legacy) or manager_ids (new) can be provided, but not both
-      // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
-      return !(data.manager_id && data.manager_ids);
-    },
-    {
-      message: 'Provide either manager_id or manager_ids, not both',
-      path: ['manager_id'],
-    },
-  );
+/**
+ * Schema for creating a new store
+ */
+const baseStoreSchema = z.object({
+  name: sanitizeAndValidateString('Store name'),
+  region_id: z.string().uuid('Invalid region ID format'),
+  manager_id: z.string().uuid('Invalid manager ID format').optional(),
+  manager_ids: z.array(z.string().uuid('Invalid manager ID format')).optional(),
+});
+
+export const createStoreSchema = baseStoreSchema.refine(
+  (data) => {
+    // Either manager_id (legacy) or manager_ids (new) can be provided, but not both
+    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
+    return !(data.manager_id && data.manager_ids);
+  },
+  {
+    message: 'Provide either manager_id or manager_ids, not both',
+    path: ['manager_id'],
+  },
+);
 
 /**
  * Schema for updating an existing store
  */
-// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-export const updateStoreSchema = createStoreSchema.partial().extend({
+export const updateStoreSchema = baseStoreSchema.partial().extend({
   id: z.string().uuid('Invalid store ID format'),
 });
 
