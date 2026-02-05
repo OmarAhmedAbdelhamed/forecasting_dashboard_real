@@ -79,7 +79,7 @@ const PRODUCT_NAMES = [
 ];
 
 // --- MOCK DATA GENERATOR ---
-const generateMockExportData = (count = 100, period: string = 'monthly') => {
+const generateMockExportData = (count = 100, period = 'monthly') => {
   return Array.from({ length: count }).map((_, i) => {
     const store = STORES[i % STORES.length];
     const region = REGIONS[i % REGIONS.length];
@@ -151,7 +151,7 @@ const generateMockExportData = (count = 100, period: string = 'monthly') => {
         ? 'none'
         : Math.random() > 0.5
           ? 'scheduled'
-          : 'ongoing') as 'none' | 'scheduled' | 'ongoing',
+          : 'ongoing'),
       futureForecast: futureForecast,
     };
   });
@@ -209,8 +209,7 @@ export function ExportForecastModal({
   const handleSort = (key: string) => {
     let direction: 'asc' | 'desc' = 'asc';
     if (
-      sortConfig &&
-      sortConfig.key === key &&
+      sortConfig?.key === key &&
       sortConfig.direction === 'asc'
     ) {
       direction = 'desc';
@@ -243,7 +242,7 @@ export function ExportForecastModal({
         selectedStores.length === 0 ||
         selectedStores.some((s) => {
           const label = STORES.find((store) => store.value === s)?.label;
-          return label && item.store === label.split(' - ')[1];
+          return item.store === label?.split(' - ')[1];
         });
 
       const matchesReyon =
@@ -326,7 +325,7 @@ export function ExportForecastModal({
   // Export Functionality (Mock CSV)
   const handleExport = () => {
     const rowsToExport = filteredData.filter((d) => selectedRows.has(d.id));
-    if (rowsToExport.length === 0) return;
+    if (rowsToExport.length === 0) {return;}
 
     const headers = visibleColumns
       .map((colId) => {
@@ -357,9 +356,9 @@ export function ExportForecastModal({
 
           // Translate Promotion Status for CSV
           if (colId === 'promotionStatus') {
-            if (val === 'ongoing') val = 'Devam Eden';
-            else if (val === 'scheduled') val = 'Planlanan';
-            else if (val === 'none') val = 'Yok';
+            if (val === 'ongoing') {val = 'Devam Eden';}
+            else if (val === 'scheduled') {val = 'Planlanan';}
+            else if (val === 'none') {val = 'Yok';}
           }
 
           return typeof val === 'string' && val.includes(',')
@@ -428,7 +427,7 @@ export function ExportForecastModal({
               <Button
                 variant='ghost'
                 size='icon'
-                onClick={() => onOpenChange(false)}
+                onClick={() => { onOpenChange(false); }}
                 className='text-white/70 hover:text-white hover:bg-white/10 ml-1 h-8 w-8'
               >
                 ✕
@@ -487,7 +486,7 @@ export function ExportForecastModal({
                   </Label>
                   <div className='flex items-center p-1 bg-muted/40 border rounded-lg h-9'>
                     <button
-                      onClick={() => setPeriod('monthly')}
+                      onClick={() => { setPeriod('monthly'); }}
                       className={cn(
                         'flex-1 flex items-center justify-center text-sm font-medium h-full rounded-md transition-all',
                         period === 'monthly'
@@ -499,7 +498,7 @@ export function ExportForecastModal({
                     </button>
                     <div className='w-px h-3 bg-border/50 mx-1' />
                     <button
-                      onClick={() => setPeriod('weekly')}
+                      onClick={() => { setPeriod('weekly'); }}
                       className={cn(
                         'flex-1 flex items-center justify-center text-sm font-medium h-full rounded-md transition-all',
                         period === 'weekly'
@@ -530,7 +529,7 @@ export function ExportForecastModal({
                         ? 'bg-[#FFB840]/10 border border-[#FFB840]/30'
                         : 'bg-muted/30 hover:bg-muted/50 border border-transparent',
                     )}
-                    onClick={() => toggleColumn(col.id)}
+                    onClick={() => { toggleColumn(col.id); }}
                   >
                     <Checkbox
                       checked={visibleColumns.includes(col.id)}
@@ -565,7 +564,7 @@ export function ExportForecastModal({
                 <Input
                   placeholder='Ürün ara (İsim veya SKU yazın)...'
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={(e) => { setSearchQuery(e.target.value); }}
                   className='pl-10 h-10 text-base bg-muted/30 border-muted focus-visible:ring-[#FFB840] focus-visible:border-[#FFB840]'
                 />
               </div>
@@ -651,7 +650,7 @@ export function ExportForecastModal({
                         return (
                           <th
                             key={colId}
-                            onClick={() => handleSort(colId)}
+                            onClick={() => { handleSort(colId); }}
                             className={cn(
                               'h-10 px-2 text-left font-semibold text-xs uppercase tracking-wider text-[#0D1E3A] bg-[#F4F7FA] cursor-pointer hover:bg-muted/50 transition-colors select-none group',
                               isNumeric && 'text-center',
@@ -689,7 +688,7 @@ export function ExportForecastModal({
                               {tooltipText && (
                                 <Tooltip>
                                   <TooltipTrigger
-                                    onClick={(e) => e.stopPropagation()}
+                                    onClick={(e) => { e.stopPropagation(); }}
                                   >
                                     <Info className='h-3.5 w-3.5 text-muted-foreground/70 hover:text-[#FFB840] transition-colors cursor-help' />
                                   </TooltipTrigger>
@@ -732,7 +731,7 @@ export function ExportForecastModal({
                             idx % 2 === 0 ? 'bg-white' : 'bg-muted/20',
                           )}
                           onClick={() =>
-                            handleRowSelect(row.id, !selectedRows.has(row.id))
+                            { handleRowSelect(row.id, !selectedRows.has(row.id)); }
                           }
                         >
                           <td className='text-center px-1 align-middle'>
@@ -740,9 +739,9 @@ export function ExportForecastModal({
                               <Checkbox
                                 checked={selectedRows.has(row.id)}
                                 onCheckedChange={(checked) =>
-                                  handleRowSelect(row.id, checked as boolean)
+                                  { handleRowSelect(row.id, checked as boolean); }
                                 }
-                                onClick={(e) => e.stopPropagation()}
+                                onClick={(e) => { e.stopPropagation(); }}
                                 className={cn(
                                   'h-3.5 w-3.5 border-2 border-[#0D1E3A]',
                                   selectedRows.has(row.id) &&
@@ -898,7 +897,7 @@ export function ExportForecastModal({
           <div className='flex gap-2'>
             <Button
               variant='outline'
-              onClick={() => onOpenChange(false)}
+              onClick={() => { onOpenChange(false); }}
               className='h-9 px-4 border-border hover:bg-muted text-sm'
             >
               İptal

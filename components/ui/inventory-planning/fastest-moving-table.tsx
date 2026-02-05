@@ -37,7 +37,7 @@ interface FastestMovingTableProps {
 }
 
 export function FastestMovingTable({
-  items = [],
+  items,
   onSeeAll,
 }: FastestMovingTableProps) {
   const [activeTab, setActiveTab] = useState('fastest');

@@ -27,7 +27,7 @@ export function ProductDetailSheet({
   open,
   onOpenChange,
 }: ProductDetailSheetProps) {
-  if (!item) return null;
+  if (!item) {return null;}
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>

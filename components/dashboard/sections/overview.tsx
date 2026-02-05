@@ -30,11 +30,18 @@ import {
   getHistoricalChartData,
   getPromotions,
 } from '@/data/mock-data';
+import { usePermissions } from '@/hooks/use-permissions';
+import { useVisibility } from '@/hooks/use-visibility';
+import type { UserRole } from '@/types/auth';
 
 export function OverviewSection() {
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+
+  // Get visibility config
+  const { canSeeKpi, canSeeChart, canSeeTable, canSeeAlert, canSeeFilter } = useVisibility('overview');
+  const { dataScope } = usePermissions();
 
   // Compute filtered options based on parent selections
   const regionOptions = useMemo(
@@ -107,44 +114,60 @@ export function OverviewSection() {
       <div className='grid grid-cols-1 lg:grid-cols-12 gap-4'>
         {/* Top Row: KPIs and Alert Center */}
         <div className='lg:col-span-8 grid grid-cols-1 md:grid-cols-4 gap-4'>
-          <MetricCard
-            title='Genel Model Doğruluğu'
-            value={`${metrics.accuracy.toFixed(1)}%`}
-            subtext='Ortalama Başarı'
-            icon={Target}
-            change={`${metrics.accuracyChange > 0 ? '+' : ''}${metrics.accuracyChange.toFixed(1)}%`}
-            changeType={metrics.accuracyChange >= 0 ? 'positive' : 'negative'}
-            delay={0}
-          />
-          <MetricCard
-            title='Gelecek 30 Günlük Tahmin'
-            value={`${(metrics.forecastValue / 1000000).toFixed(1)}M TL`}
-            secondaryValue={`${(metrics.forecastUnit / 1000).toFixed(0)}K Adet`}
-            icon={TrendingUp}
-            change={`${metrics.forecastChange > 0 ? '+' : ''}${metrics.forecastChange.toFixed(1)}%`}
-            changeType={metrics.forecastChange >= 0 ? 'positive' : 'negative'}
-            delay={0.1}
-          />
-          <MetricCard
-            title='YTD Başarı Miktarı'
-            value={`${(metrics.ytdValue / 1000000).toFixed(1)}M TL`}
-            subtext='Yılbaşından Bugüne'
-            icon={CalendarRange}
-            change={`${metrics.ytdChange > 0 ? '+' : ''}${metrics.ytdChange.toFixed(0)}%`}
-            changeType={metrics.ytdChange >= 0 ? 'positive' : 'negative'}
-            delay={0.2}
-          />
-          <MetricCard
-            title='Forecast Gap to Sales'
-            value={`${metrics.gapToSales.toFixed(1)}%`}
-            subtext='Tahmin Sapması'
-            icon={AlertTriangle}
-            change={`${metrics.gapToSalesChange > 0 ? '+' : ''}${metrics.gapToSalesChange.toFixed(1)}%`}
-            changeType={metrics.gapToSalesChange >= 0 ? 'positive' : 'negative'} // Negative gap change might be good or bad depending on context, assuming closer to 0 is better? Or just direction. Let's stick to standard logic.
-            delay={0.3}
-          />
+          {/* Model Accuracy KPI */}
+          {canSeeKpi('overview-model-accuracy') && (
+            <MetricCard
+              title='Genel Model Doğruluğu'
+              value={`${metrics.accuracy.toFixed(1)}%`}
+              subtext='Ortalama Başarı'
+              icon={Target}
+              change={`${metrics.accuracyChange > 0 ? '+' : ''}${metrics.accuracyChange.toFixed(1)}%`}
+              changeType={metrics.accuracyChange >= 0 ? 'positive' : 'negative'}
+              delay={0}
+            />
+          )}
+
+          {/* 30-Day Forecast KPI */}
+          {canSeeKpi('overview-30day-forecast') && (
+            <MetricCard
+              title='Gelecek 30 Günlük Tahmin'
+              value={`${(metrics.forecastValue / 1000000).toFixed(1)}M TL`}
+              secondaryValue={`${(metrics.forecastUnit / 1000).toFixed(0)}K Adet`}
+              icon={TrendingUp}
+              change={`${metrics.forecastChange > 0 ? '+' : ''}${metrics.forecastChange.toFixed(1)}%`}
+              changeType={metrics.forecastChange >= 0 ? 'positive' : 'negative'}
+              delay={0.1}
+            />
+          )}
+
+          {/* YTD Value KPI */}
+          {canSeeKpi('overview-ytd-value') && (
+            <MetricCard
+              title='YTD Başarı Miktarı'
+              value={`${(metrics.ytdValue / 1000000).toFixed(1)}M TL`}
+              subtext='Yılbaşından Bugüne'
+              icon={CalendarRange}
+              change={`${metrics.ytdChange > 0 ? '+' : ''}${metrics.ytdChange.toFixed(0)}%`}
+              changeType={metrics.ytdChange >= 0 ? 'positive' : 'negative'}
+              delay={0.2}
+            />
+          )}
+
+          {/* Forecast Gap KPI */}
+          {canSeeKpi('overview-forecast-gap') && (
+            <MetricCard
+              title='Forecast Gap to Sales'
+              value={`${metrics.gapToSales.toFixed(1)}%`}
+              subtext='Tahmin Sapması'
+              icon={AlertTriangle}
+              change={`${metrics.gapToSalesChange > 0 ? '+' : ''}${metrics.gapToSalesChange.toFixed(1)}%`}
+              changeType={metrics.gapToSalesChange >= 0 ? 'positive' : 'negative'}
+              delay={0.3}
+            />
+          )}
         </div>
 
+        {/* Alert Center */}
         <div className='lg:col-span-4'>
           <div className='border border-red-200 bg-red-50/10 rounded-lg overflow-hidden flex flex-col h-full'>
             <div className='pb-2 pt-3 px-4 flex items-center justify-between'>
@@ -163,114 +186,136 @@ export function OverviewSection() {
             </div>
             <div className='p-2 flex-1'>
               <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 xlg:grid-cols-4 gap-2 h-full'>
-                <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
-                        <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side='top'
-                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
-                    >
-                      Düşük büyüme gösteren ürün kategorileri. Pazarlama
-                      stratejisi gözden geçirilmeli.
-                    </TooltipContent>
-                  </Tooltip>
-                  <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
-                    Low Growth
-                  </span>
-                  <span className='text-2xl 2xl:text-3xl font-bold text-red-600'>
-                    4
-                  </span>
-                </div>
-                <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
-                        <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side='top'
-                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
-                    >
-                      Yüksek büyüme gösteren ürün kategorileri. Stok ve tedarik
-                      planlaması öncelikli.
-                    </TooltipContent>
-                  </Tooltip>
-                  <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
-                    High Growth
-                  </span>
-                  <span className='text-2xl 2xl:text-3xl font-bold text-green-600'>
-                    12
-                  </span>
-                </div>
-                <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
-                        <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side='top'
-                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
-                    >
-                      Tahmin doğruluğu düşük olan ürünler. Model iyileştirmesi
-                      gerekebilir.
-                    </TooltipContent>
-                  </Tooltip>
-                  <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
-                    Forecast Hatalar
-                  </span>
-                  <span className='text-2xl 2xl:text-3xl font-bold text-orange-600'>
-                    7
-                  </span>
-                </div>
-                <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
-                        <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent
-                      side='top'
-                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
-                    >
-                      Kritik stok seviyesinde olan ürünler. Acil tedarik
-                      aksiyonu gerekli.
-                    </TooltipContent>
-                  </Tooltip>
-                  <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
-                    Kritik Stok
-                  </span>
-                  <span className='text-2xl 2xl:text-3xl font-bold text-red-600'>
-                    3
-                  </span>
-                </div>
+                {/* Low Growth Alert */}
+                {canSeeAlert('alert-low-growth') && (
+                  <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
+                          <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side='top'
+                        className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                      >
+                        Düşük büyüme gösteren ürün kategorileri. Pazarlama
+                        stratejisi gözden geçirilmeli.
+                      </TooltipContent>
+                    </Tooltip>
+                    <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
+                      Low Growth
+                    </span>
+                    <span className='text-2xl 2xl:text-3xl font-bold text-red-600'>
+                      4
+                    </span>
+                  </div>
+                )}
+
+                {/* High Growth Alert */}
+                {canSeeAlert('alert-high-growth') && (
+                  <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
+                          <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side='top'
+                        className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                      >
+                        Yüksek büyüme gösteren ürün kategorileri. Stok ve tedarik
+                        planlaması öncelikli.
+                      </TooltipContent>
+                    </Tooltip>
+                    <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
+                      High Growth
+                    </span>
+                    <span className='text-2xl 2xl:text-3xl font-bold text-green-600'>
+                      12
+                    </span>
+                  </div>
+                )}
+
+                {/* Forecast Errors Alert */}
+                {canSeeAlert('alert-forecast-errors') && (
+                  <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
+                          <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side='top'
+                        className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                      >
+                        Tahmin doğruluğu düşük olan ürünler. Model iyileştirmesi
+                        gerekebilir.
+                      </TooltipContent>
+                    </Tooltip>
+                    <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
+                      Forecast Hatalar
+                    </span>
+                    <span className='text-2xl 2xl:text-3xl font-bold text-orange-600'>
+                      7
+                    </span>
+                  </div>
+                )}
+
+                {/* Critical Stock Alert */}
+                {canSeeAlert('alert-critical-stock') && (
+                  <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
+                          <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent
+                        side='top'
+                        className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                      >
+                        Kritik stok seviyesinde olan ürünler. Acil tedarik
+                        aksiyonu gerekli.
+                      </TooltipContent>
+                    </Tooltip>
+                    <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
+                      Kritik Stok
+                    </span>
+                    <span className='text-2xl 2xl:text-3xl font-bold text-red-600'>
+                      3
+                    </span>
+                  </div>
+                )}
               </div>
             </div>
           </div>
         </div>
 
         {/* Middle Row: Charts */}
-        <div className='lg:col-span-6'>
-          <RevenueTargetChart data={revenueData} />
-        </div>
-        <div className='lg:col-span-6'>
-          <HistoricalUnitsChart data={historicalData} />
-        </div>
+        {/* Revenue Target Chart */}
+        {canSeeChart('overview-revenue-target-chart') && (
+          <div className='lg:col-span-6'>
+            <RevenueTargetChart data={revenueData} />
+          </div>
+        )}
+
+        {/* Historical Units Chart */}
+        {canSeeChart('overview-historical-units-chart') && (
+          <div className='lg:col-span-6'>
+            <HistoricalUnitsChart data={historicalData} />
+          </div>
+        )}
 
         {/* Bottom Row: Tables */}
-        <div className='lg:col-span-12'>
-          <UpcomingPromotions promotions={promotions} />
-        </div>
-        {/* <div className='lg:col-span-12'>
-          <StockRiskTable risks={stockRisks} />
-        </div> */}
+        {/* Upcoming Promotions Table */}
+        {canSeeTable('overview-upcoming-promotions') && (
+          <div className='lg:col-span-12'>
+            <UpcomingPromotions promotions={promotions} />
+          </div>
+        )}
       </div>
     </div>
   );

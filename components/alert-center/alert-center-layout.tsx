@@ -16,6 +16,8 @@ import {
 } from '@/data/mock-data';
 import { GrowthProduct, ForecastErrorProduct } from '@/data/mock-alerts';
 import { InventoryAlert } from '@/types/inventory';
+import type { DataScope } from '@/types/permissions';
+import type { UserRole } from '@/types/auth';
 
 interface ResolvedAlert {
   id: string;
@@ -27,7 +29,17 @@ interface ResolvedAlert {
   data: GrowthProduct | ForecastErrorProduct | InventoryAlert;
 }
 
-export function AlertCenterLayout() {
+interface AlertCenterLayoutProps {
+  dataScope: DataScope;
+  canResolveAlerts: boolean;
+  userRole: UserRole | null;
+}
+
+export function AlertCenterLayout({
+  dataScope,
+  canResolveAlerts,
+  userRole,
+}: AlertCenterLayoutProps) {
   // Resolved alerts state
   const [resolvedAlerts, setResolvedAlerts] = useState<ResolvedAlert[]>([]);
 
@@ -90,6 +102,9 @@ export function AlertCenterLayout() {
             filters={{ selectedRegions, selectedStores, selectedCategories }}
             resolvedAlerts={resolvedAlerts}
             onResolve={handleResolve}
+            canResolveAlerts={canResolveAlerts}
+            dataScope={dataScope}
+            userRole={userRole}
           />
         </TabsContent>
         <TabsContent value='high-growth' className='flex-1 mt-4'>
@@ -98,6 +113,9 @@ export function AlertCenterLayout() {
             filters={{ selectedRegions, selectedStores, selectedCategories }}
             resolvedAlerts={resolvedAlerts}
             onResolve={handleResolve}
+            canResolveAlerts={canResolveAlerts}
+            dataScope={dataScope}
+            userRole={userRole}
           />
         </TabsContent>
         <TabsContent value='forecast-error' className='flex-1 mt-4'>
@@ -106,6 +124,9 @@ export function AlertCenterLayout() {
             filters={{ selectedRegions, selectedStores, selectedCategories }}
             resolvedAlerts={resolvedAlerts}
             onResolve={handleResolve}
+            canResolveAlerts={canResolveAlerts}
+            dataScope={dataScope}
+            userRole={userRole}
           />
         </TabsContent>
         <TabsContent value='inventory' className='flex-1 mt-4'>
@@ -114,6 +135,9 @@ export function AlertCenterLayout() {
             filters={{ selectedRegions, selectedStores, selectedCategories }}
             resolvedAlerts={resolvedAlerts}
             onResolve={handleResolve}
+            canResolveAlerts={canResolveAlerts}
+            dataScope={dataScope}
+            userRole={userRole}
           />
         </TabsContent>
       </Tabs>

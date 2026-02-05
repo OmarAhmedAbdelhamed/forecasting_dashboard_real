@@ -47,7 +47,7 @@ export function StockRiskTable({ risks }: StockRiskTableProps) {
               <TableRow
                 key={item.sku}
                 className='cursor-pointer hover:bg-red-100/50 transition-colors'
-                onClick={() => console.log('Navigate to', item.sku)}
+                onClick={() => { console.log('Navigate to', item.sku); }}
               >
                 <TableCell className='font-medium p-3'>
                   <div className='flex flex-col'>

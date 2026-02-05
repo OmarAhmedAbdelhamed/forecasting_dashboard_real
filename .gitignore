@@ -25,3 +25,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.serena
+.claude
+docs
+scripts
+supabase
+
+/CLAUDE.md

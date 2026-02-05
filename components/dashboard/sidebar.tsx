@@ -5,6 +5,8 @@ import React from 'react';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import type { Section } from '@/types/types';
+import type { DashboardSection } from '@/types/permissions';
+import { usePermissions } from '@/hooks/use-permissions';
 import {
   LayoutDashboard,
   TrendingUp,
@@ -12,6 +14,9 @@ import {
   Tag,
   CalendarRange,
   AlertTriangle,
+  Shield,
+  Settings,
+  FolderTree,
 } from 'lucide-react';
 
 interface SidebarProps {
@@ -28,7 +33,32 @@ const navigation: { name: string; href: Section; icon: React.ElementType }[] = [
   { name: 'Fiyatlandırma & Promosyon', href: 'pricing_promotion', icon: Tag },
   { name: 'Sezonluk Planlama', href: 'seasonal_planning', icon: CalendarRange },
   { name: 'Alert Center', href: 'alert_center', icon: AlertTriangle },
+  { name: 'Administration', href: 'administration', icon: Settings },
+  { name: 'Catalog Management', href: 'category_management', icon: FolderTree },
 ];
+
+// Mapping from Section type to DashboardSection type
+const sectionToDashboardSection: Record<Section, DashboardSection> = {
+  overview: 'overview',
+  demand_forecasting: 'demand-forecasting',
+  inventory_planning: 'inventory-planning',
+  pricing_promotion: 'pricing-promotion',
+  seasonal_planning: 'seasonal-planning',
+  alert_center: 'alert-center',
+  user_management: 'user-management',
+  administration: 'administration',
+  category_management: 'category-management',
+  financial_overview: 'financial-overview',
+  operational_overview: 'operational-overview',
+};
+
+// Helper function to format role name for display
+function formatRoleName(role: string): string {
+  return role
+    .split('_')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
 
 export function Sidebar({
   activeSection,
@@ -36,14 +66,26 @@ export function Sidebar({
   collapsed,
   onCollapsedChange,
 }: SidebarProps) {
+  const { allowedSections, userRole, canViewSection, isLoading } = usePermissions();
+
+  // Filter navigation based on user's allowed sections
+  const filteredNavigation = React.useMemo(() => {
+    if (isLoading) {return [];}
+
+    return navigation.filter((item) => {
+      const dashboardSection = sectionToDashboardSection[item.href];
+      return canViewSection(dashboardSection);
+    });
+  }, [allowedSections, canViewSection, isLoading]);
+
   return (
     <aside
       className={cn(
         'fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300 ease-out flex flex-col overflow-hidden',
         collapsed ? 'w-13.75' : 'w-60 lg:w-70 shadow-2xl',
       )}
-      onMouseEnter={() => onCollapsedChange(false)}
-      onMouseLeave={() => onCollapsedChange(true)}
+      onMouseEnter={() => { onCollapsedChange(false); }}
+      onMouseLeave={() => { onCollapsedChange(true); }}
     >
       {/* Logo */}
       <div className='h-14 flex items-center border-b border-sidebar-border overflow-hidden'>
@@ -73,14 +115,14 @@ export function Sidebar({
 
       {/* Navigation */}
       <nav className='flex-1 py-4 px-1 space-y-1 overflow-hidden'>
-        {navigation.map((item) => {
+        {filteredNavigation.map((item) => {
           const Icon = item.icon;
           const isActive = activeSection === item.href;
 
           return (
             <button
               key={item.href}
-              onClick={() => onSectionChange(item.href)}
+              onClick={() => { onSectionChange(item.href); }}
               className={cn(
                 'w-full flex items-center py-2 rounded-lg text-xs lg:text-sm font-medium transition-colors duration-200 group relative',
                 isActive
@@ -117,6 +159,33 @@ export function Sidebar({
           );
         })}
       </nav>
+
+      {/* Role Badge Footer */}
+      {userRole && !isLoading && (
+        <div className='border-t border-sidebar-border p-3 overflow-hidden'>
+          <div
+            className={cn(
+              'flex items-center gap-2 px-2 py-1.5 rounded-lg bg-accent/10 border border-accent/20',
+              'transition-all duration-300',
+            )}
+          >
+            <div className='w-5 h-5 shrink-0 flex items-center justify-center'>
+              <Shield className='w-4 h-4 text-accent' />
+            </div>
+            <div
+              className={cn(
+                'flex flex-col transition-opacity duration-300',
+                collapsed ? 'opacity-0' : 'opacity-100',
+              )}
+            >
+              <span className='text-[10px] text-muted-foreground uppercase tracking-wider font-medium'>
+                Role
+              </span>
+              <span className='text-xs font-semibold text-accent'>{formatRoleName(userRole)}</span>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

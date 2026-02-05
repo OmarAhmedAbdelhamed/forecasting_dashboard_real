@@ -34,6 +34,8 @@ import {
   Box,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import type { DataScope } from '@/types/permissions';
+import type { UserRole } from '@/types/auth';
 
 interface ResolvedAlert {
   id: string;
@@ -54,6 +56,9 @@ interface AlertListProps {
   };
   resolvedAlerts: ResolvedAlert[];
   onResolve: (alert: ResolvedAlert) => void;
+  canResolveAlerts: boolean;
+  dataScope: DataScope;
+  userRole: UserRole | null;
 }
 
 export function AlertList({
@@ -61,6 +66,9 @@ export function AlertList({
   filters,
   resolvedAlerts,
   onResolve,
+  canResolveAlerts,
+  dataScope,
+  userRole,
 }: AlertListProps) {
   const [search, setSearch] = useState('');
   // Local state to track comments and actions for demo purposes
@@ -94,15 +102,22 @@ export function AlertList({
     return data
       .filter((item) => !resolvedIds.includes(item.id))
       .filter((item) => {
-        const itemName = (item as any).name || (item as any).productName || '';
+        // Extract name with proper type checking
+        const getItemName = (i: GrowthProduct | ForecastErrorProduct | InventoryAlert): string => {
+          if ('name' in i) {return i.name || '';}
+          if ('productName' in i) {return i.productName || '';}
+          return '';
+        };
+        const itemName = getItemName(item);
+
         const matchesSearch =
           search === '' ||
           itemName.toLowerCase().includes(search.toLowerCase()) ||
           item.id.toLowerCase().includes(search.toLowerCase()) ||
-          ((item as any).sku &&
-            (item as any).sku.toLowerCase().includes(search.toLowerCase()));
+          (('sku' in item) && item.sku && item.sku.toLowerCase().includes(search.toLowerCase()));
 
-        const itemStore = (item as any).store || (item as any).storeName || '';
+        const itemStore = ('store' in item ? item.store : '') ||
+                          ('storeName' in item ? item.storeName : '');
         const matchesStore =
           filters.selectedStores.length === 0 ||
           filters.selectedStores.includes(itemStore) ||
@@ -119,7 +134,12 @@ export function AlertList({
   const handleResolve = (
     item: GrowthProduct | ForecastErrorProduct | InventoryAlert,
   ) => {
-    const itemName = (item as any).name || (item as any).productName || 'Ürün';
+    const getItemName = (i: GrowthProduct | ForecastErrorProduct | InventoryAlert): string => {
+      if ('name' in i) {return i.name || '';}
+      if ('productName' in i) {return i.productName || '';}
+      return 'Ürün';
+    };
+    const itemName = getItemName(item);
     onResolve({
       id: item.id,
       type: type,
@@ -214,7 +234,7 @@ export function AlertList({
                 placeholder='SKU veya Ürün Ara...'
                 className='pl-9'
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => { setSearch(e.target.value); }}
               />
             </div>
           </div>
@@ -295,10 +315,10 @@ export function AlertList({
                       className='border-b transition-colors hover:bg-muted/50'
                     >
                       <td className='p-4 font-mono text-xs'>
-                        {(item as any).sku || item.id}
+                        {'sku' in item ? item.sku : item.id}
                       </td>
                       <td className='p-4 font-medium'>
-                        {(item as any).productName || (item as any).name}
+                        {'productName' in item ? item.productName : 'name' in item ? item.name : item.id}
                       </td>
 
                       {type === 'inventory' ? (
@@ -399,10 +419,10 @@ export function AlertList({
                             className='h-8 text-xs'
                             value={comments[item.id] || ''}
                             onChange={(e) =>
-                              setComments((prev) => ({
+                              { setComments((prev) => ({
                                 ...prev,
                                 [item.id]: e.target.value,
-                              }))
+                              })); }
                             }
                           />
                         </div>
@@ -411,7 +431,7 @@ export function AlertList({
                         <Select
                           value={actions[item.id]}
                           onValueChange={(val) =>
-                            setActions((prev) => ({ ...prev, [item.id]: val }))
+                            { setActions((prev) => ({ ...prev, [item.id]: val })); }
                           }
                         >
                           <SelectTrigger className='h-8 text-xs w-full'>
@@ -431,15 +451,24 @@ export function AlertList({
                         </Select>
                       </td>
                       <td className='p-4 text-center'>
-                        <Button
-                          size='sm'
-                          className='h-8 w-8 p-0'
-                          variant='ghost'
-                          onClick={() => handleResolve(item)}
-                          title='Çözüldü Olarak İşaretle'
-                        >
-                          <CheckCircle className='h-5 w-5 text-green-600 hover:text-green-700' />
-                        </Button>
+                        {canResolveAlerts ? (
+                          <Button
+                            size='sm'
+                            className='h-8 w-8 p-0'
+                            variant='ghost'
+                            onClick={() => { handleResolve(item); }}
+                            title='Çözüldü Olarak İşaretle'
+                          >
+                            <CheckCircle className='h-5 w-5 text-green-600 hover:text-green-700' />
+                          </Button>
+                        ) : (
+                          <div
+                            className='h-8 w-8 flex items-center justify-center'
+                            title='Yetkiniz bulunmuyor'
+                          >
+                            <CheckCircle className='h-5 w-5 text-gray-300 cursor-not-allowed' />
+                          </div>
+                        )}
                       </td>
                     </tr>
                   ))

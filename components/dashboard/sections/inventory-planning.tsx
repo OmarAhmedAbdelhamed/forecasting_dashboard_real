@@ -24,8 +24,13 @@ import {
   generateInventoryAlerts,
 } from '@/data/mock-data';
 import { useMemo, useEffect, useRef } from 'react';
+import { usePermissions } from '@/hooks/use-permissions';
+import type { UserRole } from '@/types/auth';
 
 export function InventoryPlanningSection() {
+  // Get user permissions and data scope
+  const { dataScope, userRole, isLoading: permissionsLoading } = usePermissions();
+
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
@@ -34,16 +39,47 @@ export function InventoryPlanningSection() {
     useState<string>('all');
   const tableRef = useRef<HTMLDivElement>(null);
 
-  // Hierarchical Filter Options
-  const storeOptions = useMemo(
-    () => getStoresByRegions(selectedRegions),
-    [selectedRegions],
-  );
+  // Filter options based on user's data scope
+  const filteredRegionOptions = useMemo(() => {
+    if (permissionsLoading) {return [];}
 
-  const categoryOptions = useMemo(
-    () => getCategoriesByStores(selectedStores, selectedRegions),
-    [selectedStores, selectedRegions],
-  );
+    // If user has unrestricted access (general_manager, inventory_planner, buyer), show all regions
+    if (!userRole || !dataScope.regions || dataScope.regions.length === 0) {
+      return REGIONS_FLAT;
+    }
+
+    // Filter regions to only those in user's scope
+    return REGIONS_FLAT.filter((region) =>
+      dataScope.regions?.includes(region.value)
+    );
+  }, [dataScope.regions, userRole, permissionsLoading]);
+
+  // Hierarchical Filter Options (with data scope filtering)
+  const storeOptions = useMemo(() => {
+    // Get all stores for selected regions
+    const allStores = getStoresByRegions(selectedRegions);
+
+    // Filter stores based on user's data scope
+    if (!permissionsLoading && dataScope.stores && dataScope.stores.length > 0) {
+      return allStores.filter((store) => dataScope.stores?.includes(store.value));
+    }
+
+    return allStores;
+  }, [selectedRegions, dataScope.stores, permissionsLoading]);
+
+  const categoryOptions = useMemo(() => {
+    // Get all categories for selected stores/regions
+    const allCategories = getCategoriesByStores(selectedStores, selectedRegions);
+
+    // Filter categories based on user's data scope
+    if (!permissionsLoading && dataScope.categories && dataScope.categories.length > 0) {
+      return allCategories.filter((category) =>
+        dataScope.categories?.includes(category.value)
+      );
+    }
+
+    return allCategories;
+  }, [selectedStores, selectedRegions, dataScope.categories, permissionsLoading]);
 
   const productOptions = useMemo(
     () =>
@@ -154,7 +190,7 @@ export function InventoryPlanningSection() {
       <FilterBar
         title='Envanter Planlama'
         titleTooltip='Bölge, mağaza ve ürün bazında filtreleme yaparak envanter verilerini özelleştirin.'
-        regionOptions={REGIONS_FLAT}
+        regionOptions={filteredRegionOptions}
         selectedRegions={selectedRegions}
         onRegionChange={setSelectedRegions}
         storeOptions={storeOptions}

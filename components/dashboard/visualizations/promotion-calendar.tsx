@@ -12,7 +12,7 @@ const UPCOMING_PROMOTIONS = [
     start: 1, // Day offset from start
     duration: 10,
     type: 'INTERNET_INDIRIMI',
-    color: 'bg-emerald-500', 
+    color: 'bg-emerald-500',
   },
   {
     id: 2,
@@ -60,7 +60,7 @@ export function PromotionCalendar() {
                 <span>15. Gün</span>
                 <span>30. Gün</span>
             </div>
-            
+
             <div className="relative space-y-3">
                 {/* Grid Lines */}
                 <div className="absolute inset-0 flex justify-between pointer-events-none opacity-20">
@@ -72,7 +72,7 @@ export function PromotionCalendar() {
                 {UPCOMING_PROMOTIONS.map((promo) => (
                     <div key={promo.id} className="relative h-8 flex items-center group">
                         {/* Bar */}
-                        <div 
+                        <div
                             className={`absolute h-6 rounded-md shadow-sm ${promo.color} bg-opacity-90 flex items-center px-2 cursor-pointer transition-all hover:scale-[1.02] hover:shadow-md`}
                             style={{
                                 left: `${(promo.start / totalDays) * 100}%`,
@@ -83,7 +83,7 @@ export function PromotionCalendar() {
                                 {promo.name}
                             </span>
                         </div>
-                        
+
                         {/* Tooltip via Group Hover (Custom simplified tooltip for speed) */}
                          <div className="absolute top-[-30px] left-1/2 -translate-x-1/2 hidden group-hover:block bg-slate-800 text-white text-xs px-2 py-1 rounded z-20 whitespace-nowrap">
                             {promo.type} ({promo.duration} gün)
@@ -91,7 +91,7 @@ export function PromotionCalendar() {
                     </div>
                 ))}
             </div>
-            
+
              <div className="mt-4 flex gap-4 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1.5">
                     <div className="w-2 h-2 rounded-full bg-emerald-500" /> İnternet

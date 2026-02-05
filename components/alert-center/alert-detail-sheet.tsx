@@ -37,7 +37,7 @@ export function AlertDetailSheet({
 }: AlertDetailSheetProps) {
   const [comment, setComment] = useState('');
 
-  if (!alert) return null;
+  if (!alert) {return null;}
 
   const handleResolve = () => {
     // Mock resolve action
@@ -195,7 +195,7 @@ export function AlertDetailSheet({
               placeholder='Aksiyon hakkında notunuzu buraya girin...'
               className='resize-none text-sm'
               value={comment}
-              onChange={(e) => setComment(e.target.value)}
+              onChange={(e) => { setComment(e.target.value); }}
             />
           </div>
         </div>
@@ -208,7 +208,7 @@ export function AlertDetailSheet({
           <Button
             variant='outline'
             className='w-full'
-            onClick={() => onOpenChange(false)}
+            onClick={() => { onOpenChange(false); }}
           >
             Kapat
           </Button>

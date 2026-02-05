@@ -25,7 +25,7 @@ interface StoreComparisonProps {
   data: StoreInventoryPerformance[];
 }
 
-export function StoreComparison({ data = [] }: StoreComparisonProps) {
+export function StoreComparison({ data }: StoreComparisonProps) {
   return (
     <Card className='col-span-1 h-full'>
       <CardHeader>

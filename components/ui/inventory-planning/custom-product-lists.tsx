@@ -60,7 +60,7 @@ export function CustomProductLists({ onListSelect }: CustomProductListsProps) {
 
   // Filter products based on search
   const filteredProducts = useMemo(() => {
-    if (!searchTerm.trim()) return allProducts;
+    if (!searchTerm.trim()) {return allProducts;}
     const lowerSearch = searchTerm.toLowerCase();
     return allProducts.filter(
       (p) =>
@@ -227,14 +227,14 @@ export function CustomProductLists({ onListSelect }: CustomProductListsProps) {
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align='end'>
                     <DropdownMenuItem
-                      onClick={() => handleOpenEditDialog(list)}
+                      onClick={() => { handleOpenEditDialog(list); }}
                     >
                       <Pencil className='mr-2 h-4 w-4' />
                       Düzenle
                     </DropdownMenuItem>
                     <DropdownMenuItem
                       className='text-destructive'
-                      onClick={() => handleDeleteList(list.id)}
+                      onClick={() => { handleDeleteList(list.id); }}
                     >
                       <Trash2 className='mr-2 h-4 w-4' />
                       Sil
@@ -263,7 +263,7 @@ export function CustomProductLists({ onListSelect }: CustomProductListsProps) {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent
           className='sm:max-w-2xl h-[85vh] flex flex-col p-0 gap-0 rounded-xl overflow-hidden border-0 shadow-2xl'
-          onInteractOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => { e.preventDefault(); }}
         >
           {/* Header - Navy Blue Theme */}
           <div className='px-6 py-4 bg-[#0D1E3A] text-white shrink-0'>
@@ -309,7 +309,7 @@ export function CustomProductLists({ onListSelect }: CustomProductListsProps) {
                 id='listName'
                 placeholder='Örn: Kritik Ürünler...'
                 value={listName}
-                onChange={(e) => setListName(e.target.value)}
+                onChange={(e) => { setListName(e.target.value); }}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
                     handleSaveList();
@@ -329,7 +329,7 @@ export function CustomProductLists({ onListSelect }: CustomProductListsProps) {
                   <Button
                     variant='ghost'
                     size='sm'
-                    onClick={() => setSelectedSkus(new Set())}
+                    onClick={() => { setSelectedSkus(new Set()); }}
                     className='h-7 px-2 text-xs text-red-500 hover:text-red-700 hover:bg-red-50'
                   >
                     Seçimi Temizle
@@ -342,7 +342,7 @@ export function CustomProductLists({ onListSelect }: CustomProductListsProps) {
                 <Input
                   placeholder='Ürün adı veya SKU ile ara...'
                   value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
+                  onChange={(e) => { setSearchTerm(e.target.value); }}
                   className='pl-10 h-10 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 focus-visible:ring-[#FFB840]'
                 />
               </div>
@@ -372,12 +372,12 @@ export function CustomProductLists({ onListSelect }: CustomProductListsProps) {
                               ? 'bg-blue-50/50 dark:bg-blue-900/20'
                               : 'hover:bg-slate-50 dark:hover:bg-slate-800/80',
                           )}
-                          onClick={() => toggleSku(product.sku)}
+                          onClick={() => { toggleSku(product.sku); }}
                         >
                           <div className='col-span-1 flex justify-center'>
                             <Checkbox
                               checked={selectedSkus.has(product.sku)}
-                              onCheckedChange={() => toggleSku(product.sku)}
+                              onCheckedChange={() => { toggleSku(product.sku); }}
                               className={cn(
                                 'h-4 w-4 border-2 transition-all duration-200',
                                 selectedSkus.has(product.sku)
@@ -431,7 +431,7 @@ export function CustomProductLists({ onListSelect }: CustomProductListsProps) {
               <div className='flex gap-3'>
                 <Button
                   variant='outline'
-                  onClick={() => setIsDialogOpen(false)}
+                  onClick={() => { setIsDialogOpen(false); }}
                   className='h-10 px-6 border-slate-200 dark:border-slate-700'
                 >
                   İptal

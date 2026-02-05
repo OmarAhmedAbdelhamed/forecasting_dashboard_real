@@ -985,7 +985,7 @@ export function getEffectiveProductList(
   categories: string[],
   products: string[] = [],
 ): string[] {
-  if (products.length > 0) return products;
+  if (products.length > 0) {return products;}
 
   const contextProducts = getProductsByContext(regions, stores, categories);
   return contextProducts.map((p) => p.value);
@@ -1472,10 +1472,10 @@ export function generateInventoryItems(
       unitPrice = 20000 + Math.floor(rPrice * 25000);
     }
 
-    let status: string = 'In Stock';
-    if (stock === 0) status = 'Out of Stock';
-    else if (stock < minStock) status = 'Low Stock';
-    else if (stock > demand * 1.5) status = 'Overstock';
+    let status = 'In Stock';
+    if (stock === 0) {status = 'Out of Stock';}
+    else if (stock < minStock) {status = 'Low Stock';}
+    else if (stock > demand * 1.5) {status = 'Overstock';}
 
     const rMisc = seededRandom(p.value + '_misc');
 
@@ -1513,7 +1513,7 @@ export function generateInventoryItems(
 
 // Trends Mock Data - Recalculated based on filters
 export const generateStockTrends = (
-  days: number = 30,
+  days = 30,
   regions: string[] = [],
   stores: string[] = [],
   categories: string[] = [],
@@ -1583,7 +1583,7 @@ export const generateStockTrends = (
       // Un-apply the restock amount
       prevStock -= restockAmount;
       // Ensure we don't simulate negative history (impossible)
-      if (prevStock < 0) prevStock = safetyStockLevel;
+      if (prevStock < 0) {prevStock = safetyStockLevel;}
     }
 
     points.push({
@@ -1708,7 +1708,7 @@ export const generateInventoryAlerts = (
     const potentialSources = allStores.filter(
       (s) => s !== currentStore && s !== 'Hepsi',
     );
-    if (potentialSources.length === 0) return null;
+    if (potentialSources.length === 0) {return null;}
     return potentialSources[
       Math.floor(Math.random() * potentialSources.length)
     ];
@@ -1847,7 +1847,7 @@ export const generateInventoryAlerts = (
           threshold: item.maxStockLevel,
           forecastedDemand: item.forecastedDemand,
         },
-        recommendation: `Stok Eritme: Stok maliyetini düşürmek için promosyon yapın veya düşük stoklu mağazalara dağıtım planlayın.`,
+        recommendation: 'Stok Eritme: Stok maliyetini düşürmek için promosyon yapın veya düşük stoklu mağazalara dağıtım planlayın.',
         actionType: 'promotion',
       });
     }
@@ -1867,7 +1867,7 @@ export const generateInventoryAlerts = (
           threshold: 0,
           forecastedDemand: item.forecastedDemand,
         },
-        recommendation: `Ürün Yaşlandırma: Bu ürün kategorisinde satış hızı çok düşük. İade veya indirimli satış opsiyonlarını değerlendirin.`,
+        recommendation: 'Ürün Yaşlandırma: Bu ürün kategorisinde satış hızı çok düşük. İade veya indirimli satış opsiyonlarını değerlendirin.',
         actionType: 'review',
       });
     }

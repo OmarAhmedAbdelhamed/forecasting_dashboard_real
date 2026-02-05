@@ -22,6 +22,8 @@ const sectionTitles: Record<string, string> = {
   inventory_planning: 'Envanter Planlama',
   pricing_promotion: 'Fiyatlandırma & Promosyon',
   seasonal_planning: 'Sezonluk Planlama',
+  administration: 'Administration',
+  category_management: 'Category Management',
 };
 
 export function Header({ activeSection }: HeaderProps) {

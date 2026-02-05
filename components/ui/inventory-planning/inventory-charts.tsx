@@ -32,7 +32,7 @@ interface InventoryChartsProps {
 }
 
 export function InventoryCharts({
-  data = [],
+  data,
   hasSelection = true,
 }: InventoryChartsProps) {
   // We can treat 'data' as the display data directly.

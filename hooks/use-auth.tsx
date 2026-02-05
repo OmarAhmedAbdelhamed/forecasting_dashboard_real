@@ -1,125 +1,124 @@
 'use client';
 
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  ReactNode,
-} from 'react';
-import { useRouter } from 'next/navigation';
+import { createContext, useContext, useEffect, ReactNode } from 'react';
+import type { User } from '@supabase/supabase-js';
 
-// Mock User Type
-export interface User {
-  id: string;
-  name: string;
-  email: string;
-  avatar?: string;
-  role: 'admin' | 'user';
-}
+import { supabase } from '@/lib/supabase/client';
+import { useAuthStore } from '@/lib/store/auth-store';
+import type { UserProfile, Permission, UserRole } from '@/types/auth';
 
 interface AuthContextType {
   user: User | null;
+  userProfile: UserProfile | null;
+  permissions: Permission[] | null;
+  userRole: UserRole | null;
   isLoading: boolean;
+  profileLoading: boolean;
+  profileError: Error | null;
   login: (
     email: string,
     password: string,
   ) => Promise<{ success: boolean; error?: string }>;
-  register: (data: {
-    name: string;
-    email: string;
-    password: string;
-  }) => Promise<{ success: boolean; error?: string }>;
-  logout: () => void;
+  logout: () => Promise<void>;
+  clearProfileError: () => void;
+  retryFetchProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/**
+ * AuthProvider Component
+ *
+ * Listens to Supabase auth state changes and syncs with Zustand store.
+ * Handles:
+ * - SIGNED_IN: User logged in
+ * - SIGNED_OUT: User logged out
+ * - TOKEN_REFRESHED: Session token refreshed
+ * - INITIAL_SESSION: Initial session check on app load
+ *
+ * No custom API calls - uses Supabase user directly.
+ */
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const router = useRouter();
+  const setAuth = useAuthStore((state) => state.setAuth);
+  const clearAuth = useAuthStore((state) => state.clearAuth);
+  const setLoading = useAuthStore((state) => state.setLoading);
 
-  // Load user from localStorage on mount (Simulated Persistence)
+  // Listen to Supabase auth state changes
   useEffect(() => {
-    const storedUser = localStorage.getItem('bee2-auth-user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser)); // eslint-disable-line
-      } catch (error) {
-        console.error('Failed to parse user', error);
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'SIGNED_OUT') {
+        clearAuth();
+        return;
       }
-    }
-    setIsLoading(false);
-  }, []);
 
-  const login = async (email: string, password: string) => {
-    setIsLoading(true);
+      if ((event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') && session?.user) {
+        // Use Supabase user directly - no API call needed
+        setAuth(session.user);
+        return;
+      }
 
-    // Simulated API Call delay
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+      if (event === 'INITIAL_SESSION') {
+        if (session?.user) {
+          setLoading(false);
 
-    const testEmail = process.env.NEXT_PUBLIC_TEST_EMAIL;
-    const testPassword = process.env.NEXT_PUBLIC_TEST_PASSWORD;
+          const currentUser = useAuthStore.getState().user;
+          if (!currentUser) {
+            // First load - set user from Supabase session
+            setAuth(session.user);
+          }
+        } else {
+          clearAuth();
+        }
+      }
+    });
 
-    if (email === testEmail && password === testPassword) {
-      const mockUser: User = {
-        id: '1',
-        name: 'Admin User',
-        email: email,
-        avatar: '/avatars/01.png',
-        role: 'admin',
-      };
-
-      setUser(mockUser);
-      localStorage.setItem('bee2-auth-user', JSON.stringify(mockUser));
-      setIsLoading(false);
-      return { success: true };
-    } else {
-      setIsLoading(false);
-      return { success: false, error: 'E-posta veya şifre hatalı.' };
-    }
-  };
-
-  const register = async (data: {
-    name: string;
-    email: string;
-    password: string;
-  }) => {
-    setIsLoading(true);
-
-    // Simulate API Call
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    // In a real app, strict validation would happen here or on server
-
-    // Create new user (Simulated)
-    const newUser: User = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: data.name,
-      email: data.email,
-      role: 'user',
+    // Cleanup subscription on unmount
+    return () => {
+      subscription.unsubscribe();
     };
-
-    setUser(newUser);
-    localStorage.setItem('bee2-auth-user', JSON.stringify(newUser));
-    setIsLoading(false);
-    return { success: true };
-  };
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('bee2-auth-user');
-    router.push('/auth/login');
-  };
+  }, [setAuth, clearAuth, setLoading]);
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, login, register, logout }}>
+    <AuthContext.Provider
+      value={{
+        user: useAuthStore((state) => state.user),
+        userProfile: useAuthStore((state) => state.userProfile),
+        permissions: useAuthStore((state) => state.permissions),
+        userRole: useAuthStore((state) => state.userRole),
+        isLoading: useAuthStore((state) => state.loading || state.profileLoading),
+        profileLoading: useAuthStore((state) => state.profileLoading),
+        profileError: useAuthStore((state) => state.profileError),
+        login: async (email: string, password: string) => {
+          try {
+            await useAuthStore.getState().login(email, password);
+            return { success: true };
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'Authentication failed';
+            return { success: false, error: message };
+          }
+        },
+        logout: async () => {
+          await useAuthStore.getState().logout();
+        },
+        clearProfileError: () => {
+          useAuthStore.getState().clearProfileError();
+        },
+        retryFetchProfile: async () => {
+          await useAuthStore.getState().retryFetchProfile();
+        },
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
+/**
+ * Hook to access auth context.
+ * Must be used within an AuthProvider.
+ */
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {

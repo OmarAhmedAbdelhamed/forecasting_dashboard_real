@@ -23,7 +23,7 @@ interface SaleRateChartProps {
   items: InventoryItem[];
 }
 
-export function SaleRateChart({ items = [] }: SaleRateChartProps) {
+export function SaleRateChart({ items }: SaleRateChartProps) {
   const chartData = useMemo(() => {
     let fast = 0;
     let medium = 0;
@@ -31,9 +31,9 @@ export function SaleRateChart({ items = [] }: SaleRateChartProps) {
 
     items.forEach((item) => {
       const dailySales = item.forecastedDemand / 30;
-      if (dailySales > 20) fast++;
-      else if (dailySales > 5) medium++;
-      else slow++;
+      if (dailySales > 20) {fast++;}
+      else if (dailySales > 5) {medium++;}
+      else {slow++;}
     });
 
     return [

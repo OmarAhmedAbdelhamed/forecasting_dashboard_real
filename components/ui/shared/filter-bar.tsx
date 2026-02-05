@@ -11,10 +11,10 @@ import { useCustomLists } from '@/context/custom-lists-context';
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 
-type Option = {
+interface Option {
   value: string;
   label: string;
-};
+}
 
 interface FilterBarProps {
   // Page Title
@@ -75,7 +75,7 @@ export function FilterBar({
 
   // Merge products with custom lists for the dropdown
   const extendedProductOptions = useMemo(() => {
-    if (!productOptions) return undefined;
+    if (!productOptions) {return undefined;}
 
     const listOptions = lists.map((list) => ({
       value: `LIST_${list.id}`,
@@ -103,7 +103,7 @@ export function FilterBar({
 
   // Special handler for selection to expand lists into SKUs
   const handleProductChange = (newValues: string[]) => {
-    if (!onProductChange) return;
+    if (!onProductChange) {return;}
 
     const currentSkus = new Set(selectedProducts || []);
     const oldValues = new Set(multiSelectValue);
@@ -130,7 +130,7 @@ export function FilterBar({
           // Only remove if it doesn't belong to another list that is staying selected
           // and it's not explicitly selected in the new dropdown state
           const isInOtherSelectedList = newValues.some((v) => {
-            if (!v.startsWith('LIST_') || v === val) return false;
+            if (!v.startsWith('LIST_') || v === val) {return false;}
             const otherList = lists.find(
               (l) => l.id === v.replace('LIST_', ''),
             );

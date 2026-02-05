@@ -1,4 +1,4 @@
-export type GrowthProduct = {
+export interface GrowthProduct {
   id: string;
   name: string;
   growth: number;
@@ -9,9 +9,9 @@ export type GrowthProduct = {
   lastMonthSales: number;
   trend: 'up' | 'down';
   store: string;
-};
+}
 
-export type ForecastErrorProduct = {
+export interface ForecastErrorProduct {
   id: string;
   name: string;
   error: number;
@@ -23,7 +23,7 @@ export type ForecastErrorProduct = {
   action: string;
   store: string;
   severity: 'critical' | 'high' | 'medium' | 'low' | 'ok';
-};
+}
 
 // Growth Products Data - Reference data for alerts
 export const GROWTH_PRODUCTS_DATA: GrowthProduct[] = [

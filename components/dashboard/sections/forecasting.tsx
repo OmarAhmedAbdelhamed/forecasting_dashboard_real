@@ -10,6 +10,11 @@ import {
 } from '@/components/ui/shared/tabs';
 import { Switch } from '@/components/ui/shared/switch';
 
+// Permissions imports
+import { usePermissions } from '@/hooks/use-permissions';
+import { useVisibility } from '@/hooks/use-visibility';
+import type { UserRole } from '@/types/auth';
+
 // ... existing imports ...
 
 // Inside ForecastingSection component:
@@ -105,10 +110,20 @@ import { CampaignDetailModal } from '@/components/dashboard/modals/campaign-deta
 import { SimilarCampaign } from '@/data/mock-data';
 
 // Custom X-Axis Tick Component for Weather
-const CustomizedAxisTick = (props: any) => {
+interface CustomizedAxisTickProps {
+  x?: number;
+  y?: number;
+  payload?: {
+    value: string;
+  };
+  data: ForecastData[];
+  fontSize?: number;
+}
+
+const CustomizedAxisTick = (props: CustomizedAxisTickProps) => {
   const { x, y, payload, data, fontSize } = props;
-  const dateStr = payload.value;
-  const dayData = data.find((d: any) => d.tarih === dateStr);
+  const dateStr = payload?.value;
+  const dayData = dateStr ? data.find((d: ForecastData) => d.tarih === dateStr) : undefined;
   const weather = dayData?.weather;
 
   const Icon =
@@ -121,7 +136,7 @@ const CustomizedAxisTick = (props: any) => {
         : '#fbbf24';
 
   return (
-    <g transform={`translate(${x},${y})`}>
+    <g transform={`translate(${x ?? 0},${y ?? 0})`}>
       {/* Weather Icon - Centered close to axis */}
       <foreignObject x={-8} y={10} width={16} height={16}>
         <div className='flex items-center justify-center'>
@@ -139,13 +154,19 @@ const CustomizedAxisTick = (props: any) => {
         fontSize={fontSize || 9}
         transform='rotate(-45) translate(-10, 18)'
       >
-        {format(new Date(dateStr), 'dd MMM')}
+        {dateStr ? format(new Date(dateStr), 'dd MMM') : ''}
       </text>
     </g>
   );
 };
 
 export function ForecastingSection() {
+  // Permissions hook
+  const { dataScope, roleConfig, hasAnyRole, hasRole, isLoading: permissionsLoading } = usePermissions();
+
+  // Visibility hook for role-based UI control
+  const { canSeeKpi, canSeeChart, canSeeTable, canSeeAction } = useVisibility('pricing-promotion');
+
   // Inputs
   const [magazaKodu, setMagazaKodu] = useState<string[]>(['1001']);
   const [bolge, setBolge] = useState<string[]>([]);
@@ -190,12 +211,43 @@ export function ForecastingSection() {
   const [selectedCampaign, setSelectedCampaign] =
     useState<SimilarCampaign | null>(null);
 
+  // Filter filter options based on user's data scope
+  const filteredRegions = useMemo(() => {
+    if (!dataScope?.regions || dataScope.regions.length === 0) {return REGIONS;}
+    return REGIONS.filter((region) =>
+      dataScope.regions?.includes(region.value)
+    );
+  }, [dataScope]);
+
+  const filteredStores = useMemo(() => {
+    if (!dataScope?.stores || dataScope.stores.length === 0) {return STORES;}
+    return STORES.filter((store) =>
+      dataScope.stores?.includes(store.value)
+    );
+  }, [dataScope]);
+
+  const filteredCategories = useMemo(() => {
+    if (!dataScope?.categories || dataScope.categories.length === 0) {return CATEGORIES;}
+    return CATEGORIES.filter((category) =>
+      dataScope.categories?.includes(category.value)
+    );
+  }, [dataScope]);
+
+  const filteredProducts = useMemo(() => {
+    if (!dataScope?.categories || dataScope.categories.length === 0) {return PRODUCTS;}
+    // Filter products by user's allowed categories
+    // Extract category from categoryKey (format is "storeValue_categoryValue")
+    return PRODUCTS.filter((product) =>
+      dataScope.categories?.includes(product.categoryKey.split('_').pop() || '')
+    );
+  }, [dataScope]);
+
   // Filter similar campaigns based on current promotion type
   const filteredCampaigns = useMemo(() => {
     // If user selected generic 'KATALOG', show KATALOG campaigns. etc.
     // For demo purposes, if no direct match, show top 3 by score.
     const matches = SIMILAR_CAMPAIGNS.filter((c) => c.type === promosyon);
-    if (matches.length > 0) return matches;
+    if (matches.length > 0) {return matches;}
     return SIMILAR_CAMPAIGNS.slice(0, 3); // Fallback
   }, [promosyon]);
 
@@ -205,11 +257,11 @@ export function ForecastingSection() {
     };
     checkScreenSize();
     window.addEventListener('resize', checkScreenSize);
-    return () => window.removeEventListener('resize', checkScreenSize);
+    return () => { window.removeEventListener('resize', checkScreenSize); };
   }, []);
 
   const handleAnalyze = async () => {
-    if (!startDate || !endDate) return;
+    if (!startDate || !endDate) {return;}
 
     setIsLoading(true);
 
@@ -233,7 +285,7 @@ export function ForecastingSection() {
       discount =
         ((baseSatisFiyati - parseFloat(targetPrice)) / baseSatisFiyati) * 100;
       // Safety check
-      if (discount < 0) discount = 0;
+      if (discount < 0) {discount = 0;}
     } else {
       discount = parseFloat(promosyonIndirimOrani) || 0;
     }
@@ -262,7 +314,7 @@ export function ForecastingSection() {
       // Determine stock dynamically based on sales to show OOS
       // For simulation, let's say we have initial stock 2500
       const initialStock = 2500;
-      let currentStock = initialStock;
+      const currentStock = initialStock;
       // We need to track stock day by day, but here we are in a loop i=0..days
       // We'll simulate a linear drop for simplicity but strictly check limits
       // Mock logic: Stock drops by cumulative sales.
@@ -271,7 +323,7 @@ export function ForecastingSection() {
       // Better mock:
       const dailyDrop = 300; // Aggressive sales
       let simulatedStock = 3800 - i * dailyDrop;
-      if (simulatedStock < 0) simulatedStock = 0;
+      if (simulatedStock < 0) {simulatedStock = 0;}
 
       // Logic for Lost Sales
       // If stock is 0, we lose the sales
@@ -324,7 +376,7 @@ export function ForecastingSection() {
     total: number,
     base: number,
   ) => {
-    if (index % 7 === 5 || index % 7 === 6) return Math.round(base * 1.2);
+    if (index % 7 === 5 || index % 7 === 6) {return Math.round(base * 1.2);}
     return base;
   };
 
@@ -364,15 +416,17 @@ export function ForecastingSection() {
             </p>
           </div>
 
-          <Button
-            variant='outline'
-            size='icon'
-            onClick={() => setIsExportModalOpen(true)}
-            className='h-9 w-9 2xl:h-10 2xl:w-10 border-[#FFB840] bg-[#FFB840]/10 text-[#0D1E3A] hover:bg-[#FFB840] hover:text-[#0D1E3A] transition-all duration-200'
-            title='Verileri Dışa Aktar'
-          >
-            <HardDriveDownload className='h-4 w-4 2xl:h-5 2xl:w-5' />
-          </Button>
+          {!permissionsLoading && roleConfig?.canExport && (
+            <Button
+              variant='outline'
+              size='icon'
+              onClick={() => { setIsExportModalOpen(true); }}
+              className='h-9 w-9 2xl:h-10 2xl:w-10 border-[#FFB840] bg-[#FFB840]/10 text-[#0D1E3A] hover:bg-[#FFB840] hover:text-[#0D1E3A] transition-all duration-200'
+              title='Verileri Dışa Aktar'
+            >
+              <HardDriveDownload className='h-4 w-4 2xl:h-5 2xl:w-5' />
+            </Button>
+          )}
         </div>
       </div>
 
@@ -403,7 +457,7 @@ export function ForecastingSection() {
                   </UITooltip>
                 </div>
                 <MultiSelect
-                  options={REGIONS}
+                  options={filteredRegions}
                   selected={bolge}
                   onChange={setBolge}
                   placeholder='Bölge Seçiniz'
@@ -423,7 +477,7 @@ export function ForecastingSection() {
                   </UITooltip>
                 </div>
                 <MultiSelect
-                  options={STORES}
+                  options={filteredStores}
                   selected={magazaKodu}
                   onChange={setMagazaKodu}
                   placeholder='Mağaza Seçiniz'
@@ -443,7 +497,7 @@ export function ForecastingSection() {
                   </UITooltip>
                 </div>
                 <MultiSelect
-                  options={CATEGORIES}
+                  options={filteredCategories}
                   selected={reyon}
                   onChange={setReyon}
                   placeholder='Reyon Seçiniz'
@@ -463,7 +517,7 @@ export function ForecastingSection() {
                   </UITooltip>
                 </div>
                 <MultiSelect
-                  options={PRODUCTS}
+                  options={filteredProducts}
                   selected={urunKodu}
                   onChange={setUrunKodu}
                   placeholder='Ürün Seçiniz'
@@ -558,7 +612,7 @@ export function ForecastingSection() {
                 <Tabs
                   value={pricingMode}
                   onValueChange={(v) =>
-                    setPricingMode(v as 'discount' | 'price')
+                    { setPricingMode(v as 'discount' | 'price'); }
                   }
                   className='w-full'
                 >
@@ -661,33 +715,35 @@ export function ForecastingSection() {
                 </div>
               </div>
 
-              <div className='space-y-0.5'>
-                <div className='flex items-center gap-1'>
-                  <Label className='text-[10px] 2xl:text-xs'>
-                    Planlanan Bütçe (Opsiyonel)
-                  </Label>
-                  <UITooltip>
-                    <UITooltipTrigger>
-                      <Info className='h-3 w-3 text-muted-foreground/60 hover:text-indigo-600 cursor-help' />
-                    </UITooltipTrigger>
-                    <UITooltipContent>
-                      <p>
-                        Maksimum kampanya bütçesi. ROI hesabında kullanılır.
-                      </p>
-                    </UITooltipContent>
-                  </UITooltip>
+              {!hasRole('finance') && (
+                <div className='space-y-0.5'>
+                  <div className='flex items-center gap-1'>
+                    <Label className='text-[10px] 2xl:text-xs'>
+                      Planlanan Bütçe (Opsiyonel)
+                    </Label>
+                    <UITooltip>
+                      <UITooltipTrigger>
+                        <Info className='h-3 w-3 text-muted-foreground/60 hover:text-indigo-600 cursor-help' />
+                      </UITooltipTrigger>
+                      <UITooltipContent>
+                        <p>
+                          Maksimum kampanya bütçesi. ROI hesabında kullanılır.
+                        </p>
+                      </UITooltipContent>
+                    </UITooltip>
+                  </div>
+                  <Input
+                    type='number'
+                    placeholder='Örn: 50000'
+                    className='h-7 2xl:h-9 text-xs'
+                    value={budget}
+                    onChange={(e) => { setBudget(e.target.value); }}
+                  />
+                  <p className='text-[10px] text-muted-foreground'>
+                    ROI hesaplaması için kullanılır.
+                  </p>
                 </div>
-                <Input
-                  type='number'
-                  placeholder='Örn: 50000'
-                  className='h-7 2xl:h-9 text-xs'
-                  value={budget}
-                  onChange={(e) => setBudget(e.target.value)}
-                />
-                <p className='text-[10px] text-muted-foreground'>
-                  ROI hesaplaması için kullanılır.
-                </p>
-              </div>
+              )}
 
               <Button
                 className='w-full mt-2 h-8 2xl:h-10 2xl:text-sm text-xs'
@@ -792,7 +848,7 @@ export function ForecastingSection() {
                       size='sm'
                       className='flex-1 h-6 text-[10px] gap-1 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200'
                       onClick={() => {
-                        setPromosyon(camp.type as string);
+                        setPromosyon(camp.type);
                         setPromosyonIndirimOrani('15');
                       }}
                     >
@@ -903,129 +959,137 @@ export function ForecastingSection() {
         <div className='lg:col-span-8 space-y-2 2xl:space-y-3'>
           {/* 1. Top KPIs */}
           <div className='grid grid-cols-2 lg:grid-cols-4 gap-2 2xl:gap-3'>
-            <Card>
-              <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
-                <div className='flex items-center gap-2'>
-                  <CardTitle className='text-xs 2xl:text-sm font-semibold'>
-                    Toplam Tahmin
-                  </CardTitle>
-                  <UITooltip>
-                    <UITooltipTrigger>
-                      <Info className='h-3 w-3 text-muted-foreground hover:text-indigo-600 transition-colors' />
-                    </UITooltipTrigger>
-                    <UITooltipContent>
-                      <p className='max-w-xs'>
-                        Promosyon süresince satılması öngörülen toplam ürün
-                        adedi.
-                      </p>
-                    </UITooltipContent>
-                  </UITooltip>
-                </div>
-                <Package className='h-3 w-3 2xl:h-4 2xl:w-4 text-muted-foreground' />
-              </CardHeader>
-              <CardContent className='pb-2 2xl:pb-3'>
-                <div className='text-lg 2xl:text-xl font-bold'>
-                  {isLoading ? '-' : totalForecast.toLocaleString()}
-                </div>
-                <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
-                  ADET (Simüle)
-                </p>
-              </CardContent>
-            </Card>
+            {canSeeKpi('promo-total-forecast') && (
+              <Card>
+                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
+                  <div className='flex items-center gap-2'>
+                    <CardTitle className='text-xs 2xl:text-sm font-semibold'>
+                      Toplam Tahmin
+                    </CardTitle>
+                    <UITooltip>
+                      <UITooltipTrigger>
+                        <Info className='h-3 w-3 text-muted-foreground hover:text-indigo-600 transition-colors' />
+                      </UITooltipTrigger>
+                      <UITooltipContent>
+                        <p className='max-w-xs'>
+                          Promosyon süresince satılması öngörülen toplam ürün
+                          adedi.
+                        </p>
+                      </UITooltipContent>
+                    </UITooltip>
+                  </div>
+                  <Package className='h-3 w-3 2xl:h-4 2xl:w-4 text-muted-foreground' />
+                </CardHeader>
+                <CardContent className='pb-2 2xl:pb-3'>
+                  <div className='text-lg 2xl:text-xl font-bold'>
+                    {isLoading ? '-' : totalForecast.toLocaleString()}
+                  </div>
+                  <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
+                    ADET (Simüle)
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
-            <Card>
-              <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
-                <div className='flex items-center gap-2'>
-                  <CardTitle className='text-xs 2xl:text-sm font-semibold'>
-                    Beklenen Ciro
-                  </CardTitle>
-                  <UITooltip>
-                    <UITooltipTrigger>
-                      <Info className='h-3 w-3 text-muted-foreground hover:text-indigo-600 transition-colors' />
-                    </UITooltipTrigger>
-                    <UITooltipContent>
-                      <p className='max-w-xs'>
-                        İndirimli fiyat üzerinden hesaplanan tahmini toplam
-                        satış geliri.
-                      </p>
-                    </UITooltipContent>
-                  </UITooltip>
-                </div>
-                <TurkishLira className='h-3 w-3 2xl:h-4 2xl:w-4 text-muted-foreground' />
-              </CardHeader>
-              <CardContent className='pb-2 2xl:pb-3'>
-                <div className='text-lg 2xl:text-xl font-bold'>
-                  {isLoading ? '-' : `₺${(totalRevenue / 1000).toFixed(1)}k`}
-                </div>
-                <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
-                  TL (Simüle)
-                </p>
-              </CardContent>
-            </Card>
+            {canSeeKpi('promo-expected-revenue') && (
+              <Card>
+                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
+                  <div className='flex items-center gap-2'>
+                    <CardTitle className='text-xs 2xl:text-sm font-semibold'>
+                      Beklenen Ciro
+                    </CardTitle>
+                    <UITooltip>
+                      <UITooltipTrigger>
+                        <Info className='h-3 w-3 text-muted-foreground hover:text-indigo-600 transition-colors' />
+                      </UITooltipTrigger>
+                      <UITooltipContent>
+                        <p className='max-w-xs'>
+                          İndirimli fiyat üzerinden hesaplanan tahmini toplam
+                          satış geliri.
+                        </p>
+                      </UITooltipContent>
+                    </UITooltip>
+                  </div>
+                  <TurkishLira className='h-3 w-3 2xl:h-4 2xl:w-4 text-muted-foreground' />
+                </CardHeader>
+                <CardContent className='pb-2 2xl:pb-3'>
+                  <div className='text-lg 2xl:text-xl font-bold'>
+                    {isLoading ? '-' : `₺${(totalRevenue / 1000).toFixed(1)}k`}
+                  </div>
+                  <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
+                    TL (Simüle)
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
-            <Card>
-              <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
-                <div className='flex items-center gap-2'>
-                  <CardTitle className='text-xs 2xl:text-sm font-semibold'>
-                    Tahmini ROI
-                  </CardTitle>
-                  <UITooltip>
-                    <UITooltipTrigger>
-                      <Info className='h-3 w-3 text-muted-foreground hover:text-indigo-600 transition-colors' />
-                    </UITooltipTrigger>
-                    <UITooltipContent>
-                      <p className='max-w-xs'>
-                        Yatırım Getirisi: (Net Kar / Promosyon Maliyeti) x 100.
-                      </p>
-                    </UITooltipContent>
-                  </UITooltip>
-                </div>
-                <TrendingUp className='h-3 w-3 2xl:h-4 2xl:w-4 text-muted-foreground' />
-              </CardHeader>
-              <CardContent className='pb-2 2xl:pb-3'>
-                <div
-                  className={`text-lg 2xl:text-xl font-bold ${calculatedROI >= 0 ? 'text-emerald-600' : 'text-red-600'}`}
-                >
-                  %{calculatedROI.toFixed(1)}
-                </div>
-                <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
-                  Harcanan: ₺{(promoCost / 1000).toFixed(1)}k
-                </p>
-              </CardContent>
-            </Card>
+            {canSeeKpi('promo-roi') && (
+              <Card>
+                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
+                  <div className='flex items-center gap-2'>
+                    <CardTitle className='text-xs 2xl:text-sm font-semibold'>
+                      Tahmini ROI
+                    </CardTitle>
+                    <UITooltip>
+                      <UITooltipTrigger>
+                        <Info className='h-3 w-3 text-muted-foreground hover:text-indigo-600 transition-colors' />
+                      </UITooltipTrigger>
+                      <UITooltipContent>
+                        <p className='max-w-xs'>
+                          Yatırım Getirisi: (Net Kar / Promosyon Maliyeti) x 100.
+                        </p>
+                      </UITooltipContent>
+                    </UITooltip>
+                  </div>
+                  <TrendingUp className='h-3 w-3 2xl:h-4 2xl:w-4 text-muted-foreground' />
+                </CardHeader>
+                <CardContent className='pb-2 2xl:pb-3'>
+                  <div
+                    className={`text-lg 2xl:text-xl font-bold ${calculatedROI >= 0 ? 'text-emerald-600' : 'text-red-600'}`}
+                  >
+                    %{calculatedROI.toFixed(1)}
+                  </div>
+                  <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
+                    Harcanan: ₺{(promoCost / 1000).toFixed(1)}k
+                  </p>
+                </CardContent>
+              </Card>
+            )}
 
-            <Card>
-              <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
-                <div className='flex items-center gap-2'>
-                  <CardTitle className='text-xs 2xl:text-sm font-semibold'>
-                    Stok Durumu
-                  </CardTitle>
-                  <UITooltip>
-                    <UITooltipTrigger>
-                      <Info className='h-3 w-3 text-muted-foreground hover:text-indigo-600 transition-colors' />
-                    </UITooltipTrigger>
-                    <UITooltipContent>
-                      <p className='max-w-xs'>
-                        Mevcut stokun tahmin edilen talebi karşılama durumu.
-                      </p>
-                    </UITooltipContent>
-                  </UITooltip>
-                </div>
-                <Info className='h-3 w-3 2xl:h-4 2xl:w-4 text-muted-foreground' />
-              </CardHeader>
-              <CardContent className='pb-2 2xl:pb-3'>
-                <div
-                  className={`text-lg 2xl:text-xl font-bold ${lostSalesVolume > 0 ? 'text-red-600' : 'text-emerald-600'}`}
-                >
-                  {lostSalesVolume > 0 ? 'Riskli' : 'Güvenli'}
-                </div>
-                <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
-                  {lostSalesVolume > 0
-                    ? `-${lostSalesVolume} OOS`
-                    : 'Yeterli Stok'}
-                </p>
-              </CardContent>
-            </Card>
+            {canSeeKpi('promo-stock-status') && (
+              <Card>
+                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
+                  <div className='flex items-center gap-2'>
+                    <CardTitle className='text-xs 2xl:text-sm font-semibold'>
+                      Stok Durumu
+                    </CardTitle>
+                    <UITooltip>
+                      <UITooltipTrigger>
+                        <Info className='h-3 w-3 text-muted-foreground hover:text-indigo-600 transition-colors' />
+                      </UITooltipTrigger>
+                      <UITooltipContent>
+                        <p className='max-w-xs'>
+                          Mevcut stokun tahmin edilen talebi karşılama durumu.
+                        </p>
+                      </UITooltipContent>
+                    </UITooltip>
+                  </div>
+                  <Info className='h-3 w-3 2xl:h-4 2xl:w-4 text-muted-foreground' />
+                </CardHeader>
+                <CardContent className='pb-2 2xl:pb-3'>
+                  <div
+                    className={`text-lg 2xl:text-xl font-bold ${lostSalesVolume > 0 ? 'text-red-600' : 'text-emerald-600'}`}
+                  >
+                    {lostSalesVolume > 0 ? 'Riskli' : 'Güvenli'}
+                  </div>
+                  <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
+                    {lostSalesVolume > 0
+                      ? `-${lostSalesVolume} OOS`
+                      : 'Yeterli Stok'}
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Main Chart or Calendar */}
@@ -1035,7 +1099,7 @@ export function ForecastingSection() {
                 variant={viewMode === 'chart' ? 'secondary' : 'ghost'}
                 size='sm'
                 className='h-7 text-xs gap-2'
-                onClick={() => setViewMode('chart')}
+                onClick={() => { setViewMode('chart'); }}
               >
                 <LayoutGrid className='h-3.5 w-3.5' /> Grafik
               </Button>
@@ -1043,7 +1107,7 @@ export function ForecastingSection() {
                 variant={viewMode === 'calendar' ? 'secondary' : 'ghost'}
                 size='sm'
                 className='h-7 text-xs gap-2'
-                onClick={() => setViewMode('calendar')}
+                onClick={() => { setViewMode('calendar'); }}
               >
                 <CalendarIcon className='h-3.5 w-3.5' /> Takvim
               </Button>
@@ -1192,15 +1256,15 @@ export function ForecastingSection() {
                             }
                             formatter={(value: number, name: string) => {
                               if (name === 'tahmin')
-                                return [value, 'Promosyon Tahmini (Adet)'];
+                                {return [value, 'Promosyon Tahmini (Adet)'];}
                               if (name === 'baseline')
-                                return [value, 'Temel Satış (Adet)'];
+                                {return [value, 'Temel Satış (Adet)'];}
                               if (name === 'ciro_adedi')
-                                return [value, 'Ciro Adedi'];
+                                {return [value, 'Ciro Adedi'];}
                               if (name === 'unconstrained_demand')
-                                return [value, 'Potansiyel Talep (Stok olsa)'];
+                                {return [value, 'Potansiyel Talep (Stok olsa)'];}
                               if (name === 'lost_sales' && value > 0)
-                                return [value, 'Kaçırılan Satış'];
+                                {return [value, 'Kaçırılan Satış'];}
                               return [value, name];
                             }}
                             label={
@@ -1540,111 +1604,113 @@ export function ForecastingSection() {
           </div>
 
           {/* 3. Detailed History Table with Advanced Metrics */}
-          <Card>
-            <CardHeader className='py-2 pb-1 2xl:py-3 flex flex-row items-center justify-between'>
-              <div className='space-y-0.5'>
-                <CardTitle className='text-sm 2xl:text-base font-semibold'>
-                  Detaylı Promosyon Geçmişi
-                </CardTitle>
-                <CardDescription className='text-[10px] 2xl:text-xs'>
-                  Finansal ve operasyonel metrikler
-                </CardDescription>
-              </div>
-            </CardHeader>
-            <CardContent className='p-0 2xl:p-1'>
-              <div className='border-t'>
-                <table className='w-full text-[10px] 2xl:text-xs text-left'>
-                  <thead className='bg-muted/50 text-muted-foreground font-medium uppercase'>
-                    <tr>
-                      <th className='p-2 2xl:p-3 w-[100px]'>Tarih</th>
-                      <th className='p-2 2xl:p-3'>Kampanya / Tip</th>
-                      <th className='p-2 2xl:p-3 text-right'>
-                        Ciro Artışı (Lift)
-                      </th>
-                      <th className='p-2 2xl:p-3 text-right'>Net Kar Etkisi</th>
-                      <th className='p-2 2xl:p-3 text-right'>ROI %</th>
-                      <th className='p-2 2xl:p-3 text-center'>Stok Durumu</th>
-                      <th className='p-2 2xl:p-3 text-right'>
-                        Tahmin Doğruluğu
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className='divide-y'>
-                    {PROMOTION_HISTORY_DATA.map((row, i) => (
-                      <tr
-                        key={i}
-                        className='group hover:bg-muted/30 transition-colors cursor-pointer'
-                      >
-                        <td className='p-2 2xl:p-3 font-medium text-gray-700'>
-                          {row.date}
-                        </td>
-                        <td className='p-2 2xl:p-3'>
-                          <div className='font-semibold text-gray-900'>
-                            {row.name}
-                          </div>
-                          <div className='text-[10px] text-muted-foreground bg-muted w-fit px-1.5 py-0.5 rounded'>
-                            {row.type}
-                          </div>
-                        </td>
-                        <td className='p-2 2xl:p-3 text-right'>
-                          <div className='font-bold text-gray-900'>
-                            {row.uplift}
-                          </div>
-                          <div className='text-[10px] text-muted-foreground'>
-                            {row.upliftVal}
-                          </div>
-                        </td>
-                        <td className='p-2 2xl:p-3 text-right font-medium'>
-                          <span
-                            className={
-                              row.profit.startsWith('-')
-                                ? 'text-red-600'
-                                : 'text-emerald-600'
-                            }
-                          >
-                            {row.profit}
-                          </span>
-                        </td>
-                        <td className='p-2 2xl:p-3 text-right'>
-                          <div
-                            className={`font-bold inline-block px-1.5 py-0.5 rounded ${
-                              row.roi > 100
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : row.roi > 0
-                                  ? 'bg-blue-50 text-blue-700'
-                                  : 'bg-red-50 text-red-700'
-                            }`}
-                          >
-                            %{row.roi}
-                          </div>
-                        </td>
-                        <td className='p-2 2xl:p-3 text-center'>
-                          <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                              row.stock === 'OK'
-                                ? 'bg-green-50 text-green-700 border-green-200'
-                                : row.stock === 'OOS'
-                                  ? 'bg-red-50 text-red-700 border-red-200'
-                                  : 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                            }`}
-                          >
-                            {row.stock === 'OK'
-                              ? 'YETERLİ'
-                              : row.stock === 'OOS'
-                                ? 'TÜKENDİ'
-                                : 'AŞIRI STOK'}
-                          </span>
-                        </td>
-                        <td className='p-2 2xl:p-3 text-right text-gray-600'>
-                          {row.forecast}
-                        </td>
+          {canSeeTable('promo-campaign-history') && (
+            <Card>
+              <CardHeader className='py-2 pb-1 2xl:py-3 flex flex-row items-center justify-between'>
+                <div className='space-y-0.5'>
+                  <CardTitle className='text-sm 2xl:text-base font-semibold'>
+                    Detaylı Promosyon Geçmişi
+                  </CardTitle>
+                  <CardDescription className='text-[10px] 2xl:text-xs'>
+                    Finansal ve operasyonel metrikler
+                  </CardDescription>
+                </div>
+              </CardHeader>
+              <CardContent className='p-0 2xl:p-1'>
+                <div className='border-t'>
+                  <table className='w-full text-[10px] 2xl:text-xs text-left'>
+                    <thead className='bg-muted/50 text-muted-foreground font-medium uppercase'>
+                      <tr>
+                        <th className='p-2 2xl:p-3 w-[100px]'>Tarih</th>
+                        <th className='p-2 2xl:p-3'>Kampanya / Tip</th>
+                        <th className='p-2 2xl:p-3 text-right'>
+                          Ciro Artışı (Lift)
+                        </th>
+                        <th className='p-2 2xl:p-3 text-right'>Net Kar Etkisi</th>
+                        <th className='p-2 2xl:p-3 text-right'>ROI %</th>
+                        <th className='p-2 2xl:p-3 text-center'>Stok Durumu</th>
+                        <th className='p-2 2xl:p-3 text-right'>
+                          Tahmin Doğruluğu
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </CardContent>
-          </Card>
+                    </thead>
+                    <tbody className='divide-y'>
+                      {PROMOTION_HISTORY_DATA.map((row, i) => (
+                        <tr
+                          key={i}
+                          className='group hover:bg-muted/30 transition-colors cursor-pointer'
+                        >
+                          <td className='p-2 2xl:p-3 font-medium text-gray-700'>
+                            {row.date}
+                          </td>
+                          <td className='p-2 2xl:p-3'>
+                            <div className='font-semibold text-gray-900'>
+                              {row.name}
+                            </div>
+                            <div className='text-[10px] text-muted-foreground bg-muted w-fit px-1.5 py-0.5 rounded'>
+                              {row.type}
+                            </div>
+                          </td>
+                          <td className='p-2 2xl:p-3 text-right'>
+                            <div className='font-bold text-gray-900'>
+                              {row.uplift}
+                            </div>
+                            <div className='text-[10px] text-muted-foreground'>
+                              {row.upliftVal}
+                            </div>
+                          </td>
+                          <td className='p-2 2xl:p-3 text-right font-medium'>
+                            <span
+                              className={
+                                row.profit.startsWith('-')
+                                  ? 'text-red-600'
+                                  : 'text-emerald-600'
+                              }
+                            >
+                              {row.profit}
+                            </span>
+                          </td>
+                          <td className='p-2 2xl:p-3 text-right'>
+                            <div
+                              className={`font-bold inline-block px-1.5 py-0.5 rounded ${
+                                row.roi > 100
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : row.roi > 0
+                                    ? 'bg-blue-50 text-blue-700'
+                                    : 'bg-red-50 text-red-700'
+                              }`}
+                            >
+                              %{row.roi}
+                            </div>
+                          </td>
+                          <td className='p-2 2xl:p-3 text-center'>
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                                row.stock === 'OK'
+                                  ? 'bg-green-50 text-green-700 border-green-200'
+                                  : row.stock === 'OOS'
+                                    ? 'bg-red-50 text-red-700 border-red-200'
+                                    : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                              }`}
+                            >
+                              {row.stock === 'OK'
+                                ? 'YETERLİ'
+                                : row.stock === 'OOS'
+                                  ? 'TÜKENDİ'
+                                  : 'AŞIRI STOK'}
+                            </span>
+                          </td>
+                          <td className='p-2 2xl:p-3 text-right text-gray-600'>
+                            {row.forecast}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
       <ExportPromotionModal
@@ -1655,10 +1721,10 @@ export function ForecastingSection() {
 
       <CampaignDetailModal
         isOpen={isDetailModalOpen}
-        onClose={() => setIsDetailModalOpen(false)}
+        onClose={() => { setIsDetailModalOpen(false); }}
         campaign={selectedCampaign}
         onApply={(camp) => {
-          setPromosyon(camp.type as string);
+          setPromosyon(camp.type);
           setPromosyonIndirimOrani('15'); // Mock apply logic: set discount
           setIsDetailModalOpen(false);
         }}

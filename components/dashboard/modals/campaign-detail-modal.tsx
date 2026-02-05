@@ -37,7 +37,7 @@ interface CampaignDetailModalProps {
 
 // Helper to generate mock daily data for the chart based on the campaign's monthly stats
 const generateMockChartData = (campaign: SimilarCampaign) => {
-  if (!campaign) return [];
+  if (!campaign) {return [];}
   const days = 14; // assume 2 week campaign view
   const data = [];
   const baseSales = 100;
@@ -49,7 +49,7 @@ const generateMockChartData = (campaign: SimilarCampaign) => {
     // Forecast curve
     const forecast = Math.round(baseSales * liftMultiplier + noise);
     // Actual (realized) sales - slightly different
-    const actual = Math.round(forecast * (Math.random() * 0.2 + 0.9)); 
+    const actual = Math.round(forecast * (Math.random() * 0.2 + 0.9));
 
     data.push({
       day: `Gün ${i}`,
@@ -66,7 +66,7 @@ export function CampaignDetailModal({
   campaign,
   onApply,
 }: CampaignDetailModalProps) {
-  if (!campaign) return null;
+  if (!campaign) {return null;}
 
   const chartData = generateMockChartData(campaign);
 
@@ -128,7 +128,7 @@ export function CampaignDetailModal({
                       <BarChart3 className="h-8 w-8 text-blue-200" />
                    </CardContent>
                 </Card>
-                <Card className={`${campaign.stockOutDays > 0 ? 'bg-red-50/50 border-red-100' : 'bg-gray-50 border-gray-100'}`}>
+                <Card className={campaign.stockOutDays > 0 ? 'bg-red-50/50 border-red-100' : 'bg-gray-50 border-gray-100'}>
                    <CardContent className="p-3 flex items-center justify-between">
                       <div>
                         <div className={`text-sm font-medium ${campaign.stockOutDays > 0 ? 'text-red-800' : 'text-gray-600'} flex items-center gap-1`}>
@@ -167,7 +167,7 @@ export function CampaignDetailModal({
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
                         <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 10}} />
                         <YAxis axisLine={false} tickLine={false} tick={{fill: '#6b7280', fontSize: 10}} width={30} />
-                        <Tooltip 
+                        <Tooltip
                           contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                           itemStyle={{ fontSize: '12px' }}
                         />

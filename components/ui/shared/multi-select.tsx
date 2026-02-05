@@ -4,10 +4,10 @@ import * as React from 'react';
 import { X, ChevronDown, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-type Option = {
+interface Option {
   value: string;
   label: string;
-};
+}
 
 interface MultiSelectProps {
   options: Option[];
@@ -52,7 +52,7 @@ export function MultiSelect({
     };
 
     document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => { document.removeEventListener('mousedown', handleClickOutside); };
   }, []);
 
   // Toggle selection
@@ -123,7 +123,7 @@ export function MultiSelect({
               ref={inputRef}
               type='text'
               value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
+              onChange={(e) => { setSearchValue(e.target.value); }}
               onKeyDown={handleKeyDown}
               placeholder='Search...'
               className='w-full bg-transparent outline-none placeholder:text-muted-foreground text-sm'
@@ -145,7 +145,7 @@ export function MultiSelect({
                       {option?.label}
                       <button
                         type='button'
-                        onClick={(e) => removeOption(value, e)}
+                        onClick={(e) => { removeOption(value, e); }}
                         className='rounded-full hover:bg-muted-foreground/20 p-0.5'
                       >
                         <X className='h-3 w-3' />
@@ -210,7 +210,7 @@ export function MultiSelect({
                   return (
                     <li
                       key={option.value}
-                      onClick={() => toggleOption(option.value)}
+                      onClick={() => { toggleOption(option.value); }}
                       className={cn(
                         'flex items-center justify-between px-2 py-2 text-sm rounded-sm cursor-pointer',
                         isSelected

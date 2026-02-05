@@ -150,8 +150,8 @@ export default function LoginPage() {
                 type='email'
                 placeholder='ornek@sirket.com'
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                onBlur={() => handleBlur('email')}
+                onChange={(e) => { setEmail(e.target.value); }}
+                onBlur={() => { handleBlur('email'); }}
                 className={`bg-white border-slate-200 focus:border-primary focus:ring-primary/20 2xl:h-12 2xl:text-base ${
                   touched.email && errors.email
                     ? 'border-red-500 focus:border-red-500'
@@ -181,8 +181,8 @@ export default function LoginPage() {
                   id='password'
                   type={showPassword ? 'text' : 'password'}
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  onBlur={() => handleBlur('password')}
+                  onChange={(e) => { setPassword(e.target.value); }}
+                  onBlur={() => { handleBlur('password'); }}
                   className={`bg-white border-slate-200 focus:border-primary focus:ring-primary/20 pr-10 2xl:h-12 2xl:text-base ${
                     touched.password && errors.password
                       ? 'border-red-500 focus:border-red-500'
@@ -191,7 +191,7 @@ export default function LoginPage() {
                 />
                 <button
                   type='button'
-                  onClick={() => setShowPassword(!showPassword)}
+                  onClick={() => { setShowPassword(!showPassword); }}
                   className='absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700 focus:outline-none'
                 >
                   {showPassword ? (

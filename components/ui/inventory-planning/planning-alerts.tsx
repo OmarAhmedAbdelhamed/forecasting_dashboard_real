@@ -27,7 +27,7 @@ interface PlanningAlertsProps {
   data: InventoryAlert[];
 }
 
-export function PlanningAlerts({ data = [] }: PlanningAlertsProps) {
+export function PlanningAlerts({ data }: PlanningAlertsProps) {
   return (
     <Card className='h-full flex flex-col shadow-sm'>
       <CardHeader className='pb-3 border-b'>

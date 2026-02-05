@@ -84,7 +84,7 @@ export function HistoricalUnitsChart({ data }: HistoricalUnitsChartProps) {
                 color: '#374151',
               }}
               formatter={(value, name) => {
-                if (value === null || value === undefined) return ['—', ''];
+                if (value === null || value === undefined) {return ['—', ''];}
                 const numValue =
                   typeof value === 'number' ? value : Number(value);
                 const yearLabel =
@@ -93,7 +93,7 @@ export function HistoricalUnitsChart({ data }: HistoricalUnitsChartProps) {
                     : name === 'y2025'
                       ? '2025'
                       : '2026';
-                return [`${numValue.toLocaleString()}`, yearLabel];
+                return [numValue.toLocaleString(), yearLabel];
               }}
             />
             <Legend
@@ -102,8 +102,8 @@ export function HistoricalUnitsChart({ data }: HistoricalUnitsChartProps) {
               wrapperStyle={{ paddingBottom: '10px', fontSize: '14px' }}
               iconType='plainline'
               formatter={(value) => {
-                if (value === 'y2024') return '2024';
-                if (value === 'y2025') return '2025';
+                if (value === 'y2024') {return '2024';}
+                if (value === 'y2025') {return '2025';}
                 return '2026';
               }}
             />

@@ -35,7 +35,7 @@ interface InventoryTableProps {
 }
 
 export function InventoryTable({
-  data = [],
+  data,
   performanceFilter: externalPerformanceFilter,
   onPerformanceFilterChange,
 }: InventoryTableProps) {
@@ -83,18 +83,18 @@ export function InventoryTable({
       item.productName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.sku.toLowerCase().includes(searchTerm.toLowerCase());
 
-    if (!matchesSearch) return false;
+    if (!matchesSearch) {return false;}
 
     // 2. Status Filter
     if (statusFilter !== 'all') {
       if (statusFilter === 'overstock' && item.status !== 'Overstock')
-        return false;
+        {return false;}
       if (statusFilter === 'lowstock' && item.status !== 'Low Stock')
-        return false;
+        {return false;}
       if (statusFilter === 'outofstock' && item.status !== 'Out of Stock')
-        return false;
+        {return false;}
       if (statusFilter === 'instock' && item.status !== 'In Stock')
-        return false;
+        {return false;}
     }
 
     // 3. Performance Filter (Updated to match Widget's Sales Volume logic)
@@ -107,8 +107,8 @@ export function InventoryTable({
         item.forecastedDemand < 300 ||
         (item.turnoverRate < 4 && item.daysOfCoverage > 60);
 
-      if (performanceFilter === 'fast' && !isFastMover) return false;
-      if (performanceFilter === 'slow' && !isSlowMover) return false;
+      if (performanceFilter === 'fast' && !isFastMover) {return false;}
+      if (performanceFilter === 'slow' && !isSlowMover) {return false;}
     }
 
     return true;
@@ -116,7 +116,7 @@ export function InventoryTable({
 
   // Sort Logic
   const sortedData = [...filteredData].sort((a, b) => {
-    if (!sortColumn) return 0;
+    if (!sortColumn) {return 0;}
 
     const aValue = a[sortColumn];
     const bValue = b[sortColumn];
@@ -160,7 +160,7 @@ export function InventoryTable({
             placeholder='SKU veya Ürün Ara...'
             className='pl-8'
             value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
+            onChange={(e) => { setSearchTerm(e.target.value); }}
           />
         </div>
         <div className='flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-2 sm:pb-0'>
@@ -186,31 +186,31 @@ export function InventoryTable({
             <DropdownMenuContent align='end'>
               <DropdownMenuCheckboxItem
                 checked={statusFilter === 'all'}
-                onCheckedChange={() => setStatusFilter('all')}
+                onCheckedChange={() => { setStatusFilter('all'); }}
               >
                 Tümü
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={statusFilter === 'overstock'}
-                onCheckedChange={() => setStatusFilter('overstock')}
+                onCheckedChange={() => { setStatusFilter('overstock'); }}
               >
                 Fazla Stok (Overstock)
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={statusFilter === 'lowstock'}
-                onCheckedChange={() => setStatusFilter('lowstock')}
+                onCheckedChange={() => { setStatusFilter('lowstock'); }}
               >
                 Az Stok (Low Stock)
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={statusFilter === 'outofstock'}
-                onCheckedChange={() => setStatusFilter('outofstock')}
+                onCheckedChange={() => { setStatusFilter('outofstock'); }}
               >
                 Stok Yok (Out of Stock)
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={statusFilter === 'instock'}
-                onCheckedChange={() => setStatusFilter('instock')}
+                onCheckedChange={() => { setStatusFilter('instock'); }}
               >
                 Stokta Var (In Stock)
               </DropdownMenuCheckboxItem>
@@ -273,50 +273,50 @@ export function InventoryTable({
             <DropdownMenuContent align='end'>
               <DropdownMenuCheckboxItem
                 checked={visibleColumns.sku}
-                onCheckedChange={() => toggleColumn('sku')}
+                onCheckedChange={() => { toggleColumn('sku'); }}
               >
                 SKU
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={visibleColumns.productName}
-                onCheckedChange={() => toggleColumn('productName')}
+                onCheckedChange={() => { toggleColumn('productName'); }}
               >
                 Ürün Adı
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={visibleColumns.price}
-                onCheckedChange={() => toggleColumn('price')}
+                onCheckedChange={() => { toggleColumn('price'); }}
               >
                 Fiyat
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={visibleColumns.stockLevel}
-                onCheckedChange={() => toggleColumn('stockLevel')}
+                onCheckedChange={() => { toggleColumn('stockLevel'); }}
               >
                 Stok
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={visibleColumns.stockValue}
-                onCheckedChange={() => toggleColumn('stockValue')}
+                onCheckedChange={() => { toggleColumn('stockValue'); }}
               >
                 Stok Değeri
               </DropdownMenuCheckboxItem>
 
               <DropdownMenuCheckboxItem
                 checked={visibleColumns.forecastedDemand}
-                onCheckedChange={() => toggleColumn('forecastedDemand')}
+                onCheckedChange={() => { toggleColumn('forecastedDemand'); }}
               >
                 Tahmini Talep
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={visibleColumns.daysOfCoverage}
-                onCheckedChange={() => toggleColumn('daysOfCoverage')}
+                onCheckedChange={() => { toggleColumn('daysOfCoverage'); }}
               >
                 Kapsama
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={visibleColumns.status}
-                onCheckedChange={() => toggleColumn('status')}
+                onCheckedChange={() => { toggleColumn('status'); }}
               >
                 Durum
               </DropdownMenuCheckboxItem>
@@ -332,7 +332,7 @@ export function InventoryTable({
               {visibleColumns.sku && (
                 <TableHead
                   className='w-25 cursor-pointer text-center'
-                  onClick={() => handleSort('sku')}
+                  onClick={() => { handleSort('sku'); }}
                 >
                   <div className='flex items-center justify-center gap-1'>
                     SKU
@@ -345,7 +345,7 @@ export function InventoryTable({
               {visibleColumns.productName && (
                 <TableHead
                   className='cursor-pointer text-center'
-                  onClick={() => handleSort('productName')}
+                  onClick={() => { handleSort('productName'); }}
                 >
                   <div className='flex items-center justify-center gap-1'>
                     Ürün Adı
@@ -358,7 +358,7 @@ export function InventoryTable({
               {visibleColumns.price && (
                 <TableHead
                   className='cursor-pointer text-center'
-                  onClick={() => handleSort('price')}
+                  onClick={() => { handleSort('price'); }}
                 >
                   <div className='flex items-center justify-center gap-1'>
                     Birim Fiyat
@@ -379,7 +379,7 @@ export function InventoryTable({
               {visibleColumns.stockLevel && (
                 <TableHead
                   className='cursor-pointer text-center'
-                  onClick={() => handleSort('stockLevel')}
+                  onClick={() => { handleSort('stockLevel'); }}
                 >
                   <div className='flex items-center justify-center gap-1'>
                     Mevcut Stok
@@ -400,7 +400,7 @@ export function InventoryTable({
               {visibleColumns.stockValue && (
                 <TableHead
                   className='cursor-pointer text-center'
-                  onClick={() => handleSort('stockValue')}
+                  onClick={() => { handleSort('stockValue'); }}
                 >
                   <div className='flex items-center justify-center gap-1'>
                     Stok Değeri
@@ -422,7 +422,7 @@ export function InventoryTable({
               {visibleColumns.forecastedDemand && (
                 <TableHead
                   className='cursor-pointer text-center'
-                  onClick={() => handleSort('forecastedDemand')}
+                  onClick={() => { handleSort('forecastedDemand'); }}
                 >
                   <div className='flex items-center justify-center gap-1'>
                     Tahmini Talep
@@ -443,7 +443,7 @@ export function InventoryTable({
               {visibleColumns.daysOfCoverage && (
                 <TableHead
                   className='cursor-pointer text-center'
-                  onClick={() => handleSort('daysOfCoverage')}
+                  onClick={() => { handleSort('daysOfCoverage'); }}
                 >
                   <div className='flex items-center justify-center gap-1'>
                     Stok Günü
@@ -486,7 +486,7 @@ export function InventoryTable({
                 <TableRow
                   key={item.id}
                   className='cursor-pointer hover:bg-muted/50 transition-colors'
-                  onClick={() => handleRowClick(item)}
+                  onClick={() => { handleRowClick(item); }}
                 >
                   {visibleColumns.sku && (
                     <TableCell className='font-medium text-center'>
