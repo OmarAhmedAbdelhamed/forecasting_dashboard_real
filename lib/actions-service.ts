@@ -27,7 +27,7 @@ export function getPurchaseOrders(): (PurchaseOrderData & {
   id: string;
   status: string;
 })[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') {return [];}
   const data = localStorage.getItem(STORAGE_KEYS.PURCHASE_ORDERS);
   return data ? JSON.parse(data) : [];
 }
@@ -48,7 +48,7 @@ export function getTransfers(): (TransferData & {
   id: string;
   status: string;
 })[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') {return [];}
   const data = localStorage.getItem(STORAGE_KEYS.TRANSFERS);
   return data ? JSON.parse(data) : [];
 }
@@ -68,7 +68,7 @@ export function saveSafetyStockChange(change: SafetyStockData): void {
 }
 
 export function getSafetyStockChanges(): (SafetyStockData & { id: string })[] {
-  if (typeof window === 'undefined') return [];
+  if (typeof window === 'undefined') {return [];}
   const data = localStorage.getItem(STORAGE_KEYS.SAFETY_STOCK_CHANGES);
   return data ? JSON.parse(data) : [];
 }

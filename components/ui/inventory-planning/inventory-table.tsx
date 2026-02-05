@@ -300,7 +300,7 @@ export function InventoryTable({
               </DropdownMenuCheckboxItem>
               <DropdownMenuCheckboxItem
                 checked={visibleColumns.minStockLevel}
-                onCheckedChange={() => toggleColumn('minStockLevel')}
+                onCheckedChange={() => { toggleColumn('minStockLevel'); }}
               >
                 Güvenlik Stoğu
               </DropdownMenuCheckboxItem>
@@ -409,7 +409,7 @@ export function InventoryTable({
               {visibleColumns.minStockLevel && (
                 <TableHead
                   className='cursor-pointer text-center'
-                  onClick={() => handleSort('minStockLevel')}
+                  onClick={() => { handleSort('minStockLevel'); }}
                 >
                   <div className='flex items-center justify-center gap-1'>
                     Güvenlik Stoğu

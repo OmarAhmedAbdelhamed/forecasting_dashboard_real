@@ -41,7 +41,7 @@ export async function GET(
     const canView = role?.name === 'super_admin' ||
                      role?.name === 'general_manager' ||
                      role?.name === 'regional_manager' ||
-                     (profile.allowed_stores && profile.allowed_stores.includes(id));
+                     (profile.allowed_stores?.includes(id));
 
     if (!canView) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 });

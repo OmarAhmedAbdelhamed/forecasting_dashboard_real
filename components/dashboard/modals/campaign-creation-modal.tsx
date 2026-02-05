@@ -133,11 +133,11 @@ export function CampaignCreationModal({
 
                     <div className="space-y-2">
                         <Label htmlFor="camp-name">Kampanya Adı</Label>
-                        <Input 
-                            id="camp-name" 
-                            placeholder="Örn: Şubat Sonu Stok Eritme" 
+                        <Input
+                            id="camp-name"
+                            placeholder="Örn: Şubat Sonu Stok Eritme"
                             value={name}
-                            onChange={(e) => setName(e.target.value)}
+                            onChange={(e) => { setName(e.target.value); }}
                         />
                     </div>
 
@@ -157,18 +157,18 @@ export function CampaignCreationModal({
 
                     <div className="space-y-2">
                         <Label htmlFor="notes">Notlar (Opsiyonel)</Label>
-                        <Textarea 
-                            id="notes" 
-                            placeholder="Kampanya detayları veya onay notu..." 
+                        <Textarea
+                            id="notes"
+                            placeholder="Kampanya detayları veya onay notu..."
                             className="h-20 max-h-32 min-h-[5rem]"
                             value={notes}
-                            onChange={(e) => setNotes(e.target.value)}
+                            onChange={(e) => { setNotes(e.target.value); }}
                         />
                     </div>
                 </div>
 
                 <DialogFooter className="gap-2 sm:gap-0">
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Vazgeç</Button>
+                    <Button variant="outline" onClick={() => { onOpenChange(false); }}>Vazgeç</Button>
                     <Button onClick={handleSave} className="bg-indigo-600 hover:bg-indigo-700">
                         <Save className="w-4 h-4 mr-2" />
                         Kaydet ve Planla

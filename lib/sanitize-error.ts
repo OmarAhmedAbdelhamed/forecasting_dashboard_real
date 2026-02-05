@@ -27,23 +27,23 @@ export function sanitizeDatabaseError(
 
     // Check for specific database error patterns
     if (message.includes('duplicate key') || message.includes('unique constraint')) {
-      return `A record with this information already exists.`;
+      return 'A record with this information already exists.';
     }
 
     if (message.includes('foreign key constraint') || message.includes('violates foreign key')) {
-      return `Referenced record does not exist.`;
+      return 'Referenced record does not exist.';
     }
 
     if (message.includes('not null')) {
-      return `Required information is missing.`;
+      return 'Required information is missing.';
     }
 
     if (message.includes('check constraint') || message.includes('violates check')) {
-      return `Invalid data provided.`;
+      return 'Invalid data provided.';
     }
 
     if (message.includes('connection') || message.includes('timeout')) {
-      return `Service temporarily unavailable. Please try again.`;
+      return 'Service temporarily unavailable. Please try again.';
     }
 
     // Generic message for other database errors
@@ -57,27 +57,27 @@ export function sanitizeDatabaseError(
     // Postgres error codes
     if (code === '23505') {
       // Unique violation
-      return `A record with this information already exists.`;
+      return 'A record with this information already exists.';
     }
 
     if (code === '23503') {
       // Foreign key violation
-      return `Referenced record does not exist.`;
+      return 'Referenced record does not exist.';
     }
 
     if (code === '23502') {
       // Not null violation
-      return `Required information is missing.`;
+      return 'Required information is missing.';
     }
 
     if (code === '23514') {
       // Check violation
-      return `Invalid data provided.`;
+      return 'Invalid data provided.';
     }
 
     if (code === '08001' || code === '08004' || code === '08006') {
       // Connection errors
-      return `Service temporarily unavailable. Please try again.`;
+      return 'Service temporarily unavailable. Please try again.';
     }
   }
 
@@ -95,7 +95,7 @@ export function sanitizeDatabaseError(
 export function createErrorResponse(
   context: string,
   error?: unknown,
-  status: number = 500,
+  status = 500,
 ): Response {
   // Log the actual error server-side for debugging
   if (error) {

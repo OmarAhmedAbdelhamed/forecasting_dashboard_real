@@ -326,7 +326,7 @@ export function ExportPromotionModal({
     const csvRows = rowsToExport.map((row) => {
       // Determine Data Type
       const dataType = row.status === 'completed' ? 'Gerçekleşen' : 'Tahmin';
-      
+
       const rowData = visibleColumns
         .map((colId) => {
           const val = row[colId as keyof PromotionData];
@@ -335,7 +335,7 @@ export function ExportPromotionModal({
             : val;
         })
         .join(',');
-      
+
       return `${dataType},${rowData}`;
     });
 

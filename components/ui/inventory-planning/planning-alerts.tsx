@@ -29,7 +29,7 @@ interface PlanningAlertsProps {
 }
 
 export function PlanningAlerts({
-  data = [],
+  data,
   onActionClick,
   period = 30,
 }: PlanningAlertsProps) {

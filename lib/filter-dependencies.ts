@@ -106,7 +106,7 @@ export function shouldDisableFilter(
   const dependency = FILTER_DEPENDENCIES.find((d) => d.filter === filter);
 
   // If no dependency rule or disableWhenMissing is false, don't disable
-  if (!dependency || !dependency.disableWhenMissing) {
+  if (!dependency?.disableWhenMissing) {
     return false;
   }
 
@@ -127,7 +127,7 @@ export function getAutoFilteredOptions(
   const dependency = FILTER_DEPENDENCIES.find((d) => d.filter === filter);
 
   // If no auto-filter rule, return null
-  if (!dependency || !dependency.autoFilter) {
+  if (!dependency?.autoFilter) {
     return null;
   }
 

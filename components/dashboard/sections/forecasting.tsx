@@ -1940,84 +1940,12 @@ export function ForecastingSection() {
                              )}
                         </td>
                       </tr>
-                    </thead>
-                    <tbody className='divide-y'>
-                      {PROMOTION_HISTORY_DATA.map((row, i) => (
-                        <tr
-                          key={i}
-                          className='group hover:bg-muted/30 transition-colors cursor-pointer'
-                        >
-                          <td className='p-2 2xl:p-3 font-medium text-gray-700'>
-                            {row.date}
-                          </td>
-                          <td className='p-2 2xl:p-3'>
-                            <div className='font-semibold text-gray-900'>
-                              {row.name}
-                            </div>
-                            <div className='text-[10px] text-muted-foreground bg-muted w-fit px-1.5 py-0.5 rounded'>
-                              {row.type}
-                            </div>
-                          </td>
-                          <td className='p-2 2xl:p-3 text-right'>
-                            <div className='font-bold text-gray-900'>
-                              {row.uplift}
-                            </div>
-                            <div className='text-[10px] text-muted-foreground'>
-                              {row.upliftVal}
-                            </div>
-                          </td>
-                          <td className='p-2 2xl:p-3 text-right font-medium'>
-                            <span
-                              className={
-                                row.profit.startsWith('-')
-                                  ? 'text-red-600'
-                                  : 'text-emerald-600'
-                              }
-                            >
-                              {row.profit}
-                            </span>
-                          </td>
-                          <td className='p-2 2xl:p-3 text-right'>
-                            <div
-                              className={`font-bold inline-block px-1.5 py-0.5 rounded ${
-                                row.roi > 100
-                                  ? 'bg-emerald-100 text-emerald-700'
-                                  : row.roi > 0
-                                    ? 'bg-blue-50 text-blue-700'
-                                    : 'bg-red-50 text-red-700'
-                              }`}
-                            >
-                              %{row.roi}
-                            </div>
-                          </td>
-                          <td className='p-2 2xl:p-3 text-center'>
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                                row.stock === 'OK'
-                                  ? 'bg-green-50 text-green-700 border-green-200'
-                                  : row.stock === 'OOS'
-                                    ? 'bg-red-50 text-red-700 border-red-200'
-                                    : 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                              }`}
-                            >
-                              {row.stock === 'OK'
-                                ? 'YETERLİ'
-                                : row.stock === 'OOS'
-                                  ? 'TÜKENDİ'
-                                  : 'AŞIRI STOK'}
-                            </span>
-                          </td>
-                          <td className='p-2 2xl:p-3 text-right text-gray-600'>
-                            {row.forecast}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                    ))}
+                  </tbody>
+                </table>
                 </div>
               </CardContent>
             </Card>
-          )}
         </div>
       </div>
       <ExportPromotionModal

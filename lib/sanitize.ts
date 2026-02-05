@@ -217,6 +217,6 @@ export function isSafeString(str: string): boolean {
  * @returns Truncated string
  */
 export function truncate(str: string, maxLength = 1000): string {
-  if (!str) return '';
+  if (!str) {return '';}
   return str.length > maxLength ? str.slice(0, maxLength) : str;
 }

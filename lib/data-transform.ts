@@ -125,7 +125,7 @@ export function transformDataArray(
 export function transformChartData(
   data: ChartDataPoint[],
   config: DataTransformConfig,
-  valueKey: string = 'value'
+  valueKey = 'value'
 ): ChartDataPoint[] {
   return data.map((point) => {
     const transformed: ChartDataPoint = { ...point };
@@ -133,7 +133,7 @@ export function transformChartData(
     // Transform the main value
     if (valueKey in point && typeof point[valueKey] === 'number') {
       const transformedPoint = transformValue(
-        point[valueKey] as number,
+        point[valueKey],
         config.mode,
         point.category,
         config.volumeUnit
@@ -219,7 +219,7 @@ export function calculatePercentageChange(
  * @param locale - Locale for formatting (default: 'tr-TR')
  * @returns Formatted percentage string (e.g., '+15%' or '-8%')
  */
-export function formatPercentageChange(change: number, locale: string = 'tr-TR'): string {
+export function formatPercentageChange(change: number, locale = 'tr-TR'): string {
   const sign = change >= 0 ? '+' : '';
   return `${sign}${change.toFixed(1)}%`;
 }

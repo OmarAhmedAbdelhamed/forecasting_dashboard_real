@@ -120,7 +120,7 @@ export function StoresList({
         .eq('organization_id', regionData?.organization_id)
         .order('full_name');
 
-      if (error) throw error;
+      if (error) {throw error;}
       setEligibleManagers(data || []);
     } catch (error) {
       console.error('Error fetching eligible managers:', error);

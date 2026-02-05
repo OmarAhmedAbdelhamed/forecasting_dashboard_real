@@ -64,7 +64,7 @@ export function TransferForm({ item, onBack, onSave }: TransferFormProps) {
   const destinationOptions = stores.filter((s) => s.value !== currentStoreKey);
 
   const handleSubmit = async () => {
-    if (!destinationStore || !reason || transferQuantity <= 0) return;
+    if (!destinationStore || !reason || transferQuantity <= 0) {return;}
 
     setIsSubmitting(true);
 
@@ -160,12 +160,12 @@ export function TransferForm({ item, onBack, onSave }: TransferFormProps) {
           type='number'
           value={transferQuantity}
           onChange={(e) =>
-            setTransferQuantity(
+            { setTransferQuantity(
               Math.min(
                 maxTransferQty,
                 Math.max(0, parseInt(e.target.value) || 0),
               ),
-            )
+            ); }
           }
           min={1}
           max={maxTransferQty}
@@ -201,7 +201,7 @@ export function TransferForm({ item, onBack, onSave }: TransferFormProps) {
         <Label className='text-xs'>Notlar (Opsiyonel)</Label>
         <Textarea
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          onChange={(e) => { setNotes(e.target.value); }}
           placeholder='Ek bilgiler...'
           rows={2}
         />

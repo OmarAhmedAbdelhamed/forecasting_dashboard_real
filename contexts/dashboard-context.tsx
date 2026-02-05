@@ -37,7 +37,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     contextStr += `Aktif Sayfa: ${section}\n`;
 
     if (Object.keys(filters).length > 0) {
-      contextStr += `\nFiltreler:\n`;
+      contextStr += '\nFiltreler:\n';
       if (filters.regions?.length > 0) {
         contextStr += `- Bölgeler: ${filters.regions.join(', ')}\n`;
       }
@@ -53,7 +53,7 @@ export function DashboardProvider({ children }: { children: ReactNode }) {
     }
 
     if (Object.keys(metrics).length > 0) {
-      contextStr += `\nÖnemli Metrikler:\n`;
+      contextStr += '\nÖnemli Metrikler:\n';
       Object.entries(metrics).forEach(([key, value]) => {
         if (value !== null && value !== undefined) {
           contextStr += `- ${key}: ${typeof value === 'number' ? value.toLocaleString('tr-TR') : value}\n`;

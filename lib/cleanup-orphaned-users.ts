@@ -30,7 +30,7 @@ export interface CleanupResult {
   orphanedFound: number;
   successfullyDeleted: number;
   failedToDelete: number;
-  errors: Array<{ userId: string; email: string; error: string }>;
+  errors: { userId: string; email: string; error: string }[];
 }
 
 /**

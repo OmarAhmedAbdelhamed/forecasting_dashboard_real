@@ -80,7 +80,7 @@ export function ProductDetailSheet({
 
   // Generate trend data dynamically based on the selected product
   const trendData = useMemo(() => {
-    if (!item) return [];
+    if (!item) {return [];}
     // Generate 15 days of stock trends specific to this product
     return generateSingleProductStockTrends(item, 15);
   }, [item]);
@@ -99,21 +99,21 @@ export function ProductDetailSheet({
     savePurchaseOrder(data);
     setSuccessMessage('Satınalma talebi başarıyla oluşturuldu!');
     setActiveForm('none');
-    setTimeout(() => setSuccessMessage(null), 3000);
+    setTimeout(() => { setSuccessMessage(null); }, 3000);
   };
 
   const handleTransferSave = (data: TransferData) => {
     saveTransfer(data);
     setSuccessMessage('Transfer talebi başarıyla oluşturuldu!');
     setActiveForm('none');
-    setTimeout(() => setSuccessMessage(null), 3000);
+    setTimeout(() => { setSuccessMessage(null); }, 3000);
   };
 
   const handleSafetyStockSave = (data: SafetyStockData) => {
     saveSafetyStockChange(data);
     setSuccessMessage('Güvenlik stoğu başarıyla güncellendi!');
     setActiveForm('none');
-    setTimeout(() => setSuccessMessage(null), 3000);
+    setTimeout(() => { setSuccessMessage(null); }, 3000);
   };
 
   const handlePromotionClick = () => {
@@ -121,7 +121,7 @@ export function ProductDetailSheet({
     router.push('/dashboard?section=promotions');
   };
 
-  if (!item) return null;
+  if (!item) {return null;}
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -138,7 +138,7 @@ export function ProductDetailSheet({
         {activeForm === 'purchase' && (
           <PurchaseOrderForm
             item={item}
-            onBack={() => setActiveForm('none')}
+            onBack={() => { setActiveForm('none'); }}
             onSave={handlePurchaseOrderSave}
           />
         )}
@@ -146,7 +146,7 @@ export function ProductDetailSheet({
         {activeForm === 'transfer' && (
           <TransferForm
             item={item}
-            onBack={() => setActiveForm('none')}
+            onBack={() => { setActiveForm('none'); }}
             onSave={handleTransferSave}
           />
         )}
@@ -154,7 +154,7 @@ export function ProductDetailSheet({
         {activeForm === 'safety' && (
           <SafetyStockForm
             item={item}
-            onBack={() => setActiveForm('none')}
+            onBack={() => { setActiveForm('none'); }}
             onSave={handleSafetyStockSave}
           />
         )}
@@ -330,7 +330,7 @@ export function ProductDetailSheet({
                   <Button
                     className='w-full'
                     size='lg'
-                    onClick={() => setActiveForm('purchase')}
+                    onClick={() => { setActiveForm('purchase'); }}
                   >
                     Satınalma Talebi Oluştur
                   </Button>
@@ -338,7 +338,7 @@ export function ProductDetailSheet({
                     variant='outline'
                     className='w-full'
                     size='lg'
-                    onClick={() => setActiveForm('transfer')}
+                    onClick={() => { setActiveForm('transfer'); }}
                   >
                     Mağazalar Arası Transfer
                   </Button>
@@ -346,7 +346,7 @@ export function ProductDetailSheet({
                     variant='outline'
                     className='w-full'
                     size='lg'
-                    onClick={() => setActiveForm('safety')}
+                    onClick={() => { setActiveForm('safety'); }}
                   >
                     Güvenlik Stoğunu Düzenle ({item.minStockLevel})
                   </Button>

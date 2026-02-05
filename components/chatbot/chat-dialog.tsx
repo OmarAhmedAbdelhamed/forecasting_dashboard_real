@@ -43,7 +43,7 @@ export function ChatDialog({ open, onOpenChange }: ChatDialogProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading) {return;}
 
     const userMessage = input.trim();
     setInput('');
@@ -62,7 +62,7 @@ export function ChatDialog({ open, onOpenChange }: ChatDialogProps) {
         }),
       });
 
-      if (!response.ok) throw new Error('Failed to get response');
+      if (!response.ok) {throw new Error('Failed to get response');}
 
       const data = await response.json();
       setMessages((prev) => [
@@ -83,7 +83,7 @@ export function ChatDialog({ open, onOpenChange }: ChatDialogProps) {
     }
   };
 
-  if (!open) return null;
+  if (!open) {return null;}
 
   return (
     <div
@@ -113,7 +113,7 @@ export function ChatDialog({ open, onOpenChange }: ChatDialogProps) {
         <Button
           variant='ghost'
           size='icon'
-          onClick={() => onOpenChange(false)}
+          onClick={() => { onOpenChange(false); }}
           className='h-8 w-8 rounded-full hover:bg-slate-200/50 text-slate-500'
         >
           <X className='w-4 h-4' />
@@ -172,7 +172,7 @@ export function ChatDialog({ open, onOpenChange }: ChatDialogProps) {
         <form onSubmit={handleSubmit} className='relative group'>
           <Textarea
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => { setInput(e.target.value); }}
             placeholder='Type a message...'
             className='w-full min-h-[52px] max-h-[120px] bg-slate-50 border-slate-200 focus:border-slate-300 focus:ring-0 transition-all text-[13px] pr-12 rounded-xl resize-none py-3'
             onKeyDown={(e) => {

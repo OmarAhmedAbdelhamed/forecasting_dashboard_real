@@ -1021,7 +1021,7 @@ export function generateInventoryItems(
   stores: string[],
   categories: string[],
   products: string[] = [],
-  days: number = 30, // Added days parameter
+  days = 30, // Added days parameter
 ): (InventoryItem & { originalValue: string })[] {
   const effectiveProductKeys = getEffectiveProductList(
     regions,
@@ -1084,7 +1084,7 @@ export function generateInventoryItems(
     const baseDemand = p.forecastDemand || 1000;
     const demandVariation = 0.8 + rVar * 0.4; // 0.8 to 1.2
     let demand = Math.round(baseDemand * demandVariation);
-    if (demand < 10) demand = 10; // Minimum demand
+    if (demand < 10) {demand = 10;} // Minimum demand
 
     // 2. Calculate Stock based on Demand (Intelligent Inventory)
     // Target Coverage: 15 to 45 days (approx 0.5 to 1.5 months)
@@ -1161,7 +1161,7 @@ export function generateInventoryItems(
 
 // Trends Mock Data - Recalculated based on filters
 export const generateStockTrendsWithPeriod = (
-  days: number = 30,
+  days = 30,
   regions: string[] = [],
   stores: string[] = [],
   categories: string[] = [],
@@ -1252,7 +1252,7 @@ export const generateStockTrendsWithPeriod = (
 // Single Product Stock Trends - For product detail modal
 export const generateSingleProductStockTrends = (
   item: InventoryItem,
-  days: number = 15,
+  days = 15,
 ): StockTrendPoint[] => {
   const seed = item.sku || item.id;
   const today = new Date();
@@ -1286,11 +1286,11 @@ export const generateSingleProductStockTrends = (
     // Check if we need to un-apply a restock event
     if (prevStock > maxStockLevel) {
       prevStock -= restockAmount;
-      if (prevStock < 0) prevStock = safetyStockLevel;
+      if (prevStock < 0) {prevStock = safetyStockLevel;}
     }
 
     // Ensure stock doesn't go negative
-    if (currentSimulatedStock < 0) currentSimulatedStock = 0;
+    if (currentSimulatedStock < 0) {currentSimulatedStock = 0;}
 
     points.push({
       date: format(date, 'MMM dd'),
@@ -1313,7 +1313,7 @@ export function generateStorePerformance(
   selectedStores: string[] = [],
   selectedProducts: string[] = [],
   selectedCategories: string[] = [],
-  days: number = 30, // Added days parameter
+  days = 30, // Added days parameter
 ): StoreInventoryPerformance[] {
   // 1. Get all relevant items
   const items = generateInventoryItems(
@@ -1398,7 +1398,7 @@ export function generateStorePerformance(
 export const generateInventoryAlerts = (
   regions: string[],
   stores: string[],
-  days: number = 30, // Added days parameter
+  days = 30, // Added days parameter
 ): InventoryAlert[] => {
   // Pass empty array for categories to mean "ALL" (bypass strict key matching)
   const items = generateInventoryItems(regions, stores, [], [], days); // Use period items

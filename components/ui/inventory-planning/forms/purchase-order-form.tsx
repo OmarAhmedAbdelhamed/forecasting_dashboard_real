@@ -72,13 +72,13 @@ export function PurchaseOrderForm({
   // Calculate expected delivery based on lead time and priority
   const getExpectedDelivery = () => {
     let baseDays = item.leadTimeDays;
-    if (priority === 'high') baseDays = Math.ceil(baseDays * 0.7);
-    if (priority === 'urgent') baseDays = Math.ceil(baseDays * 0.5);
+    if (priority === 'high') {baseDays = Math.ceil(baseDays * 0.7);}
+    if (priority === 'urgent') {baseDays = Math.ceil(baseDays * 0.5);}
     return addDays(new Date(), baseDays);
   };
 
   const handleSubmit = async () => {
-    if (!supplier || orderQuantity <= 0) return;
+    if (!supplier || orderQuantity <= 0) {return;}
 
     setIsSubmitting(true);
 
@@ -150,7 +150,7 @@ export function PurchaseOrderForm({
             type='number'
             value={orderQuantity}
             onChange={(e) =>
-              setOrderQuantity(Math.max(0, parseInt(e.target.value) || 0))
+              { setOrderQuantity(Math.max(0, parseInt(e.target.value) || 0)); }
             }
             min={1}
             className='text-lg font-semibold'
@@ -173,7 +173,7 @@ export function PurchaseOrderForm({
               type='number'
               value={unitPrice}
               onChange={(e) =>
-                setUnitPrice(Math.max(0, parseFloat(e.target.value) || 0))
+                { setUnitPrice(Math.max(0, parseFloat(e.target.value) || 0)); }
               }
               min={0}
               step={0.01}
@@ -219,7 +219,7 @@ export function PurchaseOrderForm({
         <Label className='text-xs'>Öncelik</Label>
         <Select
           value={priority}
-          onValueChange={(v) => setPriority(v as 'normal' | 'high' | 'urgent')}
+          onValueChange={(v) => { setPriority(v as 'normal' | 'high' | 'urgent'); }}
         >
           <SelectTrigger>
             <SelectValue />
@@ -251,7 +251,7 @@ export function PurchaseOrderForm({
         <Label className='text-xs'>Notlar (Opsiyonel)</Label>
         <Textarea
           value={notes}
-          onChange={(e) => setNotes(e.target.value)}
+          onChange={(e) => { setNotes(e.target.value); }}
           placeholder='Ek bilgiler...'
           rows={2}
         />

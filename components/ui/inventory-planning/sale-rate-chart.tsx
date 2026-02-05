@@ -51,11 +51,11 @@ interface CustomLabelProps {
 
 interface TooltipProps {
   active?: boolean;
-  payload?: Array<{ payload: CategoryData }>;
+  payload?: { payload: CategoryData }[];
 }
 
 const CustomTooltip = ({ active, payload }: TooltipProps) => {
-  if (active && payload && payload.length) {
+  if (active && payload?.length) {
     const data = payload[0].payload;
     return (
       <div className='bg-white px-3 py-2 rounded-lg shadow-lg border border-gray-200'>
@@ -71,7 +71,7 @@ const CustomTooltip = ({ active, payload }: TooltipProps) => {
 };
 
 export function CategoryDistributionChart({
-  items = [],
+  items,
   selectedCategories = [],
   onCategoryClick,
 }: CategoryDistributionChartProps) {
@@ -130,7 +130,7 @@ export function CategoryDistributionChart({
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
     const y = cy + radius * Math.sin(-midAngle * RADIAN);
 
-    if (percent < 0.05) return null; // Don't show label for very small slices
+    if (percent < 0.05) {return null;} // Don't show label for very small slices
 
     return (
       <text
@@ -195,9 +195,9 @@ export function CategoryDistributionChart({
               outerRadius='85%'
               innerRadius='60%'
               dataKey='value'
-              onMouseEnter={(_, index) => setActiveIndex(index)}
-              onMouseLeave={() => setActiveIndex(null)}
-              onClick={(data) => handleClick(data)}
+              onMouseEnter={(_, index) => { setActiveIndex(index); }}
+              onMouseLeave={() => { setActiveIndex(null); }}
+              onClick={(data) => { handleClick(data); }}
               style={{ cursor: onCategoryClick ? 'pointer' : 'default' }}
             >
               {chartData.map((entry, index) => {

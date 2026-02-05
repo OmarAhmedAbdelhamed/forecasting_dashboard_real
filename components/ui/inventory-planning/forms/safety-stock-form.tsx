@@ -60,7 +60,7 @@ export function SafetyStockForm({
     currentValue > 0 ? ((change / currentValue) * 100).toFixed(1) : 0;
 
   const handleSubmit = async () => {
-    if (!reason || newValue < 0) return;
+    if (!reason || newValue < 0) {return;}
 
     setIsSubmitting(true);
 
@@ -125,7 +125,7 @@ export function SafetyStockForm({
             type='number'
             value={newValue}
             onChange={(e) =>
-              setNewValue(Math.max(0, parseInt(e.target.value) || 0))
+              { setNewValue(Math.max(0, parseInt(e.target.value) || 0)); }
             }
             min={0}
             className='text-2xl font-bold text-center h-auto py-3'

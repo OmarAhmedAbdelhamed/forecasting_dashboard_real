@@ -241,7 +241,7 @@ export function StoreManagementView({ storeId, storeName }: StoreManagementViewP
   };
 
   const handleBulkToggleProducts = async (enable: boolean) => {
-    if (selectedProducts.size === 0) return;
+    if (selectedProducts.size === 0) {return;}
 
     try {
       const response = await fetch(`/api/stores/${storeId}/products/bulk`, {
@@ -293,16 +293,16 @@ export function StoreManagementView({ storeId, storeName }: StoreManagementViewP
   };
 
   // Group products by category
-  const productsByCategory = allProducts.reduce((acc, product) => {
+  const productsByCategory = allProducts.reduce<Record<string, ProductWithCategory[]>>((acc, product) => {
     if (!acc[product.categoryId]) {
       acc[product.categoryId] = [];
     }
     acc[product.categoryId].push(product);
     return acc;
-  }, {} as Record<string, ProductWithCategory[]>);
+  }, {});
 
   // Filter products by category and search term
-  const filteredProductsByCategory = Object.entries(productsByCategory).reduce(
+  const filteredProductsByCategory = Object.entries(productsByCategory).reduce<Record<string, ProductWithCategory[]>>(
     (acc, [categoryId, products]) => {
       const filtered = products.filter((product) => {
         const matchesCategory = selectedCategory === 'all' || product.categoryId === selectedCategory;
@@ -315,7 +315,7 @@ export function StoreManagementView({ storeId, storeName }: StoreManagementViewP
       }
       return acc;
     },
-    {} as Record<string, ProductWithCategory[]>
+    {}
   );
 
   // Get categories that are not assigned to this store
@@ -336,7 +336,7 @@ export function StoreManagementView({ storeId, storeName }: StoreManagementViewP
   // Check if all products in a category are selected
   const areAllInCategorySelected = (categoryId: string) => {
     const products = filteredProductsByCategory[categoryId] || [];
-    if (products.length === 0) return false;
+    if (products.length === 0) {return false;}
     return products.every((p) => selectedProducts.has(p.id));
   };
 
@@ -538,7 +538,7 @@ export function StoreManagementView({ storeId, storeName }: StoreManagementViewP
                       <Collapsible
                         key={categoryId}
                         open={!isCollapsed}
-                        onOpenChange={() => handleToggleCategoryCollapse(categoryId)}
+                        onOpenChange={() => { handleToggleCategoryCollapse(categoryId); }}
                       >
                         <CollapsibleTrigger asChild>
                           <div className="flex items-center gap-2 p-3 rounded-lg border hover:bg-muted/50 cursor-pointer">
@@ -573,7 +573,7 @@ export function StoreManagementView({ storeId, storeName }: StoreManagementViewP
                                   <input
                                     type="checkbox"
                                     checked={allSelected}
-                                    onChange={() => handleSelectAllInCategory(categoryId, products)}
+                                    onChange={() => { handleSelectAllInCategory(categoryId, products); }}
                                   />
                                 </TableHead>
                                 <TableHead>Name</TableHead>

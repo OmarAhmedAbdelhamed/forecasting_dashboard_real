@@ -14,7 +14,7 @@ const UPCOMING_PROMOTIONS = [
     start: 1, // Day offset from start
     duration: 10,
     type: 'İnternet İndirimi',
-    color: 'bg-emerald-500', 
+    color: 'bg-emerald-500',
   },
   {
     id: 2,
@@ -89,7 +89,7 @@ export function PromotionCalendar() {
                                 {promo.name}
                             </span>
                         </div>
-                        
+
                         {/* Tooltip via Group Hover */}
                          <div className="absolute top-[-35px] left-1/2 -translate-x-1/2 hidden group-hover:block bg-slate-800 text-white text-xs px-3 py-1.5 rounded-md z-20 whitespace-nowrap shadow-xl">
                             <div className="font-semibold mb-0.5">{promo.type}</div>
@@ -98,7 +98,7 @@ export function PromotionCalendar() {
                             </div>
                         </div>
                     </div>
-                )})}
+                );})}
             </div>
 
              <div className="mt-4 flex gap-4 text-xs text-muted-foreground">

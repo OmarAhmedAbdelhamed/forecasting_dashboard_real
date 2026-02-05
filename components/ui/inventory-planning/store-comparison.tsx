@@ -27,7 +27,7 @@ interface StoreComparisonProps {
 }
 
 export function StoreComparison({
-  data = [],
+  data,
   period = 30,
 }: StoreComparisonProps) {
   return (

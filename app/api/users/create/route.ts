@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
 
     // SECURITY: Check if user has permission to manage users using ROLE_CONFIGS
     const roleConfig = ROLE_CONFIGS[currentRole];
-    if (!roleConfig || !roleConfig.allowedSections.includes('user-management')) {
+    if (!roleConfig?.allowedSections.includes('user-management')) {
       return NextResponse.json(
         { error: 'Forbidden - You do not have permission to manage users' },
         { status: 403 },
@@ -79,10 +79,10 @@ export async function POST(request: NextRequest) {
       full_name,
       role_id,
       organization_id,
-      allowed_regions = [],
-      allowed_stores = [],
-      allowed_categories = [],
-      is_active = true,
+      allowed_regions,
+      allowed_stores,
+      allowed_categories,
+      is_active,
     } = validated;
 
     // Get the role being assigned
