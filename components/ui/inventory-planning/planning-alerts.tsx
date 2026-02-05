@@ -12,22 +12,27 @@ import { Badge } from '@/components/ui/shared/badge';
 import { ScrollArea } from '@/components/ui/shared/scroll-area';
 import {
   AlertTriangle,
-  ArrowRight,
   TrendingUp,
   PackageMinus,
-  Truck,
   RefreshCw,
   Lightbulb,
   Box,
+  Zap,
 } from 'lucide-react';
 import { InventoryAlert } from '@/types/inventory';
 import { cn } from '@/lib/utils';
 
 interface PlanningAlertsProps {
   data: InventoryAlert[];
+  onActionClick?: (sku: string) => void;
+  period?: number;
 }
 
-export function PlanningAlerts({ data }: PlanningAlertsProps) {
+export function PlanningAlerts({
+  data = [],
+  onActionClick,
+  period = 30,
+}: PlanningAlertsProps) {
   return (
     <Card className='h-full flex flex-col shadow-sm'>
       <CardHeader className='pb-3 border-b'>
@@ -50,7 +55,14 @@ export function PlanningAlerts({ data }: PlanningAlertsProps) {
         <ScrollArea className='flex-1 h-135'>
           <div className='p-4 space-y-4'>
             {data.length > 0 ? (
-              data.map((alert) => <AlertItem key={alert.id} alert={alert} />)
+              data.map((alert) => (
+                <AlertItem
+                  key={alert.id}
+                  alert={alert}
+                  onActionClick={onActionClick}
+                  period={period}
+                />
+              ))
             ) : (
               <div className='flex flex-col items-center justify-center py-16 text-center text-muted-foreground'>
                 <Box className='h-12 w-12 mb-3 text-slate-300' />
@@ -67,20 +79,13 @@ export function PlanningAlerts({ data }: PlanningAlertsProps) {
   );
 }
 
-function AlertItem({ alert }: { alert: InventoryAlert }) {
-  const getSeverityColor = (severity: string) => {
-    switch (severity) {
-      case 'high':
-        return 'border-red-200 bg-red-50 hover:bg-red-100/50';
-      case 'medium':
-        return 'border-orange-200 bg-orange-50 hover:bg-orange-100/50';
-      case 'low':
-        return 'border-blue-200 bg-blue-50 hover:bg-blue-100/50';
-      default:
-        return 'border-slate-200 bg-white';
-    }
-  };
+interface AlertItemProps {
+  alert: InventoryAlert;
+  onActionClick?: (sku: string) => void;
+  period?: number;
+}
 
+function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
   const getIcon = (type: string) => {
     switch (type) {
       case 'stockout':
@@ -110,6 +115,12 @@ function AlertItem({ alert }: { alert: InventoryAlert }) {
         return 'Durgun Stok';
       default:
         return type.toUpperCase();
+    }
+  };
+
+  const handleActionClick = () => {
+    if (onActionClick && alert.sku) {
+      onActionClick(alert.sku);
     }
   };
 
@@ -185,7 +196,7 @@ function AlertItem({ alert }: { alert: InventoryAlert }) {
           {alert.metrics.forecastedDemand !== undefined && (
             <div className='flex flex-col items-center justify-center p-2 rounded bg-slate-50'>
               <span className='text-[10px] text-slate-400 uppercase font-semibold'>
-                Tahmin (30G)
+                Tahmin ({period}G)
               </span>
               <span className='text-sm font-bold text-blue-600'>
                 {alert.metrics.forecastedDemand}
@@ -204,7 +215,7 @@ function AlertItem({ alert }: { alert: InventoryAlert }) {
             </div>
             <div className='flex-1 space-y-1'>
               <p className='text-[11px] font-bold text-indigo-700 uppercase tracking-wide'>
-               Öneri
+                Öneri
               </p>
               <p className='text-xs text-indigo-900 leading-relaxed'>
                 {alert.recommendation}
@@ -214,38 +225,15 @@ function AlertItem({ alert }: { alert: InventoryAlert }) {
         </div>
       )}
 
-      {/* Actions */}
+      {/* Unified Action Button */}
       <div className='flex items-center gap-2 mt-1'>
-        {alert.actionType === 'transfer' && (
-          <Button className='w-full h-8 text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-none'>
-            <Truck className='mr-2 h-3.5 w-3.5' />
-            Transfer Oluştur
-          </Button>
-        )}
-        {alert.actionType === 'reorder' && (
-          <Button className='w-full h-8 text-xs bg-blue-600 hover:bg-blue-700 text-white shadow-none'>
-            <RefreshCw className='mr-2 h-3.5 w-3.5' />
-            Sipariş Ver
-          </Button>
-        )}
-        {(alert.actionType === 'promotion' ||
-          alert.actionType === 'review') && (
-          <Button
-            variant='outline'
-            className='w-full h-8 text-xs border-slate-200 hover:bg-slate-50'
-          >
-            Detayları İncele
-            <ArrowRight className='ml-2 h-3 w-3' />
-          </Button>
-        )}
-        {!alert.actionType && (
-          <Button
-            variant='ghost'
-            className='ml-auto h-7 text-xs text-slate-500 hover:text-slate-900'
-          >
-            Yoksay
-          </Button>
-        )}
+        <Button
+          className='w-full h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground shadow-none'
+          onClick={handleActionClick}
+        >
+          <Zap className='mr-2 h-3.5 w-3.5' />
+          Aksiyon Al
+        </Button>
       </div>
     </div>
   );

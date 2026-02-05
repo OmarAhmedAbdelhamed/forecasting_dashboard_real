@@ -2,13 +2,14 @@
 
 import Link from 'next/link';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { FilterBar } from '@/components/ui/shared/filter-bar';
 import { MetricCard } from '@/components/dashboard/metric-card';
 import { RevenueTargetChart } from '@/components/dashboard/charts/revenue-target-chart';
 import { HistoricalUnitsChart } from '@/components/dashboard/charts/historical-units-chart';
 import { UpcomingPromotions } from '@/components/dashboard/tables/upcoming-promotions';
 import { Button } from '@/components/ui/shared/button';
+import { useDashboardContext } from '@/contexts/dashboard-context';
 import {
   Tooltip,
   TooltipContent,
@@ -29,6 +30,7 @@ import {
   getRevenueChartData,
   getHistoricalChartData,
   getPromotions,
+  generateInventoryAlerts,
 } from '@/data/mock-data';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useVisibility } from '@/hooks/use-visibility';
@@ -82,6 +84,37 @@ export function OverviewSection() {
   );
 
   const promotions = useMemo(() => getPromotions(), []);
+
+  const inventoryAlerts = useMemo(
+    () => generateInventoryAlerts(selectedRegions, selectedStores),
+    [selectedRegions, selectedStores],
+  );
+
+  // Sync with Dashboard Context
+  const { setSection, setFilters, setMetrics } = useDashboardContext();
+
+  useEffect(() => {
+    setSection('Genel Bakış');
+    setFilters({
+      regions: selectedRegions,
+      stores: selectedStores,
+      categories: selectedCategories,
+    });
+    setMetrics({
+      'Model Doğruluğu': `${metrics.accuracy.toFixed(1)}%`,
+      'Gelecek 30 Günlük Tahmin': `${(metrics.forecastValue / 1000000).toFixed(1)}M TL (${(metrics.forecastUnit / 1000).toFixed(0)}K Adet)`,
+      'YTD Başarı': `${(metrics.ytdValue / 1000000).toFixed(1)}M TL`,
+      'Tahmin Sapması': `${metrics.gapToSales.toFixed(1)}%`,
+    });
+  }, [
+    selectedRegions,
+    selectedStores,
+    selectedCategories,
+    metrics,
+    setSection,
+    setFilters,
+    setMetrics,
+  ]);
 
   // Reset child selections when parent changes
   const handleRegionChange = (regions: string[]) => {
@@ -173,7 +206,7 @@ export function OverviewSection() {
             <div className='pb-2 pt-3 px-4 flex items-center justify-between'>
               <div className='flex items-center gap-2 text-red-600'>
                 <AlertTriangle className='h-5 w-5' />
-                <span className='font-semibold'>Alert Center</span>
+                <span className='font-semibold'>Uyarı Merkezi</span>
               </div>
               <Button
                 variant='ghost'
@@ -181,114 +214,102 @@ export function OverviewSection() {
                 className='text-xs h-8 hover:bg-red-100 hover:text-red-700 text-red-600'
                 asChild
               >
-                <Link href='/alert-center'>See More</Link>
+                <Link href='/alert-center'>Daha Fazla</Link>
               </Button>
             </div>
             <div className='p-2 flex-1'>
               <div className='grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 xlg:grid-cols-4 gap-2 h-full'>
-                {/* Low Growth Alert */}
-                {canSeeAlert('alert-low-growth') && (
-                  <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
-                          <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side='top'
-                        className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
-                      >
-                        Düşük büyüme gösteren ürün kategorileri. Pazarlama
-                        stratejisi gözden geçirilmeli.
-                      </TooltipContent>
-                    </Tooltip>
-                    <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
-                      Low Growth
-                    </span>
-                    <span className='text-2xl 2xl:text-3xl font-bold text-red-600'>
-                      4
-                    </span>
-                  </div>
-                )}
-
-                {/* High Growth Alert */}
-                {canSeeAlert('alert-high-growth') && (
-                  <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
-                          <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side='top'
-                        className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
-                      >
-                        Yüksek büyüme gösteren ürün kategorileri. Stok ve tedarik
-                        planlaması öncelikli.
-                      </TooltipContent>
-                    </Tooltip>
-                    <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
-                      High Growth
-                    </span>
-                    <span className='text-2xl 2xl:text-3xl font-bold text-green-600'>
-                      12
-                    </span>
-                  </div>
-                )}
-
-                {/* Forecast Errors Alert */}
-                {canSeeAlert('alert-forecast-errors') && (
-                  <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
-                          <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side='top'
-                        className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
-                      >
-                        Tahmin doğruluğu düşük olan ürünler. Model iyileştirmesi
-                        gerekebilir.
-                      </TooltipContent>
-                    </Tooltip>
-                    <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
-                      Forecast Hatalar
-                    </span>
-                    <span className='text-2xl 2xl:text-3xl font-bold text-orange-600'>
-                      7
-                    </span>
-                  </div>
-                )}
-
-                {/* Critical Stock Alert */}
-                {canSeeAlert('alert-critical-stock') && (
-                  <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
-                          <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent
-                        side='top'
-                        className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
-                      >
-                        Kritik stok seviyesinde olan ürünler. Acil tedarik
-                        aksiyonu gerekli.
-                      </TooltipContent>
-                    </Tooltip>
-                    <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
-                      Kritik Stok
-                    </span>
-                    <span className='text-2xl 2xl:text-3xl font-bold text-red-600'>
-                      3
-                    </span>
-                  </div>
-                )}
+                <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
+                        <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side='top'
+                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                    >
+                      Düşük büyüme gösteren ürün kategorileri. Pazarlama
+                      stratejisi gözden geçirilmeli.
+                    </TooltipContent>
+                  </Tooltip>
+                  <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
+                    Düşük Büyüme
+                  </span>
+                  <span className='text-2xl 2xl:text-3xl font-bold text-red-600'>
+                    4
+                  </span>
+                </div>
+                <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
+                        <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side='top'
+                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                    >
+                      Yüksek büyüme gösteren ürün kategorileri. Stok ve tedarik
+                      planlaması öncelikli.
+                    </TooltipContent>
+                  </Tooltip>
+                  <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
+                    Yüksek Büyüme
+                  </span>
+                  <span className='text-2xl 2xl:text-3xl font-bold text-green-600'>
+                    12
+                  </span>
+                </div>
+                <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
+                        <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side='top'
+                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                    >
+                      Tahmin doğruluğu düşük olan ürünler. Model iyileştirmesi
+                      gerekebilir.
+                    </TooltipContent>
+                  </Tooltip>
+                  <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
+                    Tahmin Hataları
+                  </span>
+                  <span className='text-2xl 2xl:text-3xl font-bold text-orange-600'>
+                    7
+                  </span>
+                </div>
+                <Link
+                  href='/dashboard?section=inventory_planning'
+                  className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'
+                >
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button className='absolute top-1 right-1 text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100 transition-opacity'>
+                        <Info className='h-3 w-3 2xl:h-4 2xl:w-4' />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side='top'
+                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                    >
+                      Kritik stok seviyesinde olan ürünler. Acil tedarik
+                      aksiyonu gerekli.
+                    </TooltipContent>
+                  </Tooltip>
+                  <span className='text-sm 2xl:text-base font-medium text-muted-foreground mb-0.5'>
+                    Stok uyarıları
+                  </span>
+                  <span className='text-2xl 2xl:text-3xl font-bold text-red-600'>
+                    {inventoryAlerts.length}
+                  </span>
+                </Link>
               </div>
             </div>
           </div>

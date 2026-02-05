@@ -23,9 +23,13 @@ import { StoreInventoryPerformance } from '@/types/inventory';
 
 interface StoreComparisonProps {
   data: StoreInventoryPerformance[];
+  period?: number;
 }
 
-export function StoreComparison({ data }: StoreComparisonProps) {
+export function StoreComparison({
+  data = [],
+  period = 30,
+}: StoreComparisonProps) {
   return (
     <Card className='col-span-1 h-full'>
       <CardHeader>
@@ -61,7 +65,7 @@ export function StoreComparison({ data }: StoreComparisonProps) {
                         <Info className='h-3.5 w-3.5 text-muted-foreground cursor-help hover:text-foreground transition-colors' />
                       </TooltipTrigger>
                       <TooltipContent>
-                        Son 30 günlük ortalama satış adedi
+                        Son {period} günlük ortalama satış adedi
                       </TooltipContent>
                     </Tooltip>
                   </div>

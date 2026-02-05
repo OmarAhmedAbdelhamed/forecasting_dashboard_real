@@ -2,8 +2,10 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/shared/card';
 import { Badge } from '@/components/ui/shared/badge';
-import { Calendar, Info } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/shared/tooltip';
+import { Calendar } from 'lucide-react';
+
+import { addDays, format } from 'date-fns';
+import { tr } from 'date-fns/locale';
 
 const UPCOMING_PROMOTIONS = [
   {
@@ -11,15 +13,15 @@ const UPCOMING_PROMOTIONS = [
     name: 'Bahar Temizliği',
     start: 1, // Day offset from start
     duration: 10,
-    type: 'INTERNET_INDIRIMI',
-    color: 'bg-emerald-500',
+    type: 'İnternet İndirimi',
+    color: 'bg-emerald-500', 
   },
   {
     id: 2,
     name: 'Ramazan Paketi',
     start: 5,
     duration: 14,
-    type: 'ALISVERIS_INDIRIMI_500',
+    type: 'Alışveriş İndirimi 500TL+',
     color: 'bg-amber-500',
   },
   {
@@ -27,7 +29,7 @@ const UPCOMING_PROMOTIONS = [
     name: 'Haftasonu İndirimi',
     start: 15,
     duration: 3,
-    type: 'COKLU_ALIM',
+    type: 'Çoklu Alım',
     color: 'bg-blue-500',
   },
    {
@@ -35,13 +37,14 @@ const UPCOMING_PROMOTIONS = [
     name: 'Yaz Öncesi Fırsat',
     start: 22,
     duration: 7,
-    type: 'OZEL_GUN_INDIRIMI',
+    type: 'Özel Gün İndirimi',
     color: 'bg-purple-500',
   },
 ];
 
 export function PromotionCalendar() {
   const totalDays = 30; // 1 Month view
+  const today = new Date();
 
   return (
     <Card className="h-full">
@@ -56,9 +59,9 @@ export function PromotionCalendar() {
         <div className="relative pt-6">
             {/* Timeline Axis */}
              <div className="flex justify-between text-[10px] text-muted-foreground mb-2 px-1">
-                <span>Bugün</span>
-                <span>15. Gün</span>
-                <span>30. Gün</span>
+                <span>{format(today, 'd MMM', { locale: tr })}</span>
+                <span>{format(addDays(today, 15), 'd MMM', { locale: tr })}</span>
+                <span>{format(addDays(today, 30), 'd MMM', { locale: tr })}</span>
             </div>
 
             <div className="relative space-y-3">
@@ -69,7 +72,10 @@ export function PromotionCalendar() {
                     ))}
                 </div>
 
-                {UPCOMING_PROMOTIONS.map((promo) => (
+                {UPCOMING_PROMOTIONS.map((promo) => {
+                    const startDate = addDays(today, promo.start);
+                    const endDate = addDays(startDate, promo.duration);
+                    return (
                     <div key={promo.id} className="relative h-8 flex items-center group">
                         {/* Bar */}
                         <div
@@ -83,13 +89,16 @@ export function PromotionCalendar() {
                                 {promo.name}
                             </span>
                         </div>
-
-                        {/* Tooltip via Group Hover (Custom simplified tooltip for speed) */}
-                         <div className="absolute top-[-30px] left-1/2 -translate-x-1/2 hidden group-hover:block bg-slate-800 text-white text-xs px-2 py-1 rounded z-20 whitespace-nowrap">
-                            {promo.type} ({promo.duration} gün)
+                        
+                        {/* Tooltip via Group Hover */}
+                         <div className="absolute top-[-35px] left-1/2 -translate-x-1/2 hidden group-hover:block bg-slate-800 text-white text-xs px-3 py-1.5 rounded-md z-20 whitespace-nowrap shadow-xl">
+                            <div className="font-semibold mb-0.5">{promo.type}</div>
+                            <div className="text-[10px] opacity-80">
+                                {format(startDate, 'd MMMM', { locale: tr })} - {format(endDate, 'd MMMM', { locale: tr })} ({promo.duration} gün)
+                            </div>
                         </div>
                     </div>
-                ))}
+                )})}
             </div>
 
              <div className="mt-4 flex gap-4 text-xs text-muted-foreground">

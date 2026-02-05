@@ -7,7 +7,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/shared/tooltip';
-import { useCustomLists } from '@/context/custom-lists-context';
+import { useCustomLists } from '@/contexts/custom-lists-context';
 import { useMemo } from 'react';
 import { cn } from '@/lib/utils';
 

@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/purity */
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -8,7 +9,8 @@ import {
   TabsList,
   TabsTrigger,
 } from '@/components/ui/shared/tabs';
-import { Switch } from '@/components/ui/shared/switch';
+
+import { useDashboardContext } from '@/contexts/dashboard-context';
 
 // Permissions imports
 import { usePermissions } from '@/hooks/use-permissions';
@@ -40,14 +42,15 @@ import {
 } from '@/components/ui/shared/select';
 import {
   ComposedChart,
+  LineChart,
   Line,
-  Area,
   CartesianGrid,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
   ReferenceArea,
+  Bar,
 } from 'recharts';
 import {
   Loader2,
@@ -60,13 +63,26 @@ import {
   Info,
   TurkishLira,
   LayoutGrid,
+  Sparkles,
   Calendar as CalendarIcon,
   HardDriveDownload,
-  ArrowRight,
-  CheckCircle2,
+
   Copy,
   Eye,
+  ZoomIn,
+  ZoomOut,
+
+  Flag,
+  Plus,
 } from 'lucide-react';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/shared/dialog';
 import {
   Tooltip as UITooltip,
   TooltipContent as UITooltipContent,
@@ -101,29 +117,21 @@ import {
   PROMOTIONS,
   REGIONS_FLAT as REGIONS,
   CATEGORIES,
-  PROMOTION_HISTORY_DATA,
   SIMILAR_CAMPAIGNS,
+  type SimilarCampaign,
+  PROMOTION_HISTORY_DATA,
 } from '@/data/mock-data';
 import { ExportPromotionModal } from '@/components/dashboard/modals/export-promotion-modal';
+import { CampaignCreationModal } from '@/components/dashboard/modals/campaign-creation-modal';
 import { PromotionCalendar } from '@/components/dashboard/visualizations/promotion-calendar';
-import { CampaignDetailModal } from '@/components/dashboard/modals/campaign-detail-modal';
-import { SimilarCampaign } from '@/data/mock-data';
+import { useToast } from '@/components/ui/shared/use-toast';
 
 // Custom X-Axis Tick Component for Weather
-interface CustomizedAxisTickProps {
-  x?: number;
-  y?: number;
-  payload?: {
-    value: string;
-  };
-  data: ForecastData[];
-  fontSize?: number;
-}
-
-const CustomizedAxisTick = (props: CustomizedAxisTickProps) => {
+const CustomizedAxisTick = (props: { x?: number; y?: number; payload?: { value: string }; data: ForecastData[]; fontSize?: number }) => {
   const { x, y, payload, data, fontSize } = props;
-  const dateStr = payload?.value;
-  const dayData = dateStr ? data.find((d: ForecastData) => d.tarih === dateStr) : undefined;
+  if (!payload) return null;
+  const dateStr = payload.value;
+  const dayData = data.find((d) => d.tarih === dateStr);
   const weather = dayData?.weather;
 
   const Icon =
@@ -168,10 +176,10 @@ export function ForecastingSection() {
   const { canSeeKpi, canSeeChart, canSeeTable, canSeeAction } = useVisibility('pricing-promotion');
 
   // Inputs
-  const [magazaKodu, setMagazaKodu] = useState<string[]>(['1001']);
+  const [magazaKodu, setMagazaKodu] = useState<string[]>([]);
   const [bolge, setBolge] = useState<string[]>([]);
   const [reyon, setReyon] = useState<string[]>([]);
-  const [urunKodu, setUrunKodu] = useState<string[]>(['30000332']);
+  const [urunKodu, setUrunKodu] = useState<string[]>([]);
 
   const [startDate, setStartDate] = useState<Date | undefined>(
     new Date('2026-01-06'),
@@ -189,6 +197,12 @@ export function ForecastingSection() {
 
   const [promosyon, setPromosyon] = useState('INTERNET_INDIRIMI');
   const [promosyonIndirimOrani, setPromosyonIndirimOrani] = useState('9');
+  
+  // Base values (Component Scope)
+  const baseSatisFiyati = 87.45;
+  const baseHamFiyat = 67.67;
+  const birimKar = baseSatisFiyati - baseHamFiyat;
+  const marj = (birimKar / baseSatisFiyati) * 100;
 
   // NEW STATES
   const [pricingMode, setPricingMode] = useState<'discount' | 'price'>(
@@ -196,6 +210,8 @@ export function ForecastingSection() {
   );
   const [targetPrice, setTargetPrice] = useState<string>('');
   const [budget, setBudget] = useState<string>('');
+  const [budgetMode, setBudgetMode] = useState<'budget' | 'units'>('budget');
+  const [isZoomed, setIsZoomed] = useState(false);
 
   // State
   const [isLoading, setIsLoading] = useState(false);
@@ -208,39 +224,11 @@ export function ForecastingSection() {
 
   // Similar Campaign Modal State
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [isPlanningModalOpen, setIsPlanningModalOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] =
     useState<SimilarCampaign | null>(null);
 
-  // Filter filter options based on user's data scope
-  const filteredRegions = useMemo(() => {
-    if (!dataScope?.regions || dataScope.regions.length === 0) {return REGIONS;}
-    return REGIONS.filter((region) =>
-      dataScope.regions?.includes(region.value)
-    );
-  }, [dataScope]);
-
-  const filteredStores = useMemo(() => {
-    if (!dataScope?.stores || dataScope.stores.length === 0) {return STORES;}
-    return STORES.filter((store) =>
-      dataScope.stores?.includes(store.value)
-    );
-  }, [dataScope]);
-
-  const filteredCategories = useMemo(() => {
-    if (!dataScope?.categories || dataScope.categories.length === 0) {return CATEGORIES;}
-    return CATEGORIES.filter((category) =>
-      dataScope.categories?.includes(category.value)
-    );
-  }, [dataScope]);
-
-  const filteredProducts = useMemo(() => {
-    if (!dataScope?.categories || dataScope.categories.length === 0) {return PRODUCTS;}
-    // Filter products by user's allowed categories
-    // Extract category from categoryKey (format is "storeValue_categoryValue")
-    return PRODUCTS.filter((product) =>
-      dataScope.categories?.includes(product.categoryKey.split('_').pop() || '')
-    );
-  }, [dataScope]);
+  const { toast } = useToast();
 
   // Filter similar campaigns based on current promotion type
   const filteredCampaigns = useMemo(() => {
@@ -260,6 +248,49 @@ export function ForecastingSection() {
     return () => { window.removeEventListener('resize', checkScreenSize); };
   }, []);
 
+  // Sync with Dashboard Context
+  const { setSection, setFilters, setMetrics } = useDashboardContext();
+
+  useEffect(() => {
+    setSection('Fiyatlandırma & Promosyon');
+
+    setFilters({
+      regions: bolge,
+      stores: magazaKodu,
+      categories: reyon,
+      products: urunKodu,
+    });
+
+    // Only update metrics if we have forecast data
+    if (forecastData && forecastData.length > 0) {
+      const totalF = forecastData.reduce(
+        (acc, curr) => acc + (curr.tahmin || 0),
+        0,
+      );
+      const totalRev = forecastData.reduce((acc, curr) => acc + curr.ciro, 0);
+
+      setMetrics({
+        'Toplam Tahmin': `${(totalF / 1000).toFixed(1)}K Adet`,
+        'Toplam Ciro': `${(totalRev / 1000).toFixed(1)}K TL`,
+        Promosyon: promosyon,
+        'İndirim Oranı': `%${promosyonIndirimOrani}`,
+        ROI: `${(((totalRev * 0.22 - (budget ? parseFloat(budget) : totalF * 0.15 * 87.45)) / (budget ? parseFloat(budget) : totalF * 0.15 * 87.45)) * 100).toFixed(1)}%`,
+      });
+    }
+  }, [
+    bolge,
+    magazaKodu,
+    reyon,
+    urunKodu,
+    forecastData,
+    promosyon,
+    promosyonIndirimOrani,
+    budget,
+    setSection,
+    setFilters,
+    setMetrics,
+  ]);
+
   const handleAnalyze = async () => {
     if (!startDate || !endDate) {return;}
 
@@ -274,10 +305,7 @@ export function ForecastingSection() {
 
     // Base values
     // Base values - Moved out for shared access if needed, or kept here but consistent
-    const baseSatisFiyati = 87.45;
-    const baseHamFiyat = 67.67;
-    const birimKar = baseSatisFiyati - baseHamFiyat;
-    const marj = (birimKar / baseSatisFiyati) * 100;
+    // Base values - Moved to component scope
 
     // Determine discount based on mode
     let discount = 0;
@@ -290,7 +318,15 @@ export function ForecastingSection() {
       discount = parseFloat(promosyonIndirimOrani) || 0;
     }
 
+    // Initialize Stock (Mock) - 4-digit sales (Units)
+    let currentStock = 300;
+
     for (let i = 0; i < days; i++) {
+        // Restock every 3 days (simulated delivery)
+        if(i > 0 && i % 2 === 0) {
+            currentStock += 350;
+        }
+
       const currentDate = addDays(startDate, i);
 
       // Check if current date is within promo range
@@ -301,44 +337,33 @@ export function ForecastingSection() {
         }
       }
 
-      // Random forecast variation
-      const baseForecast = 50 + Math.floor(Math.random() * 15);
+      // 1. Calculate Unconstrained Demand (Potansiyel Talep)
+      // Base forecast in UNITS (approx 170 units * 87.45 TL ~= 14,800 TL -> 5 digits)
+      const baseForecast = 140 + Math.floor(Math.random() * 40);
+      const patternBase = createSpecificPattern(i, days, baseForecast);
+      
+      // Values in Revenue (TL) for Chart
+
+
       const lift = isPromoActive ? 1 + discount / 100 : 1;
-      const tahminVal = Math.round(baseForecast * lift);
-      const baseline = baseForecast;
+      const dailyDemand = Math.round(patternBase * lift); // This is what customers WANT to buy (Units)
 
-      // Secondary metric (Yellow line)
-      const ciro_adedi =
-        Math.floor(Math.random() * 10) + 5 + (isPromoActive ? 5 : 0);
-
-      // Determine stock dynamically based on sales to show OOS
-      // For simulation, let's say we have initial stock 2500
-      const initialStock = 2500;
-      const currentStock = initialStock;
-      // We need to track stock day by day, but here we are in a loop i=0..days
-      // We'll simulate a linear drop for simplicity but strictly check limits
-      // Mock logic: Stock drops by cumulative sales.
-      // Since specific pattern usage, let's just use the mock `stok` calculation but make it reach 0
-
-      // Better mock:
-      const dailyDrop = 300; // Aggressive sales
-      let simulatedStock = 3800 - i * dailyDrop;
-      if (simulatedStock < 0) {simulatedStock = 0;}
-
-      // Logic for Lost Sales
-      // If stock is 0, we lose the sales
-      const demand = tahminVal;
-      let actualSales = demand;
+      // 2. Apply Constraints (Stock)
+      let actualSales = dailyDemand;
       let lostSales = 0;
 
-      if (simulatedStock < demand) {
-        actualSales = simulatedStock;
-        lostSales = demand - actualSales;
+      if (currentStock < dailyDemand) {
+        actualSales = currentStock;     // Sell whatever is left
+        lostSales = dailyDemand - actualSales; // The rest is lost
       }
 
-      // If lost sales, actual sales is reduced
-      const finalTahmin = actualSales;
+      // 3. Update Stock
+      currentStock = Math.max(0, currentStock - actualSales);
 
+      // Secondary metric (Yellow line visual logic)
+      const ciro_adedi = 0;
+
+      const finalTahmin = actualSales;
       const ciro = finalTahmin * baseSatisFiyati;
       const gunluk_kar = finalTahmin * birimKar;
 
@@ -349,15 +374,15 @@ export function ForecastingSection() {
 
       data.push({
         tarih: format(currentDate, "yyyy-MM-dd'T'00:00:00"),
-        baseline: createSpecificPattern(i, days, baseline),
-        tahmin: isPromoActive ? finalTahmin : null,
-        unconstrained_demand: isPromoActive ? demand : null, // The potential
+        baseline: parseFloat(patternBase.toFixed(0)), // Units
+        tahmin: isPromoActive ? parseFloat(finalTahmin.toFixed(0)) : null, // Units
+        unconstrained_demand: lostSales > 0 ? parseFloat(dailyDemand.toFixed(0)) : null, // Units (Potential Sales)
         lost_sales: lostSales,
         ciro_adedi: ciro_adedi,
         benim_promom: isPromoActive ? [promosyon] : [],
         benim_promom_yuzde: isPromoActive ? discount : 0,
         ciro: parseFloat(ciro.toFixed(2)),
-        stok: simulatedStock,
+        stok: currentStock, // Yellow line (Actual Stock)
         satisFiyati: baseSatisFiyati,
         ham_fiyat: baseHamFiyat,
         birim_kar: parseFloat(birimKar.toFixed(2)),
@@ -380,27 +405,50 @@ export function ForecastingSection() {
     return base;
   };
 
+  // FILTER DATA FOR ROI & STOCK CALCULATIONS (Based on Promo Period)
+  const promoPeriodData = useMemo(() => {
+    if (!forecastData || !startPromosyon || !endPromosyon) return [];
+    return forecastData.filter((d) => {
+      const date = new Date(d.tarih);
+      return date >= startPromosyon && date <= endPromosyon;
+    });
+  }, [forecastData, startPromosyon, endPromosyon]);
+
   const totalForecast =
-    forecastData?.reduce((acc, curr) => acc + (curr.tahmin || 0), 0) || 0;
+    promoPeriodData?.reduce((acc, curr) => acc + (curr.tahmin || 0), 0) || 0;
 
   // Calculate potential forecast (unconstrained)
-  const totalPotentialForecast =
-    forecastData?.reduce(
-      (acc, curr) => acc + (curr.unconstrained_demand || curr.tahmin || 0),
-      0,
-    ) || 0;
+
 
   const totalRevenue =
-    forecastData?.reduce((acc, curr) => acc + curr.ciro, 0) || 0;
+    promoPeriodData?.reduce((acc, curr) => acc + curr.ciro, 0) || 0;
 
   // Financial Logic
-  const promoCost = budget ? parseFloat(budget) : totalForecast * 0.15 * 87.45; // Fallback mock cost if no budget
-  const grossProfit = totalRevenue * 0.22; // Mock margin 22%
-  const netProfit = grossProfit - promoCost;
-  const calculatedROI = promoCost > 0 ? (netProfit / promoCost) * 100 : 0;
+  // baseHamFiyat and baseSatisFiyati are now in component scope
+  
 
-  const avgLift = 12.5;
-  const lostSalesVolume = totalPotentialForecast - totalForecast;
+
+  
+
+  
+
+
+
+
+  // Calculate directly from unit-based lost_sales property (Filtered by Promo Period)
+  const totalLostSalesUnits = promoPeriodData?.reduce((acc, curr) => acc + (curr.lost_sales || 0), 0) || 0;
+  
+  // Calculate Revenue Loss
+  const estimatedRevenueLoss = totalLostSalesUnits * baseSatisFiyati;
+  
+  // Calculate Baseline Revenue (since baseline in chart is now Units)
+  // We need to re-calculate it or derive it
+  const totalBaselineUnits = forecastData ? forecastData.reduce((acc, curr) => acc + (curr.baseline || 0), 0) : 0;
+  const totalBaselineRevenue = totalBaselineUnits * baseSatisFiyati;
+
+  // 1. Lift Calculation
+  const liftAmount = totalRevenue - totalBaselineRevenue;
+  const liftPercentage = totalBaselineRevenue > 0 ? (liftAmount / totalBaselineRevenue) * 100 : 0;
 
   return (
     <div className='space-y-2 2xl:space-y-4'>
@@ -416,17 +464,27 @@ export function ForecastingSection() {
             </p>
           </div>
 
-          {!permissionsLoading && roleConfig?.canExport && (
-            <Button
-              variant='outline'
-              size='icon'
-              onClick={() => { setIsExportModalOpen(true); }}
-              className='h-9 w-9 2xl:h-10 2xl:w-10 border-[#FFB840] bg-[#FFB840]/10 text-[#0D1E3A] hover:bg-[#FFB840] hover:text-[#0D1E3A] transition-all duration-200'
-              title='Verileri Dışa Aktar'
-            >
-              <HardDriveDownload className='h-4 w-4 2xl:h-5 2xl:w-5' />
-            </Button>
-          )}
+          
+            <div className="flex items-center gap-2">
+               <Button
+                disabled={!forecastData}
+                className={`h-9 2xl:h-10 text-xs 2xl:text-sm shadow-sm transition-all ${forecastData ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-muted text-muted-foreground'}`}
+                onClick={() => setIsPlanningModalOpen(true)}
+              >
+                 <Plus className="w-4 h-4 mr-1.5" />
+                 Kampanyayı Oluştur
+              </Button>
+
+              <Button
+                variant='outline'
+                size='icon'
+                onClick={() => setIsExportModalOpen(true)}
+                className='h-9 w-9 2xl:h-10 2xl:w-10 border-[#FFB840] bg-[#FFB840]/10 text-[#0D1E3A] hover:bg-[#FFB840] hover:text-[#0D1E3A] transition-all duration-200'
+                title='Verileri Dışa Aktar'
+              >
+                <HardDriveDownload className='h-4 w-4 2xl:h-5 2xl:w-5' />
+              </Button>
+            </div>
         </div>
       </div>
 
@@ -715,35 +773,70 @@ export function ForecastingSection() {
                 </div>
               </div>
 
-              {!hasRole('finance') && (
-                <div className='space-y-0.5'>
+              <div className='bg-muted/30 p-2 rounded-lg border space-y-2 mt-2'>
+                <div className='flex items-center justify-between'>
                   <div className='flex items-center gap-1'>
-                    <Label className='text-[10px] 2xl:text-xs'>
-                      Planlanan Bütçe (Opsiyonel)
+                    <Label className='text-[10px] 2xl:text-xs font-semibold'>
+                      Kısıtlar & Bütçe
                     </Label>
                     <UITooltip>
-                      <UITooltipTrigger>
-                        <Info className='h-3 w-3 text-muted-foreground/60 hover:text-indigo-600 cursor-help' />
-                      </UITooltipTrigger>
-                      <UITooltipContent>
-                        <p>
-                          Maksimum kampanya bütçesi. ROI hesabında kullanılır.
-                        </p>
-                      </UITooltipContent>
-                    </UITooltip>
+                        <UITooltipTrigger>
+                          <Info className='h-3 w-3 text-muted-foreground/60 hover:text-indigo-600 cursor-help' />
+                        </UITooltipTrigger>
+                        <UITooltipContent>
+                          <p>Kampanya bütçesi veya hedef satış adedi.</p>
+                        </UITooltipContent>
+                      </UITooltip>
                   </div>
-                  <Input
-                    type='number'
-                    placeholder='Örn: 50000'
-                    className='h-7 2xl:h-9 text-xs'
-                    value={budget}
-                    onChange={(e) => { setBudget(e.target.value); }}
-                  />
-                  <p className='text-[10px] text-muted-foreground'>
-                    ROI hesaplaması için kullanılır.
-                  </p>
                 </div>
-              )}
+
+                <div className='flex bg-muted rounded-md p-0.5 h-6'>
+                    <button
+                      onClick={() => setBudgetMode('budget')}
+                      className={`flex-1 text-[9px] rounded-sm font-medium transition-all ${
+                        budgetMode === 'budget'
+                          ? 'bg-white shadow-sm text-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Bütçe (TL)
+                    </button>
+                    <button
+                      onClick={() => setBudgetMode('units')}
+                      className={`flex-1 text-[9px] rounded-sm font-medium transition-all ${
+                        (budgetMode as string) === 'units'
+                          ? 'bg-white shadow-sm text-foreground'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      Adet
+                    </button>
+                </div>
+
+                <Input
+                  type='number'
+                  placeholder={
+                    budgetMode === 'budget' ? 'Örn: 50000 TL' : 'Örn: 1000 Adet'
+                  }
+                  className='h-7 2xl:h-9 text-xs'
+                  value={budget}
+                  onChange={(e) => setBudget(e.target.value)}
+                />
+                
+                {budget && parseFloat(budget) > 0 && (
+                    <div className='text-[10px] text-muted-foreground px-1'>
+                      {budgetMode === 'budget' ? (
+                          <span>
+                            ~{Math.round(parseFloat(budget) / baseHamFiyat).toLocaleString()} adet ürün (Maliyet: {baseHamFiyat} TL)
+                          </span>
+                      ) : (
+                          <span>
+                            ~{(parseFloat(budget) * baseHamFiyat).toLocaleString()} TL bütçe gereksinimi
+                          </span>
+                      )}
+                    </div>
+                )}
+              </div>
 
               <Button
                 className='w-full mt-2 h-8 2xl:h-10 2xl:text-sm text-xs'
@@ -770,7 +863,7 @@ export function ForecastingSection() {
                   <Copy className='h-3 w-3' />
                 </div>
                 <CardTitle className='text-sm 2xl:text-base'>
-                  Benzer Kampanyalar
+                  Geçmiş Deneyimler
                 </CardTitle>
                 <UITooltip>
                   <UITooltipTrigger>
@@ -778,91 +871,94 @@ export function ForecastingSection() {
                   </UITooltipTrigger>
                   <UITooltipContent>
                     <p>
-                      Geçmişte benzer özellikler gösteren kampanyaların
-                      performans analizi.
+                      Önceki kampanyaların başarı ve başarısızlık analizleri.
                     </p>
                   </UITooltipContent>
                 </UITooltip>
               </div>
               <CardDescription className='text-[10px]'>
-                Geçmiş öneriler
+                Başarı Hikayeleri & Fırsatlar
               </CardDescription>
             </CardHeader>
             <CardContent className='space-y-2 p-3'>
-              {filteredCampaigns.map((camp) => (
-                <div
-                  key={camp.id}
-                  className='bg-white border rounded-lg p-2 hover:shadow-sm transition-shadow'
-                >
-                  <div className='flex justify-between items-start mb-1'>
-                    <div>
-                      <div className='font-semibold text-xs text-indigo-950'>
-                        {camp.name}
-                      </div>
-                      <div className='text-[10px] text-muted-foreground'>
-                        {camp.date} • {camp.type}
-                      </div>
-                    </div>
-                    <div className='text-[10px] font-bold text-indigo-600 bg-indigo-50 px-1 py-0.5 rounded'>
-                      %{camp.similarityScore}
-                    </div>
-                  </div>
+              <Tabs defaultValue="success" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-2">
+                  <TabsTrigger value="success" className="text-[10px] 2xl:text-xs h-7 data-[state=active]:bg-emerald-50 data-[state=active]:text-emerald-700">
+                    Başarı Hikayeleri
+                  </TabsTrigger>
+                  <TabsTrigger value="failure" className="text-[10px] 2xl:text-xs h-7 data-[state=active]:bg-red-50 data-[state=active]:text-red-700">
+                    Kayıp Fırsatlar
+                  </TabsTrigger>
+                </TabsList>
+                
+                {['success', 'failure'].map((tab) => (
+                  <TabsContent key={tab} value={tab} className="space-y-2 mt-0">
+                    {filteredCampaigns
+                      .filter(c => {
+                        // Classification Logic
+                        const isSuccess = (c.actualRevenue / c.targetRevenue >= 0.95) && 
+                                          (Math.abs(c.plannedStockDays - c.actualStockDays) <= 3);
+                         if (tab === 'success') return isSuccess;
+                         return !isSuccess;
+                      })
+                      .map((camp) => {
+                         const achievement = (camp.actualRevenue / camp.targetRevenue) * 100;
+                         const isStockIssue = camp.stockOutDays > camp.plannedStockDays / 2;
+                         
+                         return (
+                        <div
+                          key={camp.id}
+                          className={`bg-white border rounded-lg p-2 hover:shadow-sm transition-shadow ${tab === 'success' ? 'border-l-4 border-l-emerald-500' : 'border-l-4 border-l-red-500'}`}
+                        >
+                          <div className='flex justify-between items-start mb-1'>
+                            <div>
+                              <div className='font-semibold text-xs text-indigo-950'>
+                                {camp.name}
+                              </div>
+                              <div className='text-[10px] text-muted-foreground'>
+                                {camp.date}
+                              </div>
+                            </div>
+                            <Button
+                              variant='ghost'
+                              size='icon'
+                              className='h-5 w-5'
+                              onClick={() => {
+                                setSelectedCampaign(camp);
+                                setIsDetailModalOpen(true);
+                              }}
+                            >
+                              <Eye className='h-3 w-3 text-muted-foreground' />
+                            </Button>
+                          </div>
 
-                  <div className='grid grid-cols-3 gap-1 text-[10px] text-muted-foreground mb-2'>
-                    <div className='flex flex-col'>
-                      <span className='font-medium text-emerald-600'>
-                        %{camp.lift}
-                      </span>
-                      <span>Lift</span>
-                    </div>
-                    <div className='flex flex-col'>
-                      <span className='font-medium text-blue-600'>
-                        %{camp.roi}
-                      </span>
-                      <span>ROI</span>
-                    </div>
-                    <div className='flex flex-col'>
-                      <span
-                        className={`font-medium ${camp.stockOutDays > 0 ? 'text-red-500' : 'text-gray-600'}`}
-                      >
-                        {camp.stockOutDays} G
-                      </span>
-                      <span>OOS</span>
-                    </div>
-                  </div>
-
-                  <div className='flex gap-2'>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      className='flex-1 h-6 text-[10px] gap-1'
-                      onClick={() => {
-                        setSelectedCampaign(camp);
-                        setIsDetailModalOpen(true);
-                      }}
-                    >
-                      <Eye className='h-3 w-3' /> Gör
-                    </Button>
-                    <Button
-                      variant='outline'
-                      size='sm'
-                      className='flex-1 h-6 text-[10px] gap-1 hover:bg-indigo-50 hover:text-indigo-700 hover:border-indigo-200'
-                      onClick={() => {
-                        setPromosyon(camp.type);
-                        setPromosyonIndirimOrani('15');
-                      }}
-                    >
-                      <CheckCircle2 className='h-3 w-3' /> Uygula
-                    </Button>
-                  </div>
-                </div>
-              ))}
-
-              {filteredCampaigns.length === 0 && (
-                <div className='text-center text-xs text-muted-foreground py-4'>
-                  Bu kriterlere uygun benzer kampanya bulunamadı.
-                </div>
-              )}
+                          <div className='flex items-center gap-2 mt-2'>
+                             {tab === 'success' ? (
+                                <span className="text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                                   %{achievement.toFixed(0)} Hedef Tutma
+                                </span>
+                             ) : (
+                                <span className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${isStockIssue ? 'text-red-700 bg-red-50' : 'text-orange-700 bg-orange-50'}`}>
+                                   {isStockIssue ? 'Erken Tükendi (OOS)' : `%${achievement.toFixed(0)} Hedef Altı`}
+                                </span>
+                             )}
+                          </div>
+                        </div>
+                      )})}
+                      
+                      {filteredCampaigns.filter(c => {
+                          const isSuccess = (c.actualRevenue / c.targetRevenue >= 0.95) && 
+                                          (Math.abs(c.plannedStockDays - c.actualStockDays) <= 3);
+                         if (tab === 'success') return isSuccess;
+                         return !isSuccess;
+                      }).length === 0 && (
+                        <div className="text-center text-[10px] text-muted-foreground py-4">
+                           {tab === 'success' ? 'Kriterlere uygun başarı hikayesi bulunamadı.' : 'Kayıp fırsat bulunamadı.'}
+                        </div>
+                      )}
+                  </TabsContent>
+                ))}
+              </Tabs>
             </CardContent>
           </Card>
 
@@ -925,7 +1021,7 @@ export function ForecastingSection() {
                 ].map((event, i) => (
                   <div
                     key={i}
-                    className='flex items-center justify-between p-2 rounded-lg border bg-card hover:bg-accent/50 transition-all cursor-default group'
+                    className='flex items-center justify-between p-2 rounded-lg border bg-white hover:shadow-sm transition-shadow cursor-default group'
                   >
                     <div className='grid gap-1'>
                       <span className='font-semibold text-sm 2xl:text-base group-hover:text-primary transition-colors'>
@@ -1023,73 +1119,72 @@ export function ForecastingSection() {
               </Card>
             )}
 
-            {canSeeKpi('promo-roi') && (
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
-                  <div className='flex items-center gap-2'>
-                    <CardTitle className='text-xs 2xl:text-sm font-semibold'>
-                      Tahmini ROI
-                    </CardTitle>
-                    <UITooltip>
-                      <UITooltipTrigger>
-                        <Info className='h-3 w-3 text-muted-foreground hover:text-indigo-600 transition-colors' />
-                      </UITooltipTrigger>
-                      <UITooltipContent>
-                        <p className='max-w-xs'>
-                          Yatırım Getirisi: (Net Kar / Promosyon Maliyeti) x 100.
-                        </p>
-                      </UITooltipContent>
-                    </UITooltip>
-                  </div>
-                  <TrendingUp className='h-3 w-3 2xl:h-4 2xl:w-4 text-muted-foreground' />
-                </CardHeader>
-                <CardContent className='pb-2 2xl:pb-3'>
-                  <div
-                    className={`text-lg 2xl:text-xl font-bold ${calculatedROI >= 0 ? 'text-emerald-600' : 'text-red-600'}`}
-                  >
-                    %{calculatedROI.toFixed(1)}
-                  </div>
-                  <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
-                    Harcanan: ₺{(promoCost / 1000).toFixed(1)}k
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+            <Card>
+              <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
+                <div className='flex items-center gap-2'>
+                  <CardTitle className='text-xs 2xl:text-sm font-semibold'>
+                    Ciro Artışı (Lift)
+                  </CardTitle>
+                  <UITooltip>
+                    <UITooltipTrigger>
+                      <Info className='h-3 w-3 text-muted-foreground hover:text-indigo-600 transition-colors' />
+                    </UITooltipTrigger>
+                    <UITooltipContent>
+                      <p className='max-w-xs'>
+                         Promosyonun sağladığı ekstra ciro. (Beklenen - Temel)
+                      </p>
+                    </UITooltipContent>
+                  </UITooltip>
+                </div>
+                <TrendingUp className='h-3 w-3 2xl:h-4 2xl:w-4 text-muted-foreground' />
+              </CardHeader>
+              <CardContent className='pb-2 2xl:pb-3'>
+                <div className='text-lg 2xl:text-xl font-bold'>
+                  {isLoading ? '-' : `₺${(liftAmount / 1000).toFixed(1)}k`}
+                </div>
+                 <div className='flex items-center gap-2 mt-0.5 text-[10px] 2xl:text-xs'>
+                     <span className={`font-medium ${liftPercentage >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {liftPercentage > 0 ? '+' : ''}%{liftPercentage.toFixed(1)}
+                     </span>
+                      <span className='text-muted-foreground'>
+                        Temel Satışa Göre
+                      </span>
+                 </div>
+              </CardContent>
+            </Card>
 
-            {canSeeKpi('promo-stock-status') && (
-              <Card>
-                <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
-                  <div className='flex items-center gap-2'>
-                    <CardTitle className='text-xs 2xl:text-sm font-semibold'>
-                      Stok Durumu
-                    </CardTitle>
-                    <UITooltip>
-                      <UITooltipTrigger>
-                        <Info className='h-3 w-3 text-muted-foreground hover:text-indigo-600 transition-colors' />
-                      </UITooltipTrigger>
-                      <UITooltipContent>
-                        <p className='max-w-xs'>
-                          Mevcut stokun tahmin edilen talebi karşılama durumu.
-                        </p>
-                      </UITooltipContent>
-                    </UITooltip>
-                  </div>
-                  <Info className='h-3 w-3 2xl:h-4 2xl:w-4 text-muted-foreground' />
-                </CardHeader>
-                <CardContent className='pb-2 2xl:pb-3'>
-                  <div
-                    className={`text-lg 2xl:text-xl font-bold ${lostSalesVolume > 0 ? 'text-red-600' : 'text-emerald-600'}`}
-                  >
-                    {lostSalesVolume > 0 ? 'Riskli' : 'Güvenli'}
-                  </div>
-                  <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
-                    {lostSalesVolume > 0
-                      ? `-${lostSalesVolume} OOS`
-                      : 'Yeterli Stok'}
-                  </p>
-                </CardContent>
-              </Card>
-            )}
+            <Card>
+              <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
+                <div className='flex items-center gap-2'>
+                  <CardTitle className='text-xs 2xl:text-sm font-semibold'>
+                    Stok Durumu
+                  </CardTitle>
+                  <UITooltip>
+                    <UITooltipTrigger>
+                      <Info className='h-3 w-3 text-muted-foreground hover:text-indigo-600 transition-colors' />
+                    </UITooltipTrigger>
+                    <UITooltipContent>
+                      <p className='max-w-xs'>
+                        Mevcut stokun tahmin edilen talebi karşılama durumu.
+                      </p>
+                    </UITooltipContent>
+                  </UITooltip>
+                </div>
+                <Info className='h-3 w-3 2xl:h-4 2xl:w-4 text-muted-foreground' />
+              </CardHeader>
+              <CardContent className='pb-2 2xl:pb-3'>
+                <div
+                  className={`text-lg 2xl:text-xl font-bold ${totalLostSalesUnits > 0 ? 'text-red-600' : 'text-emerald-600'}`}
+                >
+                  {totalLostSalesUnits > 0 ? 'Riskli' : 'Güvenli'}
+                </div>
+                <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
+                  {totalLostSalesUnits > 0
+                    ? `-${totalLostSalesUnits} OOS`
+                    : 'Yeterli Stok'}
+                </p>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Main Chart or Calendar */}
@@ -1147,6 +1242,7 @@ export function ForecastingSection() {
                         Temel
                       </span>
                     </div>
+
                     <div className='flex items-center gap-1.5'>
                       <span className='w-2 h-2 rounded-full bg-[#22c55e]' />
                       <span className='text-muted-foreground font-medium'>
@@ -1162,15 +1258,43 @@ export function ForecastingSection() {
                         Kaçan
                       </span>
                     </div>
+                     <div className='flex items-center gap-1.5'>
+                      <span className='w-2 h-2 rounded-full bg-[#FFB840]' />
+                      <span className='text-muted-foreground font-medium'>Stok Adedi</span>
+                    </div>
+
+                    {/* Zoom Controls */}
+                    <div className="flex items-center gap-1 ml-2 border-l pl-3">
+                         <span className="text-[10px] text-muted-foreground mr-1">Zoom:</span>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            className={`h-6 w-6 ${isZoomed ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : ''}`}
+                            onClick={() => setIsZoomed(true)}
+                            title="Yaklaş (Scroll)"
+                        >
+                            <ZoomIn className="h-3 w-3" />
+                        </Button>
+                        <Button
+                            variant="outline"
+                            size="icon"
+                            className={`h-6 w-6 ${!isZoomed ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : ''}`}
+                            onClick={() => setIsZoomed(false)}
+                            title="Sığdır"
+                        >
+                            <ZoomOut className="h-3 w-3" />
+                        </Button>
+                    </div>
                   </div>
                 </div>
 
                 <div className='pl-0 pb-2 px-2 pt-2 2xl:pb-4'>
                   <div className='w-full overflow-x-auto pb-1'>
                     <div
+                      className={`transition-all duration-300 ease-in-out ${isZoomed ? 'cursor-grab active:cursor-grabbing' : ''}`}
                       style={{
-                        width: '100%',
-                        minWidth: `${Math.max(100, (forecastData?.length || 0) * 40)}px`,
+                        width: isZoomed ? '200%' : '100%',
+                        minWidth: isZoomed ? '1200px' : '100%',
                         height: 320,
                       }}
                     >
@@ -1229,7 +1353,7 @@ export function ForecastingSection() {
                             interval={0}
                             tick={
                               <CustomizedAxisTick
-                                data={forecastData}
+                                data={forecastData || []}
                                 fontSize={is2xl ? 11 : 9}
                               />
                             }
@@ -1258,11 +1382,11 @@ export function ForecastingSection() {
                               if (name === 'tahmin')
                                 {return [value, 'Promosyon Tahmini (Adet)'];}
                               if (name === 'baseline')
-                                {return [value, 'Temel Satış (Adet)'];}
-                              if (name === 'ciro_adedi')
-                                {return [value, 'Ciro Adedi'];}
+                                return [value, 'Temel Satış (Adet)'];
+                                if (name === 'stok' || name === 'Stok Adedi')
+                                return [value, 'Stok Adedi'];
                               if (name === 'unconstrained_demand')
-                                {return [value, 'Potansiyel Talep (Stok olsa)'];}
+                                return [value, 'Potansiyel Talep (Adet)'];
                               if (name === 'lost_sales' && value > 0)
                                 {return [value, 'Kaçırılan Satış'];}
                               return [value, name];
@@ -1281,7 +1405,7 @@ export function ForecastingSection() {
                             stroke='#0D1E3A'
                             strokeWidth={2}
                             dot={false}
-                            name='Baseline Forecast'
+                            name='Temel Tahmin'
                           />
                           <Line
                             type='monotone'
@@ -1290,7 +1414,7 @@ export function ForecastingSection() {
                             strokeWidth={4}
                             dot={{ r: 4, fill: '#22c55e', strokeWidth: 0 }}
                             activeDot={{ r: 6 }}
-                            name='Realized Sales'
+                            name='Gerçekleşen Satış'
                             connectNulls={false}
                           />
                           <Line
@@ -1303,13 +1427,12 @@ export function ForecastingSection() {
                             activeDot={{ r: 4, fill: '#ef4444' }}
                             name='Lost Demand'
                           />
-                          <Line
-                            type='monotone'
-                            dataKey='ciro_adedi'
-                            stroke='#FFB840'
-                            strokeWidth={2}
-                            dot={false}
-                            name='Revenue Count'
+                          <Bar
+                            dataKey='stok'
+                            fill='#FFB840'
+                            opacity={0.5}
+                            name='Stok Adedi'
+                            barSize={30}
                           />
                         </ComposedChart>
                       </ResponsiveContainer>
@@ -1360,14 +1483,14 @@ export function ForecastingSection() {
                     </div>
                     <div className='flex items-baseline gap-2'>
                       <span className='text-xl 2xl:text-2xl font-black text-emerald-600 tracking-tighter'>
-                        142%
+                        +{totalBaselineRevenue > 0 ? (((totalRevenue - totalBaselineRevenue) / totalBaselineRevenue) * 100).toFixed(0) : 0}%
                       </span>
                       <span className='text-[10px] 2xl:text-xs text-muted-foreground font-medium'>
-                        ROI
+                        Lift
                       </span>
                     </div>
                     <p className='text-emerald-700 text-[10px] 2xl:text-xs mt-0.5 leading-tight'>
-                      12.4k TL net kar artışı sağladı.
+                      ₺{((totalRevenue - totalBaselineRevenue) || 0).toLocaleString(undefined, { maximumFractionDigits: 0 })} net ciro artışı sağladı.
                     </p>
                   </div>
                 </CardContent>
@@ -1402,8 +1525,8 @@ export function ForecastingSection() {
                     </div>
                     <div className='flex items-baseline gap-2'>
                       <span className='text-xl 2xl:text-2xl font-black text-red-600 tracking-tighter'>
-                        {lostSalesVolume > 0
-                          ? `${lostSalesVolume} Adet`
+                        {totalLostSalesUnits > 0
+                          ? `${totalLostSalesUnits.toLocaleString()} Adet`
                           : '0 Adet'}
                       </span>
                       <span className='text-[10px] 2xl:text-xs text-muted-foreground font-medium'>
@@ -1411,16 +1534,30 @@ export function ForecastingSection() {
                       </span>
                     </div>
                     <p className='text-red-700 text-[10px] 2xl:text-xs mt-0.5 leading-tight'>
-                      {lostSalesVolume > 0
-                        ? `Tahmini ₺${((lostSalesVolume * 87.45) / 1000).toFixed(1)}k ciro kaybı.`
+                      {totalLostSalesUnits > 0
+                        ? `Tahmini ₺${(estimatedRevenueLoss / 1000).toFixed(1)}k ciro kaybı.`
                         : 'Stok riski bulunmuyor.'}
                     </p>
                     {/* Financial Warning */}
                     <div className='mt-1 text-[10px] bg-red-100/50 p-1 rounded text-red-800 font-medium'>
-                      Stok Maliyeti: ₺{(lostSalesVolume * 15).toFixed(0)}
+                      Stok Maliyeti: ₺{(totalLostSalesUnits * 15).toLocaleString()}
                       <span className='block font-normal opacity-80'>
                         (Acil sipariş farkı)
                       </span>
+                    </div>
+
+                    <div className="mt-2 pt-2 border-t border-red-200">
+                         <div className="text-[10px] text-red-700 font-medium mb-1.5">
+                            Uyarı: Promosyonun en optimal şekilde gerçekleşmesi için günlük stoğun min <span className="font-bold">750</span> olması gerekiyor.
+                         </div>
+                        <Button 
+                            size="sm" 
+                            variant="destructive" 
+                            className="w-full h-6 text-[10px] bg-red-100 text-red-700 hover:bg-red-200 border-none shadow-none"
+                            onClick={() => window.location.href = '/dashboard?section=inventory_planning'}
+                        >
+                            Envanter Planlamaya Git
+                        </Button>
                     </div>
                   </div>
                 </CardContent>
@@ -1481,7 +1618,7 @@ export function ForecastingSection() {
               <CardHeader className='py-2 pb-1 2xl:py-3'>
                 <div className='flex items-center gap-1'>
                   <CardTitle className='text-xs 2xl:text-sm font-semibold'>
-                    Promosyon Tipi Karşılaştırması
+                    Promosyon Ciro Payı
                   </CardTitle>
                   <UITooltip>
                     <UITooltipTrigger>
@@ -1489,42 +1626,42 @@ export function ForecastingSection() {
                     </UITooltipTrigger>
                     <UITooltipContent>
                       <p>
-                        Farklı promosyon kurgularının karlılık (ROI) ve ciro
-                        artışı (Lift) karşılaştırması.
+                        Farklı promosyon kurgularının toplam ciro içindeki payı.
                       </p>
                     </UITooltipContent>
                   </UITooltip>
                 </div>
                 <CardDescription className='text-[10px] 2xl:text-xs'>
-                  Hangi yöntem daha karlı? (ROI vs Ciro Artışı)
+                  Hangi kampanya ne kadar ciro getiriyor? (Share)
                 </CardDescription>
               </CardHeader>
               <CardContent className='pt-1 pb-2'>
                 {/* Simplified Visualization using simple bars for now */}
                 <div className='space-y-2'>
-                  {[
+                      {/* Revenue Share Visualization - Pie Chart Logic represented as Bars for now per request style */}
+                     {[
                     {
                       type: 'INTERNET_INDIRIMI',
-                      roi: 95,
-                      lift: 80,
+                      share: 45,
+                      value: '180k',
                       color: 'bg-emerald-500',
                     },
                     {
                       type: 'ALISVERIS_INDIRIMI_500',
-                      roi: 45,
-                      lift: 60,
+                      share: 25,
+                       value: '100k',
                       color: 'bg-blue-500',
                     },
                     {
                       type: 'COKLU_ALIM',
-                      roi: 60,
-                      lift: 40,
+                      share: 20,
+                       value: '80k',
                       color: 'bg-indigo-500',
                     },
                     {
                       type: 'OZEL_GUN_INDIRIMI',
-                      roi: 75,
-                      lift: 70,
+                      share: 10,
+                       value: '40k',
                       color: 'bg-amber-500',
                     },
                   ].map((item, i) => (
@@ -1532,19 +1669,13 @@ export function ForecastingSection() {
                       <div className='flex justify-between text-[10px] 2xl:text-xs font-medium'>
                         <span>{item.type}</span>
                         <span className='text-muted-foreground'>
-                          ROI: %{item.roi} | Lift: %{item.lift}
+                          %{item.share} ({item.value})
                         </span>
                       </div>
-                      <div className='h-1.5 w-full bg-muted rounded-full overflow-hidden flex'>
+                      <div className='h-2 w-full bg-muted rounded-full overflow-hidden'>
                         <div
                           className={`h-full ${item.color}`}
-                          style={{ width: `${item.roi}%` }}
-                          title='ROI'
-                        />
-                        <div
-                          className='h-full bg-gray-300'
-                          style={{ width: `${item.lift * 0.5}%` }}
-                          title='Lift (Scaled)'
+                          style={{ width: `${item.share}%` }}
                         />
                       </div>
                     </div>
@@ -1604,34 +1735,210 @@ export function ForecastingSection() {
           </div>
 
           {/* 3. Detailed History Table with Advanced Metrics */}
-          {canSeeTable('promo-campaign-history') && (
-            <Card>
-              <CardHeader className='py-2 pb-1 2xl:py-3 flex flex-row items-center justify-between'>
-                <div className='space-y-0.5'>
-                  <CardTitle className='text-sm 2xl:text-base font-semibold'>
-                    Detaylı Promosyon Geçmişi
-                  </CardTitle>
-                  <CardDescription className='text-[10px] 2xl:text-xs'>
-                    Finansal ve operasyonel metrikler
-                  </CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent className='p-0 2xl:p-1'>
-                <div className='border-t'>
-                  <table className='w-full text-[10px] 2xl:text-xs text-left'>
-                    <thead className='bg-muted/50 text-muted-foreground font-medium uppercase'>
-                      <tr>
-                        <th className='p-2 2xl:p-3 w-[100px]'>Tarih</th>
-                        <th className='p-2 2xl:p-3'>Kampanya / Tip</th>
-                        <th className='p-2 2xl:p-3 text-right'>
-                          Ciro Artışı (Lift)
-                        </th>
-                        <th className='p-2 2xl:p-3 text-right'>Net Kar Etkisi</th>
-                        <th className='p-2 2xl:p-3 text-right'>ROI %</th>
-                        <th className='p-2 2xl:p-3 text-center'>Stok Durumu</th>
-                        <th className='p-2 2xl:p-3 text-right'>
-                          Tahmin Doğruluğu
-                        </th>
+            {/* 3. Detailed History Table with Advanced Metrics */}
+          <Card>
+            <CardHeader className='py-2 pb-1 2xl:py-3 flex flex-row items-center justify-between'>
+              <div className='space-y-0.5'>
+                <CardTitle className='text-sm 2xl:text-base font-semibold'>
+                  Promosyon Planla ve Takip Listesi
+                </CardTitle>
+                <CardDescription className='text-[10px] 2xl:text-xs'>
+                  Geçmiş performanslar ve gelecek planlamaları
+                </CardDescription>
+              </div>
+            </CardHeader>
+            <CardContent className='p-0 2xl:p-1'>
+              <div className='border-t'>
+                <table className='w-full text-[10px] 2xl:text-xs text-left'>
+                  <thead className='bg-muted/50 text-muted-foreground font-medium uppercase'>
+                    <tr>
+                      <th className='p-2 2xl:p-3 w-[100px]'>Tarih</th>
+                      <th className='p-2 2xl:p-3'>Kampanya / Tip</th>
+                      <th className='p-2 2xl:p-3 w-[100px] text-center'>Durum</th>
+                      <th className='p-2 2xl:p-3 text-right'>
+                        Ciro Artışı (Lift)
+                      </th>
+                      <th className='p-2 2xl:p-3 text-right'>Brüt Kar Etkisi</th>
+                    <th className='p-2 2xl:p-3 text-center'>Stok Durumu</th>
+                      <th className='p-2 2xl:p-3 text-right'>
+                        Tahmin Doğruluğu
+                      </th>
+                      <th className='p-2 2xl:p-3 text-right'>Aksiyon</th>
+                    </tr>
+                  </thead>
+                  <tbody className='divide-y'>
+                    {[...PROMOTION_HISTORY_DATA]
+                      .sort((a, b) => {
+                           // Logic: Future (Pending > Draft > Approved) -> Past
+                           // First, simplified date comparison (assuming string dates are chronological or need parsing)
+                           // For Mock purposes, let's prioritize by Status Priority
+                           const statusOrder = { pending: 0, draft: 1, approved: 2, completed: 3 };
+                           return (statusOrder[a.status as keyof typeof statusOrder] ?? 4) - (statusOrder[b.status as keyof typeof statusOrder] ?? 4);
+                      })
+                      .map((row, i) => (
+                      <tr
+                        key={i}
+                        className='group hover:bg-muted/30 transition-colors cursor-pointer'
+                        onClick={() => {
+                            // Unified handler for all statuses
+                            setIsDetailModalOpen(true);
+                            
+                            if (row.status === 'completed') {
+                                setSelectedCampaign({
+                                    id: 'mock-history-1',
+                                    name: row.name,
+                                    date: row.date,
+                                    type: row.type, 
+                                    similarityScore: 85,
+                                    lift: 15,
+                                    roi: 120,
+                                    targetRevenue: 110000,
+                                    actualRevenue: 124500,
+                                    plannedStockDays: 14,
+                                    actualStockDays: 12,
+                                    stockOutDays: 2,
+                                    sellThrough: 98,
+                                    markdownCost: 4200,
+                                    status: 'completed'
+                                } as SimilarCampaign);
+                            } else {
+                                // For Future (Draft, Pending, Approved)
+                                setSelectedCampaign({
+                                    id: 'mock-future-1',
+                                    name: row.name,
+                                    date: row.date,
+                                    type: row.type,
+                                    similarityScore: 90,
+                                    lift: 22, // Projected Lift
+                                    roi: 135, // Projected ROI
+                                    targetRevenue: 145000, 
+                                    actualRevenue: 0, // Not started
+                                    plannedStockDays: 14,
+                                    actualStockDays: 0,
+                                    stockOutDays: 0,
+                                    sellThrough: 0,
+                                    markdownCost: 4500, // Budget
+                                    status: row.status // key to differentiate view
+                                } as SimilarCampaign);
+                            }
+                        }}
+                      >
+                        <td className='p-2 2xl:p-3 font-medium text-gray-700'>
+                          {row.date}
+                        </td>
+                        <td className='p-2 2xl:p-3'>
+                          <div className='font-semibold text-gray-900'>
+                            {row.name}
+                          </div>
+                          <div className='text-[10px] text-muted-foreground bg-muted w-fit px-1.5 py-0.5 rounded'>
+                            {row.type}
+                          </div>
+                        </td>
+                        <td className='p-2 2xl:p-3 text-center'>
+                           {/* Status Badge */}
+                           {(() => {
+                               switch(row.status) {
+                                   case 'draft': return <span className="bg-[#e0e0e0] text-[#333] px-1.5 py-0.5 rounded font-semibold text-[9px] border border-gray-300">TASLAK</span>
+                                   case 'pending': return <span className="bg-[#fff3cd] text-[#856404] px-1.5 py-0.5 rounded font-semibold text-[9px] border border-yellow-200">ONAY BEKLİYOR</span>
+                                   case 'approved': return <span className="bg-[#d4edda] text-[#155724] px-1.5 py-0.5 rounded font-semibold text-[9px] border border-green-200">ONAYLANDI</span>
+                                   case 'completed': return <span className="bg-[#d1ecf1] text-[#0c5460] px-1.5 py-0.5 rounded font-semibold text-[9px] border border-cyan-200">TAMAMLANDI</span>
+                                   default: return <span className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-[9px]">BİLİNMİYOR</span>
+                               }
+                           })()}
+                        </td>
+                        <td className='p-2 2xl:p-3 text-right'>
+                          <div className='font-bold text-gray-900'>
+                            {row.uplift}
+                          </div>
+                          <div className='text-[10px] text-muted-foreground'>
+                            {row.upliftVal}
+                          </div>
+                        </td>
+                        <td className='p-2 2xl:p-3 text-right font-medium'>
+                          <span
+                            className={
+                              row.profit.startsWith('-')
+                                ? 'text-red-600'
+                                : 'text-emerald-600'
+                            }
+                          >
+                            {row.profit}
+                          </span>
+                        </td>
+                        
+                        <td className='p-2 2xl:p-3 text-center'>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
+                              row.stock === 'OK'
+                                ? 'bg-green-50 text-green-700 border-green-200'
+                                : row.stock === 'OOS'
+                                  ? 'bg-red-50 text-red-700 border-red-200'
+                                  : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                            }`}
+                          >
+                            {row.stock === 'OK'
+                              ? (row.status === 'completed' ? 'YETERLİ' : 'GÜVENLİ')
+                              : row.stock === 'OOS'
+                                ? (row.status === 'completed' ? 'TÜKENDİ' : 'RİSKLİ')
+                                : 'AŞIRI STOK'}
+                          </span>
+                        </td>
+                        <td className='p-2 2xl:p-3 text-right text-gray-600'>
+                          {row.status === 'completed' ? row.forecast : '--'}
+                        </td>
+                        <td className='p-2 2xl:p-3 text-right'>
+                             {row.status === 'completed' ? (
+                                <Button variant="ghost" size="sm" className="h-6 text-[10px] hover:bg-indigo-50 hover:text-indigo-600">
+                                    <BarChart3 className="w-3 h-3 mr-1" /> Rapor
+                                </Button>
+                             ) : (
+                                <div className="flex justify-end gap-1">
+                                    <Button 
+                                        variant="ghost" 
+                                        size="sm" 
+                                        className="h-6 w-6 p-0 hover:bg-blue-50 hover:text-blue-600"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            setIsDetailModalOpen(true);
+                                            setSelectedCampaign({
+                                                id: 'mock-future-1',
+                                                name: row.name,
+                                                date: row.date,
+                                                type: row.type,
+                                                similarityScore: 90,
+                                                lift: 22, 
+                                                roi: 135,
+                                                targetRevenue: 145000, 
+                                                actualRevenue: 0,
+                                                plannedStockDays: 14,
+                                                actualStockDays: 0,
+                                                stockOutDays: 0,
+                                                sellThrough: 0,
+                                                markdownCost: 4500,
+                                                status: row.status 
+                                            } as SimilarCampaign);
+                                        }}
+                                    >
+                                        <Eye className="w-3 h-3" />
+                                    </Button>
+                                     <Button 
+                                        variant="ghost" 
+                                        size="sm" 
+                                        className="h-6 w-6 p-0 hover:bg-red-50 hover:text-red-600"
+                                        onClick={(e) => {
+                                            e.stopPropagation();
+                                            // Copy logic would go here
+                                            toast({
+                                                title: "Kopyalandı",
+                                                description: "Kampanya detayları panoya kopyalandı.",
+                                            });
+                                        }}
+                                    >
+                                        <Copy className="w-3 h-3" />
+                                    </Button>
+                                </div>
+                             )}
+                        </td>
                       </tr>
                     </thead>
                     <tbody className='divide-y'>
@@ -1719,16 +2026,302 @@ export function ForecastingSection() {
         initialData={PROMOTION_HISTORY_DATA}
       />
 
-      <CampaignDetailModal
-        isOpen={isDetailModalOpen}
-        onClose={() => { setIsDetailModalOpen(false); }}
-        campaign={selectedCampaign}
-        onApply={(camp) => {
-          setPromosyon(camp.type);
-          setPromosyonIndirimOrani('15'); // Mock apply logic: set discount
-          setIsDetailModalOpen(false);
-        }}
+      <CampaignCreationModal
+         open={isPlanningModalOpen}
+         onOpenChange={setIsPlanningModalOpen}
+         simulationMetrics={{
+             targetRevenue: forecastData ? `₺${(forecastData.reduce((acc, curr) => acc + (curr.tahmin || 0), 0) * baseSatisFiyati / 1000).toFixed(1)}k` : '-',
+             lift: forecastData ? '+' + (((forecastData.reduce((acc, curr) => acc + curr.ciro, 0) - (forecastData.reduce((acc, curr) => acc + (curr.baseline || 0), 0) * baseSatisFiyati)) / (forecastData.reduce((acc, curr) => acc + (curr.baseline || 0), 0) * baseSatisFiyati)) * 100).toFixed(0) + '%' : '-',
+             stockStatus: 'Optimal' // Mocked for now
+         }}
+         campaignContext={{
+             regions: bolge,
+             stores: magazaKodu,
+             products: urunKodu,
+             startDate: startPromosyon,
+             endDate: endPromosyon,
+             duration: startPromosyon && endPromosyon ? differenceInDays(endPromosyon, startPromosyon) + 1 : 0
+         }}
+         onSave={(data) => {
+             toast({
+                 title: "Kampanya Başarıyla Oluşturuldu",
+                 description: `${data.name} isimli kampanya ${data.status === 'active' ? 'yayına alındı' : 'taslak olarak kaydedildi'}.`,
+                 className: "bg-emerald-50 border-emerald-200 text-emerald-800",
+             });
+         }}
       />
+
+      {/* Modal - Conditional Render: Scorecard vs Approval Form */}
+      {selectedCampaign && (
+        <Dialog open={isDetailModalOpen} onOpenChange={setIsDetailModalOpen}>
+            <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                {/* 
+                  =============================================================================
+                  VIEW A: COMPLETED CAMPAIGNS (SCORECARD)
+                  =============================================================================
+                */}
+                {(selectedCampaign as SimilarCampaign).status === 'completed' ? (
+                <>
+                 <DialogHeader>
+                    <div className="flex items-center gap-3 mb-2">
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-r pr-3 mr-1">{selectedCampaign.date}</span>
+                         {/* Stamp Logic */}
+                         {(() => {
+                            const achievement = 1.12; // Mock: 112%
+                            const isOOS = true; // Mock: Stockout happened
+                            
+                            if(achievement >= 0.95 && !isOOS) return <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-200">BAŞARILI (%92)</span>
+                            if(isOOS) return <span className="bg-red-100 text-red-700 text-[10px] font-bold px-2 py-0.5 rounded border border-red-200">STOK SORUNU</span>
+                            return <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded border border-blue-200">TAMAMLANDI</span>
+                         })()}
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <DialogTitle className="text-xl">{selectedCampaign.name}</DialogTitle>
+                    </div>
+                    <DialogDescription>
+                        Kampanya Performans Karnesi ve Sonuç Analizi
+                    </DialogDescription>
+                 </DialogHeader>
+                 
+                 <div className="space-y-4 mt-2">
+                    {/* KPI Cards */}
+                    <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-muted/30 p-3 rounded-lg border">
+                            <div className="text-[10px] text-muted-foreground uppercase font-semibold mb-1">Gerçekleşen Ciro</div>
+                            <div className="text-2xl font-bold text-gray-900">₺124.5k</div>
+                            <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2 overflow-hidden">
+                                <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: '100%' }}></div>
+                            </div>
+                            <div className="text-[10px] font-medium text-emerald-600 mt-1">
+                                Hedefin %112&apos;si
+                            </div>
+                        </div>
+                        <div className="bg-muted/30 p-3 rounded-lg border">
+                            <div className="text-[10px] text-muted-foreground uppercase font-semibold mb-1">Satılan Adet</div>
+                            <div className="text-2xl font-bold text-gray-900">5.200 <span className="text-sm font-normal text-muted-foreground">Adet</span></div>
+                            <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2 overflow-hidden">
+                                <div className="bg-red-500 h-1.5 rounded-full" style={{ width: '98%' }}></div>
+                            </div>
+                             <div className="text-[10px] font-medium text-red-600 mt-1">
+                                Stokların %98&apos;i tükendi (Sell-Through)
+                            </div>
+                        </div>
+                        <div className="bg-muted/30 p-3 rounded-lg border">
+                            <div className="text-[10px] text-muted-foreground uppercase font-semibold mb-1">İndirim Maliyeti (Markdown)</div>
+                            <div className="text-2xl font-bold text-gray-900">₺4.2k</div>
+                             <div className="h-1.5 mt-2"></div>
+                             <div className="text-[10px] text-muted-foreground mt-1">
+                                Birim başı ₺0.8 maliyet
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Chart Area */}
+                     <div className="h-56 w-full bg-white p-3 rounded-lg border shadow-sm">
+                        <div className="flex items-center justify-between mb-4">
+                             <h4 className="text-sm font-semibold text-gray-700">Satış Performansı: Normal vs Promosyonlu</h4>
+                             <div className="flex gap-4 text-[10px]">
+                                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-gray-400"></div>Normal Satış (Tahmin)</div>
+                                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-600"></div>Gerçekleşen</div>
+                             </div>
+                        </div>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={[
+                                    { day: 'Gn 1', baseline: 4000, actual: 4200 },
+                                    { day: 'Gn 2', baseline: 4200, actual: 4800 },
+                                    { day: 'Gn 3', baseline: 4100, actual: 6500 },
+                                    { day: 'Gn 4', baseline: 3800, actual: 7200 },
+                                    { day: 'Gn 5', baseline: 4500, actual: 8900 },
+                                    { day: 'Gn 6', baseline: 4600, actual: 12000 },
+                                    { day: 'Gn 7', baseline: 5000, actual: 5500 }, 
+                                ]}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#6b7280'}} />
+                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#6b7280'}} tickFormatter={(value) => `₺${value/1000}k`} />
+                                <Tooltip 
+                                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                                    cursor={{ stroke: '#9ca3af', strokeWidth: 1, strokeDasharray: '4 4' }}
+                                />
+                                <Line type="monotone" dataKey="baseline" stroke="#9ca3af" strokeWidth={2} dot={false} strokeDasharray="5 5" />
+                                <Line type="monotone" dataKey="actual" stroke="#059669" strokeWidth={3} dot={{ r: 3, fill: '#059669', strokeWidth: 0 }} activeDot={{ r: 6 }} />
+                            </LineChart>
+                        </ResponsiveContainer>
+                    </div>
+
+                    {/* Analysis */}
+                    <div className="bg-indigo-50/50 p-4 rounded-lg border border-indigo-100 flex gap-3">
+                        <div className="shrink-0 mt-0.5">
+                            <div className="h-8 w-8 rounded-full bg-indigo-100 flex items-center justify-center">
+                                <Sparkles className="h-4 w-4 text-indigo-600" />
+                            </div>
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-bold text-indigo-900 mb-1">Sonuç Analizi</h4>
+                            <p className="text-xs leading-relaxed text-indigo-800">
+                                Kampanya hedeflenen cironun üzerine çıktı <span className="font-bold">(+%12)</span>. Ancak <span className="font-bold border-b border-indigo-300">Stok Planlaması yetersiz kaldı</span>; ürünler son 2 gün kala tükendiği için tahmini 15.000 TL ciro kaybı (Lost Sales) oluştu.
+                                <br/><br/>
+                                <span className="font-bold">Öneri:</span> Gelecek sene benzer dönemde stok adedini %20 artırarak planlama yapılması önerilir.
+                            </p>
+                        </div>
+                    </div>
+                 </div>
+                 
+                <DialogFooter className="gap-2 sm:gap-0 mt-2">
+                     <Button variant="outline" onClick={() => setIsDetailModalOpen(false)}>Kapat</Button>
+                     <Button 
+                        variant="destructive" 
+                        className="bg-red-600 hover:bg-red-700" 
+                        onClick={() => window.location.href='/alert-center?report=campaign_issue'}
+                     >
+                        <Flag className="w-4 h-4 mr-2" />
+                        Sorun Bildir / Raporla
+                     </Button>
+                </DialogFooter>
+                </>
+                ) : (
+                <>
+                {/* 
+                  =============================================================================
+                  VIEW B: FUTURE CAMPAIGNS (APPROVAL & PREVIEW)
+                  =============================================================================
+                */}
+                 <DialogHeader>
+                    <div className="flex items-center gap-3 mb-2">
+                        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider border-r pr-3 mr-1">{selectedCampaign.date}</span>
+                         {/* Status Badge */}
+                         {(() => {
+                             const s = (selectedCampaign as SimilarCampaign).status;
+                             if(s === 'pending') return <span className="bg-[#fff3cd] text-[#856404] px-2 py-0.5 rounded border border-yellow-200 text-[10px] font-bold">ONAY BEKLİYOR</span>
+                             if(s === 'draft') return <span className="bg-[#e0e0e0] text-[#333] px-2 py-0.5 rounded border border-gray-300 text-[10px] font-bold">TASLAK</span>
+                             if(s === 'approved') return <span className="bg-[#d4edda] text-[#155724] px-2 py-0.5 rounded border border-green-200 text-[10px] font-bold">ONAYLANDI</span>
+                             return null;
+                         })()}
+                    </div>
+                    <div className="flex items-center justify-between">
+                        <DialogTitle className="text-xl">{selectedCampaign.name}</DialogTitle>
+                    </div>
+                    <DialogDescription>
+                        Fizibilite Raporu ve Onay Formu
+                    </DialogDescription>
+                 </DialogHeader>
+
+                 <div className="space-y-4 mt-2">
+                    {/* KPI Cards (Expectations) */}
+                    <div className="grid grid-cols-3 gap-3">
+                        <div className="bg-white p-3 rounded-lg border shadow-sm">
+                            <div className="text-[10px] text-muted-foreground uppercase font-semibold mb-1">Beklenen Ciro & Lift</div>
+                            <div className="text-2xl font-bold text-indigo-900">₺145.0k</div>
+                            <div className="text-[10px] font-medium text-emerald-600 mt-1 flex items-center gap-1">
+                                <TrendingUp className="w-3 h-3" />
+                                +₺32k Lift Beklentisi
+                            </div>
+                        </div>
+                        <div className="bg-white p-3 rounded-lg border shadow-sm">
+                            <div className="text-[10px] text-muted-foreground uppercase font-semibold mb-1">Yatırım Maliyeti</div>
+                            <div className="text-2xl font-bold text-gray-900">₺4.5k</div>
+                            <div className="text-[10px] font-medium text-muted-foreground mt-1">
+                                %9 İndirim Oranı ile
+                            </div>
+                        </div>
+                        <div className="bg-white p-3 rounded-lg border shadow-sm">
+                            <div className="text-[10px] text-muted-foreground uppercase font-semibold mb-1">Stok Yeterliliği</div>
+                            <div className="text-2xl font-bold text-emerald-600">%100</div>
+                             <div className="text-[10px] font-medium text-muted-foreground mt-1">
+                                Gerekli: 5.0k / Mevcut: 5.2k
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Simulation Chart */}
+                     <div className="h-56 w-full bg-slate-50 p-3 rounded-lg border border-slate-200">
+                        <div className="flex items-center justify-between mb-4">
+                             <h4 className="text-sm font-semibold text-slate-700">Simülasyon: Satış & Stok Riski</h4>
+                             <div className="flex gap-4 text-[10px]">
+                                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-gray-400"></div>Baseline</div>
+                                 <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-600"></div>Forecast (Kampanyalı)</div>
+                        <div className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-yellow-400"></div>Stok Limiti</div>
+                             </div>
+                        </div>
+                        <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart data={[
+                                    { day: 'Gn 1', baseline: 4000, forecast: 4200, stock: 8000 },
+                                    { day: 'Gn 2', baseline: 4200, forecast: 4800, stock: 7500 },
+                                    { day: 'Gn 3', baseline: 4100, forecast: 7500, stock: 7000 }, // Peak
+                                    { day: 'Gn 4', baseline: 3800, forecast: 6200, stock: 6500 },
+                                    { day: 'Gn 5', baseline: 4500, forecast: 5900, stock: 6000 },
+                                    { day: 'Gn 6', baseline: 4600, forecast: 6000, stock: 5500 },
+                                    { day: 'Gn 7', baseline: 5000, forecast: 5500, stock: 5200 },
+                                ]}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#64748b'}} />
+                                <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: '#64748b'}} tickFormatter={(value) => `₺${value/1000}k`} />
+                                <Tooltip />
+                                <Bar dataKey="stock" fill="#fde68a" fillOpacity={0.3} barSize={999} /> {/* Background area hack or use ReferenceArea */}
+                                <Line type="monotone" dataKey="baseline" stroke="#94a3b8" strokeWidth={2} dot={false} strokeDasharray="5 5" />
+                                <Line type="monotone" dataKey="forecast" stroke="#059669" strokeWidth={3} dot={{ r: 3, fill: '#059669' }} strokeDasharray="5 5" />
+                            </ComposedChart>
+                        </ResponsiveContainer>
+                    </div>
+                    
+                    {/* Risk Analysis */}
+                    <div className="flex items-start gap-3 bg-emerald-50 p-4 rounded-lg border border-emerald-100">
+                         <div className="shrink-0 pt-1">
+                             <div className="h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-sm animate-pulse"></div>
+                         </div>
+                         <div className="space-y-1">
+                             <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-bold text-emerald-900">DÜŞÜK RİSK</h4>
+                                <span className="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">AI Güven Skoru: 95/100</span>
+                             </div>
+                             <p className="text-xs text-emerald-800 leading-relaxed">
+                                 Bu kampanya planı, mevsimsellik verilerine göre uygun görünüyor. Stok seviyesi talebi karşılamak için yeterli (%100 doluluk). Simüle edilen brüt kar marjı hedefin üzerinde.
+                             </p>
+                         </div>
+                    </div>
+
+                 </div>
+
+                 {/* Footer Actions */}
+                 <DialogFooter className="gap-2 sm:gap-0 mt-4 border-t pt-4">
+                     {/* Dynamic Buttons based on status */}
+                     {(() => {
+                         const s = (selectedCampaign as SimilarCampaign).status;
+                         if (s === 'draft') return (
+                             <>
+                                <Button variant="ghost" onClick={() => setIsDetailModalOpen(false)}>Vazgeç</Button>
+                                <div className="flex gap-2 w-full sm:w-auto">
+                                    <Button variant="outline" className="flex-1 sm:flex-none">Düzenle</Button>
+                                    <Button className="flex-1 sm:flex-none bg-indigo-600 hover:bg-indigo-700">Onaya Gönder</Button>
+                                </div>
+                             </>
+                         )
+                         if (s === 'pending') return (
+                            <>
+                               <Button variant="outline" className="text-red-600 hover:bg-red-50 hover:text-red-700 border-red-200">Reddet / Revize İste</Button>
+                               <Button className="bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto">
+                                   <CalendarIcon className="w-3.5 h-3.5 mr-2" />
+                                   Onayla ve Takvime İşle
+                               </Button>
+                            </>
+                        )
+                        if (s === 'approved') return (
+                            <>
+                               <Button variant="outline" className="text-red-600 border-red-200">İptal Et</Button>
+                               <div className="flex gap-2 w-full sm:w-auto">
+                                   <Button variant="outline">Düzenle</Button>
+                                   <Button variant="secondary" onClick={() => setIsDetailModalOpen(false)}>Kapat</Button>
+                               </div>
+                            </>
+                        )
+                         return <Button onClick={() => setIsDetailModalOpen(false)}>Kapat</Button>
+                     })()}
+                </DialogFooter>
+                </>
+                )}
+            </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
+

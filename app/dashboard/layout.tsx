@@ -3,9 +3,9 @@
 import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
-import { Button } from '@/components/ui/shared/button';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/shared/alert';
+import { Loader2 } from 'lucide-react';
+import { DashboardProvider } from '@/contexts/dashboard-context';
+import { ChatbotButton } from '@/components/chatbot/chatbot-button';
 
 export default function DashboardLayout({
   children,
@@ -133,5 +133,10 @@ export default function DashboardLayout({
     );
   }
 
-  return <>{children}</>;
+  return (
+    <DashboardProvider>
+      {children}
+      <ChatbotButton />
+    </DashboardProvider>
+  );
 }

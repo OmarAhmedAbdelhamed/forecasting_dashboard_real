@@ -12,6 +12,14 @@ import {
 } from '@/components/ui/shared/card';
 import { StockTrendPoint } from '@/types/inventory';
 
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/shared/select';
+
 // Dynamically import the chart component with SSR disabled
 // This fixes the hydration mismatch and "setState synchronously in effect" warning
 const InventoryTrendsCharts = dynamic(
@@ -29,17 +37,26 @@ const InventoryTrendsCharts = dynamic(
 interface InventoryChartsProps {
   data: StockTrendPoint[];
   hasSelection?: boolean;
+  products?: { value: string; label: string }[];
+  selectedProductId?: string;
+  onProductChange?: (val: string) => void;
+  period?: number;
 }
 
 export function InventoryCharts({
   data,
   hasSelection = true,
+  products = [],
+  selectedProductId,
+  onProductChange,
+  period = 30,
 }: InventoryChartsProps) {
   // We can treat 'data' as the display data directly.
   const displayData = data;
 
-  // 1. Initial State: No Selection
-  if (!hasSelection) {
+  // 1. Initial State: No Selection (Only if no data and no product selected)
+  // If we have a selected product, we should try to show data or "No Data" for that product
+  if (!hasSelection && !selectedProductId) {
     return (
       <Card className='col-span-1 flex flex-col h-full'>
         <CardHeader>
@@ -64,16 +81,37 @@ export function InventoryCharts({
   // 2. Data State: Empty or Populated
   return (
     <Card className='col-span-1 flex flex-col h-full'>
-      <CardHeader>
-        <CardTitle>Stok ve Talep Trendleri</CardTitle>
-        <CardDescription>
-          Son 30 günlük stok değişimi ve talep tahmin karşılaştırması
-        </CardDescription>
+      <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-2'>
+        <div className='space-y-1'>
+          <CardTitle>Stok ve Talep Trendleri</CardTitle>
+          <CardDescription>
+            Geçmiş {period} gün ve Gelecek {period} günlük stok değişimi ve
+            talep tahmin karşılaştırması
+          </CardDescription>
+        </div>
+        {products.length > 0 && onProductChange && (
+          <div className='min-w-[200px]'>
+            <Select value={selectedProductId} onValueChange={onProductChange}>
+              <SelectTrigger>
+                <SelectValue placeholder='Ürün Seçin' />
+              </SelectTrigger>
+              <SelectContent>
+                {products.map((product) => (
+                  <SelectItem key={product.value} value={product.value}>
+                    {product.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </CardHeader>
-      <CardContent className='flex-1 flex flex-col'>
+      <CardContent className='flex-1 flex flex-col pt-4'>
         {displayData.length === 0 ? (
           <div className='flex h-87.5 items-center justify-center text-muted-foreground'>
-            Veri Bulunamadı
+            {selectedProductId
+              ? 'Bu ürün için trend verisi bulunamadı'
+              : 'Veri Bulunamadı'}
           </div>
         ) : (
           <InventoryTrendsCharts data={displayData} />

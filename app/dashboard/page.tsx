@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Sidebar } from '@/components/dashboard/sidebar';
 import { Header } from '@/components/dashboard/header';
 import { OverviewSection } from '@/components/dashboard/sections/overview';
@@ -43,39 +43,18 @@ const PERMISSION_TO_SECTION_MAP: Record<DashboardSection, Section> = {
 
 export default function Dashboard() {
   const router = useRouter();
-  const { allowedSections, canViewSection, isLoading, userRole, profileError } = usePermissions();
-  const { user } = useAuth();
+  const searchParams = useSearchParams();
 
-  // Convert allowed DashboardSections to Sections and set initial section
-  const initialSection = useMemo(() => {
-    if (isLoading || !allowedSections || allowedSections.length === 0) {
-      return 'overview' as Section;
-    }
-    // Find the first allowed section and map it to Section type
-    const firstAllowed = allowedSections[0];
-    return PERMISSION_TO_SECTION_MAP[firstAllowed] || 'overview';
-  }, [allowedSections, isLoading]);
-
-  const [activeSection, setActiveSection] = useState<Section>(initialSection);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-
-  // Update active section when allowed sections change (e.g., after login/logout)
-  useEffect(() => {
-    if (!isLoading && allowedSections && allowedSections.length > 0) {
-      const permissionSection = SECTION_TO_PERMISSION_MAP[activeSection];
-      if (!canViewSection(permissionSection)) {
-        // Current section is not allowed, switch to first allowed
-        const firstAllowed = allowedSections[0];
-        setActiveSection(PERMISSION_TO_SECTION_MAP[firstAllowed]);
-      }
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allowedSections, canViewSection, isLoading]);
+  // Get section from URL or default to 'overview'
+  const activeSection = (searchParams.get('section') as Section) || 'overview';
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
 
   const handleSectionChange = (section: Section) => {
     if (section === 'alert_center') {
       router.push('/alert-center');
-      return;
+    } else {
+      // Update URL without page reload
+      router.push(`/dashboard?section=${section}`, { scroll: false });
     }
 
     // Check if user has permission to view this section
