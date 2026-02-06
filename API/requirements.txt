@@ -1,0 +1,7 @@
+pandas
+numpy
+clickhouse-connect
+ipykernel
+fastapi
+uvicorn[standard]
+python-dotenv
