@@ -17,10 +17,10 @@ import {
 } from '@/components/ui/shared/card';
 import { Badge } from '@/components/ui/shared/badge';
 
-import { Promotion } from '@/data/mock-data';
+import { PromotionItem } from '@/services/types/api';
 
 interface UpcomingPromotionsProps {
-  promotions: Promotion[];
+  promotions: PromotionItem[];
 }
 
 export function UpcomingPromotions({ promotions }: UpcomingPromotionsProps) {
@@ -39,7 +39,7 @@ export function UpcomingPromotions({ promotions }: UpcomingPromotionsProps) {
           <TableHeader>
             <TableRow>
               <TableHead>Kampanya Adı</TableHead>
-              <TableHead>Tip</TableHead>
+              <TableHead>Süre (Gün)</TableHead>
               <TableHead>Başlangıç</TableHead>
               <TableHead>İndirim</TableHead>
               <TableHead>Durum</TableHead>
@@ -47,17 +47,17 @@ export function UpcomingPromotions({ promotions }: UpcomingPromotionsProps) {
           </TableHeader>
           <TableBody>
             {promotions.map((promo) => (
-              <TableRow key={promo.id}>
+              <TableRow key={`${promo.name}-${promo.startDate}`}>
                 <TableCell className='font-medium'>{promo.name}</TableCell>
-                <TableCell>{promo.type}</TableCell>
+                <TableCell>{promo.durationDays}</TableCell>
                 <TableCell>{promo.startDate}</TableCell>
                 <TableCell>{promo.discount}</TableCell>
                 <TableCell>
                   <Badge
                     variant={
-                      promo.status === 'Onaylandı'
+                      promo.status === 'Aktif'
                         ? 'default'
-                        : promo.status === 'Taslak'
+                        : promo.status === 'Beklemede'
                           ? 'secondary'
                           : 'outline'
                     }

@@ -6,7 +6,9 @@
 # next.js
 /.next/
 /out/
-
+.venv/
+API/.venv/
+/API
 # production
 /build
 

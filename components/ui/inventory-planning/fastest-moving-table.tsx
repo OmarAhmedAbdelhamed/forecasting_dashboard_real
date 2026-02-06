@@ -118,8 +118,11 @@ export function FastestMovingTable({
         </TableHeader>
         <TableBody>
           {data.length > 0 ? (
-            data.map((item) => (
-              <TableRow key={item.id} className='border-b border-border/50'>
+            data.map((item, index) => (
+              <TableRow
+                key={`${item.sku}-${index}`}
+                className='border-b border-border/50'
+              >
                 <TableCell className='font-medium text-center text-xs py-3'>
                   {item.sku}
                 </TableCell>

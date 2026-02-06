@@ -46,15 +46,24 @@ import {
   ReferenceLine,
   ReferenceArea,
 } from 'recharts';
-import { STORES, PRODUCTS, REYONLAR } from '@/data/mock-data';
 import {
   Tooltip as UITooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/shared/tooltip';
-import { GROWTH_PRODUCTS_DATA, FORECAST_ERROR_DATA } from '@/data/mock-alerts';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useVisibility } from '@/hooks/use-visibility';
+import { useFilterOptions } from '@/services/hooks/filters/use-filter-options';
+import { demandApi } from '@/services/api/demand';
+import type {
+  DemandKPIs,
+  DemandTrendData,
+  YearComparisonData,
+  MonthlyBiasData,
+  GrowthProduct,
+  ForecastErrorProduct,
+} from '@/services/types/api';
+import { toast } from 'sonner';
 
 // Responsive chart config for different screen sizes
 const getChartConfig = (is2xl: boolean) => ({
@@ -67,227 +76,6 @@ const getChartConfig = (is2xl: boolean) => ({
   yAxisWidth: is2xl ? 50 : 40,
 });
 
-// ============ MOCK DATA ============
-
-// Monthly Bias Data - per store/product
-const generateMonthlyBiasData = (storeId?: string, productId?: string) => {
-  // Base data - slightly modified based on selection
-  const seed = (storeId?.charCodeAt(0) || 0) + (productId?.charCodeAt(0) || 0);
-  const modifier = (seed % 10) - 5;
-
-  return [
-    { month: 'Oca', bias: -3 + modifier },
-    { month: 'Şub', bias: 0 + modifier },
-    { month: 'Mar', bias: 2 + modifier },
-    { month: 'Nis', bias: 8 + modifier },
-    { month: 'May', bias: 22 + modifier },
-    { month: 'Haz', bias: 23 + modifier },
-    { month: 'Tem', bias: 25 + modifier },
-    { month: 'Ağu', bias: 30 + modifier },
-    { month: 'Eyl', bias: 12 + modifier },
-    { month: 'Eki', bias: 5 + modifier },
-    { month: 'Kas', bias: 4 + modifier },
-    { month: 'Ara', bias: 0 + modifier },
-  ];
-};
-
-// Trend Forecast Data - reactive to filters with realistic patterns
-const generateTrendForecastData = (
-  storeId?: string,
-  productId?: string,
-  filterSeed = 0,
-  granularity: 'daily' | 'weekly' | 'monthly' = 'weekly',
-) => {
-  const data = [];
-  const startYear = 2023;
-  const endYear = 2026;
-  const baseSeed =
-    (storeId?.charCodeAt(0) || 0) +
-    (productId?.charCodeAt(0) || 0) +
-    filterSeed;
-  const multiplier = 0.7 + (baseSeed % 8) * 0.1;
-
-  // Seasonal pattern factors (peaks in summer for most products)
-  const getSeasonalFactor = (week: number) => {
-    return Math.sin(((week - 13) * Math.PI) / 26) * 0.3 + 1;
-  };
-
-  // Noise generator
-  const getVariation = (index: number, seed: number) => {
-    const pseudoRandom = Math.sin(index * 12.9898 + seed * 78.233) * 43758.5453;
-    return (pseudoRandom - Math.floor(pseudoRandom)) * 400 - 200;
-  };
-
-  const currentYear = 2026;
-  const currentMonth = 0;
-  const currentDay = 29;
-  const currentWeek = 5;
-
-  if (granularity === 'daily') {
-    for (let year = startYear; year <= endYear; year++) {
-      const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
-      const daysInYear = isLeap ? 366 : 365;
-
-      for (let day = 1; day <= daysInYear; day++) {
-        const date = new Date(year, 0, day);
-        const month = date.getMonth();
-        const dayOfMonth = date.getDate();
-
-        const isForecast =
-          year > currentYear ||
-          (year === currentYear && month > currentMonth) ||
-          (year === currentYear &&
-            month === currentMonth &&
-            dayOfMonth > currentDay);
-
-        const weekNum = Math.ceil(day / 7);
-        const seasonal = getSeasonalFactor(weekNum);
-        const yearGrowth = (year - startYear) * 150;
-        const baseValue = (1800 + yearGrowth) * multiplier;
-        const dailyNoise = getVariation(day + year * 365, baseSeed);
-        const dayOfWeek = date.getDay();
-        const weekendBoost =
-          dayOfWeek === 0 || dayOfWeek === 6 ? baseValue * 0.15 : 0;
-
-        let value = (baseValue * seasonal + dailyNoise + weekendBoost) / 7;
-        if (isForecast) {value *= 1.08;}
-
-        const trendValue =
-          ((1600 + (year - startYear) * 200 + weekNum * 3) * multiplier) / 7;
-
-        const dateStr = date.toLocaleDateString('tr-TR', {
-          day: '2-digit',
-          month: 'short',
-          year: '2-digit',
-        });
-
-        data.push({
-          date: dateStr,
-          history: isForecast ? null : Math.round(value),
-          forecast: isForecast ? Math.round(value) : null,
-          trendline: Math.round(trendValue),
-        });
-      }
-    }
-  } else if (granularity === 'monthly') {
-    for (let year = startYear; year <= endYear; year++) {
-      for (let month = 0; month < 12; month++) {
-        const isForecast =
-          year > currentYear || (year === currentYear && month > currentMonth);
-
-        const weekNum = (month + 1) * 4.3;
-        const seasonal = getSeasonalFactor(weekNum);
-        const yearGrowth = (year - startYear) * 150;
-        const baseValue = (1800 + yearGrowth) * multiplier * 4.3;
-        const noise = getVariation(month + year * 12, baseSeed) * 5;
-
-        let value = baseValue * seasonal + noise;
-        if (isForecast) {value *= 1.08;}
-
-        const trendValue =
-          (1600 + (year - startYear) * 200 + weekNum * 3) * multiplier * 4.3;
-
-        const date = new Date(year, month, 1);
-        const dateStr = date.toLocaleDateString('tr-TR', {
-          month: 'short',
-          year: '2-digit',
-        });
-
-        data.push({
-          date: dateStr,
-          history: isForecast ? null : Math.round(value),
-          forecast: isForecast ? Math.round(value) : null,
-          trendline: Math.round(trendValue),
-        });
-      }
-    }
-  } else {
-    for (let year = startYear; year <= endYear; year++) {
-      for (let week = 1; week <= 52; week++) {
-        const isForecast = year === 2026 && week > currentWeek;
-        const yearGrowth = (year - startYear) * 150;
-        const baseValue = (1800 + yearGrowth) * multiplier;
-        const seasonal = getSeasonalFactor(week);
-        const weeklyNoise = getVariation(week + year * 52, baseSeed);
-        const hasPromo = (week * 7 + baseSeed) % 17 === 0;
-        const promoBoost = hasPromo ? baseValue * 0.25 : 0;
-
-        let value = baseValue * seasonal + weeklyNoise + promoBoost;
-        if (isForecast) {
-          const lastYearSameWeekValue =
-            (1800 + (year - 1 - startYear) * 150) *
-            multiplier *
-            getSeasonalFactor(week);
-          value =
-            lastYearSameWeekValue * 1.08 +
-            getVariation(week, baseSeed + 1000) * 0.3;
-        }
-
-        const trendValue =
-          (1600 + (year - startYear) * 200 + week * 3) * multiplier;
-
-        data.push({
-          date: `H${week} ${year.toString().slice(-2)}`,
-          history: isForecast ? null : Math.round(value),
-          forecast: isForecast ? Math.round(value) : null,
-          trendline: Math.round(trendValue),
-        });
-      }
-    }
-  }
-  return data;
-};
-
-// Year Comparison Data - 3 years (2024, 2025, 2026)
-const generateYearComparisonData = (storeId?: string, productId?: string) => {
-  const data = [];
-  const seed = (storeId?.charCodeAt(0) || 0) + (productId?.charCodeAt(0) || 0);
-  const multiplier = 0.8 + (seed % 5) * 0.1;
-  const currentWeek = 4;
-
-  for (let week = 1; week <= 52; week++) {
-    const baseValue = (8000 + Math.sin(week / 6) * 2000) * multiplier;
-    data.push({
-      week: `H${week}`,
-      y2024: Math.round(baseValue + Math.random() * 500),
-      y2025: Math.round(baseValue * 1.08 + Math.random() * 500),
-      y2026:
-        week <= currentWeek
-          ? Math.round(baseValue * 1.15 + Math.random() * 500)
-          : null,
-    });
-  }
-  return data;
-};
-
-// Growth Products Data - Imported from mock-alerts
-const growthProductsData = GROWTH_PRODUCTS_DATA;
-
-// Forecast Error Products Data - Imported from mock-alerts
-const forecastErrorData = FORECAST_ERROR_DATA;
-
-// KPI values generator - reactive to filters
-const generateKPIValues = (stores: string[], products: string[]) => {
-  const hasFilters = stores.length > 0 || products.length > 0;
-  const modifier = hasFilters ? 0.7 + Math.random() * 0.3 : 1;
-
-  return {
-    totalForecast: hasFilters
-      ? `${(2.8 * modifier).toFixed(1)}M TL`
-      : '2.8M TL',
-    totalUnits: hasFilters
-      ? `${Math.round(142 * modifier)}K Adet`
-      : '142K Adet',
-    accuracy: hasFilters
-      ? `${(94.8 * (0.95 + Math.random() * 0.1)).toFixed(1)}%`
-      : '94.8%',
-    yoyGrowth: hasFilters ? `${(12.4 * modifier).toFixed(1)}%` : '12.4%',
-    bias: hasFilters ? `+${(2.3 * modifier).toFixed(1)}%` : '+2.3%',
-    lowGrowth: hasFilters ? Math.ceil(4 * modifier) : 4,
-    highGrowth: hasFilters ? Math.ceil(12 * modifier) : 12,
-  };
-};
-
 // ============ MAIN COMPONENT ============
 
 export function DemandForecastingSection() {
@@ -295,7 +83,8 @@ export function DemandForecastingSection() {
   const { dataScope, isLoading: permissionsLoading } = usePermissions();
 
   // Visibility hook
-  const { canSeeKpi, canSeeChart, canSeeTable, canSeeFilter, canSeeAction } = useVisibility('demand-forecasting');
+  const { canSeeKpi, canSeeChart, canSeeTable, canSeeFilter, canSeeAction } =
+    useVisibility('demandForecasting');
 
   // Filter states
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
@@ -313,8 +102,40 @@ export function DemandForecastingSection() {
   // Screen size detection for responsive charts
   const [is2xl, setIs2xl] = useState(false);
 
+  // Get filter options from API
+  const {
+    regionOptions,
+    storeOptions,
+    categoryOptions,
+    productOptions,
+    isLoading: isFilterLoading,
+  } = useFilterOptions({
+    selectedStores,
+    selectedCategories: selectedReyonlar,
+  });
+
   // Export Modal State
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+
+  // Data states
+  const [kpis, setKpis] = useState<DemandKPIs>({
+    totalForecast: { value: 0, units: 0, trend: 0 },
+    accuracy: { value: 0, trend: 0 },
+    yoyGrowth: { value: 0, trend: 0 },
+    bias: { value: 0, type: 'over', trend: 'Stabil' },
+    lowGrowthCount: 0,
+    highGrowthCount: 0,
+  });
+  const [trendDataState, setTrendDataState] = useState<DemandTrendData[]>([]);
+  const [biasDataState, setBiasDataState] = useState<MonthlyBiasData[]>([]);
+  const [yearDataState, setYearDataState] = useState<YearComparisonData[]>([]);
+  const [growthProductsState, setGrowthProductsState] = useState<
+    GrowthProduct[]
+  >([]);
+  const [errorProductsState, setErrorProductsState] = useState<
+    ForecastErrorProduct[]
+  >([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -322,174 +143,157 @@ export function DemandForecastingSection() {
     };
     checkScreenSize();
     window.addEventListener('resize', checkScreenSize);
-    return () => { window.removeEventListener('resize', checkScreenSize); };
+    return () => {
+      window.removeEventListener('resize', checkScreenSize);
+    };
   }, []);
 
   const chartConfig = getChartConfig(is2xl);
 
-  // Period calculation with 1 year max cap
-  const periodInDays = useMemo(() => {
-    const value = parseInt(periodValue) || 30;
-    let days: number;
-
-    switch (periodUnit) {
-      case 'hafta':
-        days = Math.min(value * 7, 365);
-        break;
-      case 'ay':
-        days = Math.min(value * 30, 365);
-        break;
-      case 'yil':
-        days = 365;
-        break;
-      default:
-        days = Math.min(value, 365);
-    }
-
-    return days;
-  }, [periodValue, periodUnit]);
-
-  // Combine all filter selections into a seed for data generation
-  const filterSeed = useMemo(() => {
-    const storeChar = selectedStores[0]?.charCodeAt(0) || 0;
-    const productChar = selectedProducts[0]?.charCodeAt(0) || 0;
-    const reyonChar = selectedReyonlar[0]?.charCodeAt(0) || 0;
-    return storeChar + productChar + reyonChar;
-  }, [selectedStores, selectedProducts, selectedReyonlar]);
-
   // Determine granularity based on period unit
   const granularity = useMemo<'daily' | 'weekly' | 'monthly'>(() => {
-    if (periodUnit === 'yil') {return 'monthly';}
-    if (periodUnit === 'ay') {return 'weekly';}
+    if (periodUnit === 'yil') {
+      return 'monthly';
+    }
+    if (periodUnit === 'ay') {
+      return 'weekly';
+    }
     return 'daily';
   }, [periodUnit]);
 
-  // Reactive data based on filters
-  const trendData = useMemo(() => {
-    const fullData = generateTrendForecastData(
-      selectedStores[0],
-      selectedProducts[0],
-      filterSeed,
-      granularity,
-    );
+  // Fetch data on filter change
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const filterParams = {
+          storeIds: selectedStores,
+          productIds: selectedProducts,
+          categoryIds: selectedReyonlar,
+        };
 
-    const historyData = fullData.filter((d) => d.forecast === null);
-    const forecastData = fullData.filter((d) => d.history === null);
+        // Fetch KPIs
+        const kpiRes = await demandApi.getKPIs(filterParams);
+        if (kpiRes) {
+          setKpis(kpiRes);
+        }
 
-    let sliceCount = 0;
-    if (granularity === 'daily') {
-      sliceCount = periodInDays;
-    } else if (granularity === 'weekly') {
-      sliceCount = Math.ceil(periodInDays / 7);
-    } else {
-      sliceCount = Math.ceil(periodInDays / 30);
-      if (periodUnit === 'yil') {
-        sliceCount = 12 * (parseInt(periodValue) || 1);
+        // Fetch tables (parallel for better performance)
+        const [growthRes, errorRes] = await Promise.all([
+          demandApi.getGrowthProducts({
+            storeIds: selectedStores,
+            type:
+              growthFilter === 'all'
+                ? 'high'
+                : (growthFilter as 'high' | 'low'),
+          }),
+          demandApi.getForecastErrors({
+            storeIds: selectedStores,
+            severityFilter: errorFilter,
+          }),
+        ]);
+
+        if (growthRes?.products) {
+          setGrowthProductsState(growthRes.products);
+        }
+        if (errorRes?.products) {
+          setErrorProductsState(errorRes.products);
+        }
+
+        // Aggregate charts - fetch always with current filters
+        const detailParams = {
+          storeIds: selectedStores,
+          productIds: selectedProducts,
+        };
+
+        const [trendRes, biasRes, yearRes] = await Promise.all([
+          demandApi.getTrendForecast({
+            ...detailParams,
+            period: granularity,
+          }),
+          demandApi.getMonthlyBias(detailParams),
+          demandApi.getYearComparison(detailParams),
+        ]);
+
+        if (trendRes?.data) {
+          setTrendDataState(trendRes.data);
+        }
+        if (biasRes?.data) {
+          setBiasDataState(biasRes.data);
+        }
+        if (yearRes?.data) {
+          setYearDataState(yearRes.data);
+        }
+      } catch (error) {
+        console.error('Demand Forecasting fetch error:', error);
+        toast.error('Veriler yüklenirken bir hata oluştu.');
+      } finally {
+        setIsLoading(false);
       }
-    }
+    };
 
-    sliceCount = Math.max(1, sliceCount);
-
-    const slicedForecast = forecastData.slice(0, sliceCount);
-
-    if (historyData.length > 0 && slicedForecast.length > 0) {
-      const lastHistoryIndex = historyData.length - 1;
-      const lastHistory = historyData[lastHistoryIndex];
-
-      historyData[lastHistoryIndex] = {
-        ...lastHistory,
-        forecast: lastHistory.history,
-      };
-    }
-
-    let finalHistory = historyData;
-    if (granularity === 'daily' && historyData.length > 365) {
-      finalHistory = historyData.slice(-365);
-    } else if (granularity === 'monthly' && historyData.length > 24) {
-      finalHistory = historyData.slice(-24);
-    }
-
-    return [...finalHistory, ...slicedForecast];
+    void fetchData();
   }, [
     selectedStores,
     selectedProducts,
-    filterSeed,
+    selectedReyonlar,
     granularity,
-    periodInDays,
-    periodUnit,
-    periodValue,
+    growthFilter,
+    errorFilter,
   ]);
 
-  const biasData = useMemo(
-    () => generateMonthlyBiasData(selectedStores[0], selectedProducts[0]),
-    [selectedStores, selectedProducts],
-  );
+  // Reactive data based on filters
+  const trendData = useMemo(() => {
+    // Map API data keys to chart keys
+    return trendDataState.map((d) => ({
+      date: d.date,
+      history: d.actual,
+      forecast: d.forecast,
+      trendline: d.trendline,
+    }));
+  }, [trendDataState]);
 
-  const yearData = useMemo(
-    () => generateYearComparisonData(selectedStores[0], selectedProducts[0]),
-    [selectedStores, selectedProducts],
-  );
+  const biasData = useMemo(() => biasDataState, [biasDataState]);
 
-  const kpiValues = useMemo(
-    () => generateKPIValues(selectedStores, selectedProducts),
-    [selectedStores, selectedProducts],
-  );
+  const yearData = useMemo(() => {
+    return yearDataState.map((d) => ({
+      ...d,
+      week: d.month, // The API uses "month" key but it's actually week label in backend
+    }));
+  }, [yearDataState]);
+
+  const kpiValues = useMemo(() => {
+    return {
+      totalForecast: `${(kpis.totalForecast.value / 1000).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}TL`,
+      totalUnits: `${(kpis.totalForecast.units / 1000).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} Ünite`,
+      accuracy: `${kpis.accuracy.value}%`,
+      yoyGrowth: `${kpis.yoyGrowth.value > 0 ? '+' : ''}${
+        kpis.yoyGrowth.value
+      }%`,
+      bias: `${kpis.bias.value}%`,
+      lowGrowth: kpis.lowGrowthCount,
+      highGrowth: kpis.highGrowthCount,
+    };
+  }, [kpis]);
 
   // Filtered table data
   const filteredGrowthProducts = useMemo(() => {
-    return growthProductsData.filter((product) => {
+    return growthProductsState.filter((product) => {
       const matchesSearch =
         product.name.toLowerCase().includes(growthSearch.toLowerCase()) ||
         product.id.toLowerCase().includes(growthSearch.toLowerCase());
-      const matchesFilter =
-        growthFilter === 'all' || product.type === growthFilter;
-      const matchesStore =
-        selectedStores.length === 0 || selectedStores.includes(product.store);
-      return matchesSearch && matchesFilter && matchesStore;
+      return matchesSearch;
     });
-  }, [growthSearch, growthFilter, selectedStores]);
+  }, [growthSearch, growthProductsState]);
 
   const filteredErrorProducts = useMemo(() => {
-    return forecastErrorData.filter((product) => {
+    return errorProductsState.filter((product) => {
       const matchesSearch =
         product.name.toLowerCase().includes(errorSearch.toLowerCase()) ||
         product.id.toLowerCase().includes(errorSearch.toLowerCase());
-      const matchesFilter =
-        errorFilter === 'all' ||
-        (errorFilter === 'high' && product.error > 10) ||
-        (errorFilter === 'medium' &&
-          product.error >= 5 &&
-          product.error <= 10) ||
-        (errorFilter === 'low' && product.error < 5);
-      const matchesStore =
-        selectedStores.length === 0 || selectedStores.includes(product.store);
-      return matchesSearch && matchesFilter && matchesStore;
+      return matchesSearch;
     });
-  }, [errorSearch, errorFilter, selectedStores]);
-
-  // Filter options based on user's data scope
-  const filteredStoreOptions = useMemo(() => {
-    if (permissionsLoading || !dataScope?.stores || dataScope.stores.length === 0) {
-      return STORES;
-    }
-    return STORES.filter(store => dataScope.stores?.includes(store.value));
-  }, [dataScope, permissionsLoading]);
-
-  const filteredReyonOptions = useMemo(() => {
-    if (permissionsLoading || !dataScope?.categories || dataScope.categories.length === 0) {
-      return REYONLAR;
-    }
-    return REYONLAR.filter(reyon => dataScope.categories?.includes(reyon.value));
-  }, [dataScope, permissionsLoading]);
-
-  const filteredProductOptions = useMemo(() => {
-    if (permissionsLoading || !dataScope?.categories || dataScope.categories.length === 0) {
-      return PRODUCTS;
-    }
-    return PRODUCTS.filter(product =>
-      dataScope.categories?.includes(product.categoryKey.split('_').pop() || '')
-    );
-  }, [dataScope, permissionsLoading]);
+  }, [errorSearch, errorProductsState]);
 
   return (
     <div className='space-y-4 2xl:space-y-6'>
@@ -501,7 +305,9 @@ export function DemandForecastingSection() {
             <Button
               variant='outline'
               size='icon'
-              onClick={() => { setIsExportModalOpen(true); }}
+              onClick={() => {
+                setIsExportModalOpen(true);
+              }}
               className='h-10 w-10 2xl:h-12 2xl:w-12 border-[#FFB840] bg-[#FFB840]/10 text-[#0D1E3A] hover:bg-[#FFB840] hover:text-[#0D1E3A] transition-all duration-200'
               title='Excel Olarak Dışa Aktar'
             >
@@ -509,13 +315,16 @@ export function DemandForecastingSection() {
             </Button>
           )
         }
-        storeOptions={filteredStoreOptions}
+        storeOptions={storeOptions}
         selectedStores={selectedStores}
-        onStoreChange={setSelectedStores}
-        categoryOptions={filteredReyonOptions}
+        onStoreChange={(val) => {
+          setSelectedStores(val);
+          // Reset dependent filters if needed, though they handle themselves mostly
+        }}
+        categoryOptions={categoryOptions}
         selectedCategories={selectedReyonlar}
         onCategoryChange={setSelectedReyonlar}
-        productOptions={filteredProductOptions}
+        productOptions={productOptions}
         selectedProducts={selectedProducts}
         onProductChange={setSelectedProducts}
       >
@@ -535,7 +344,9 @@ export function DemandForecastingSection() {
                       : 365
               }
               value={periodValue}
-              onChange={(e) => { setPeriodValue(e.target.value); }}
+              onChange={(e) => {
+                setPeriodValue(e.target.value);
+              }}
               className='w-14 2xl:w-16 h-8 2xl:h-10 text-center text-xs 2xl:text-sm bg-white dark:bg-slate-900'
               disabled={periodUnit === 'yil'}
             />
@@ -545,9 +356,15 @@ export function DemandForecastingSection() {
                 setPeriodUnit(newUnit);
                 const val = parseInt(periodValue) || 0;
                 let max = 365;
-                if (newUnit === 'ay') {max = 12;}
-                if (newUnit === 'hafta') {max = 52;}
-                if (newUnit === 'yil') {max = 1;}
+                if (newUnit === 'ay') {
+                  max = 12;
+                }
+                if (newUnit === 'hafta') {
+                  max = 52;
+                }
+                if (newUnit === 'yil') {
+                  max = 1;
+                }
 
                 if (val > max) {
                   setPeriodValue(max.toString());
@@ -568,13 +385,19 @@ export function DemandForecastingSection() {
         )}
       </FilterBar>
 
+      {/* Export Modal */}
       <ExportForecastModal
         open={isExportModalOpen}
         onOpenChange={setIsExportModalOpen}
       />
 
       {/* KPI Cards */}
-      <div className='grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4'>
+      <div
+        className={cn(
+          'grid grid-cols-1 lg:grid-cols-12 gap-4 mb-4',
+          isLoading && 'opacity-60 pointer-events-none transition-opacity',
+        )}
+      >
         <div className='lg:col-span-4 grid grid-cols-2 gap-2 2xl:gap-3'>
           {canSeeKpi('demand-total-forecast') && (
             <KPICard
@@ -664,21 +487,32 @@ export function DemandForecastingSection() {
                 </CardDescription>
               </CardHeader>
               <CardContent className='h-[250px] 2xl:h-[350px]'>
-                <ResponsiveContainer width='100%' height='100%' key={granularity}>
+                <ResponsiveContainer
+                  width='100%'
+                  height={is2xl ? 400 : 260}
+                  key={granularity}
+                >
                   <ComposedChart
                     data={trendData}
-                    margin={{ top: 10, right: 20, left: 0, bottom: 10 }}
+                    margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
                   >
                     <CartesianGrid
                       strokeDasharray='3 3'
                       vertical={false}
-                      stroke='#e5e7eb'
+                      stroke='#f3f4f6'
                     />
                     <XAxis
                       dataKey='date'
                       fontSize={chartConfig.axisFontSize}
                       tickLine={false}
                       axisLine={false}
+                      tickFormatter={(str: string) => {
+                        const date = new Date(str);
+                        return date.toLocaleDateString('tr-TR', {
+                          month: 'short',
+                          day: 'numeric',
+                        });
+                      }}
                       interval={
                         granularity === 'daily'
                           ? 'preserveStartEnd'
@@ -794,14 +628,16 @@ export function DemandForecastingSection() {
                     />
                     <Tooltip
                       formatter={(value: number, name: string) => {
-                        if (value === null) {return ['—', ''];}
+                        if (typeof value !== 'number') {
+                          return ['—', ''];
+                        }
                         const year =
                           name === 'y2024'
                             ? '2024'
                             : name === 'y2025'
                               ? '2025'
                               : '2026';
-                        return [value?.toLocaleString(), year];
+                        return [value.toLocaleString(), year];
                       }}
                       contentStyle={{ fontSize: chartConfig.tooltipFontSize }}
                     />
@@ -890,7 +726,7 @@ export function DemandForecastingSection() {
                   </UITooltip>
                 </CardTitle>
               </CardHeader>
-              <CardContent className='h-[300px] 2xl:h-[450px]'>
+              <CardContent className='h-75 2xl:h-112.5'>
                 <ResponsiveContainer width='100%' height='100%'>
                   <ComposedChart
                     data={biasData}
@@ -939,7 +775,11 @@ export function DemandForecastingSection() {
                       fillOpacity={0.15}
                     />
 
-                    <ReferenceLine y={0} stroke='#22c55e' strokeDasharray='3 3' />
+                    <ReferenceLine
+                      y={0}
+                      stroke='#22c55e'
+                      strokeDasharray='3 3'
+                    />
 
                     <Line
                       type='monotone'
@@ -973,7 +813,8 @@ export function DemandForecastingSection() {
                   </TooltipTrigger>
                   <TooltipContent className='max-w-[320px] text-xs 2xl:text-base'>
                     <p>
-                      <strong>Tahmin:</strong> AI modelinin öngördüğü satış adedi
+                      <strong>Tahmin:</strong> AI modelinin öngördüğü satış
+                      adedi
                     </p>
                     <p>
                       <strong>Satış:</strong> Gerçekleşen satış adedi
@@ -990,7 +831,9 @@ export function DemandForecastingSection() {
                   <Input
                     placeholder='Ara...'
                     value={growthSearch}
-                    onChange={(e) => { setGrowthSearch(e.target.value); }}
+                    onChange={(e) => {
+                      setGrowthSearch(e.target.value);
+                    }}
                     className='pl-9 h-8 2xl:h-12 text-xs 2xl:text-base'
                   />
                 </div>
@@ -1030,7 +873,10 @@ export function DemandForecastingSection() {
                   </thead>
                   <tbody>
                     {filteredGrowthProducts.map((product) => (
-                      <tr key={product.id} className='border-b hover:bg-muted/50'>
+                      <tr
+                        key={product.id}
+                        className='border-b hover:bg-muted/50'
+                      >
                         <td className='p-2 font-mono text-[10px] 2xl:text-xs'>
                           {product.id}
                         </td>
@@ -1077,8 +923,8 @@ export function DemandForecastingSection() {
                   </TooltipTrigger>
                   <TooltipContent className='max-w-[320px] text-xs 2xl:text-base'>
                     <p>
-                      <strong>Hata (Bias):</strong> Tahmin ile gerçek arasındaki %
-                      sapma
+                      <strong>Hata (Bias):</strong> Tahmin ile gerçek arasındaki
+                      % sapma
                     </p>
                     <p>
                       <strong>Aksiyon:</strong> Önerilen düzeltme adımı
@@ -1092,7 +938,9 @@ export function DemandForecastingSection() {
                   <Input
                     placeholder='Ara...'
                     value={errorSearch}
-                    onChange={(e) => { setErrorSearch(e.target.value); }}
+                    onChange={(e) => {
+                      setErrorSearch(e.target.value);
+                    }}
                     className='pl-9 h-8 2xl:h-12 text-xs 2xl:text-base'
                   />
                 </div>
@@ -1130,11 +978,14 @@ export function DemandForecastingSection() {
                   </thead>
                   <tbody>
                     {filteredErrorProducts.map((product) => (
-                      <tr key={product.id} className='border-b hover:bg-muted/50'>
+                      <tr
+                        key={product.id}
+                        className='border-b hover:bg-muted/50'
+                      >
                         <td className='p-2 font-mono text-[10px] 2xl:text-xs'>
                           {product.id}
                         </td>
-                        <td className='p-2 truncate max-w-[120px] 2xl:max-w-[180px]'>
+                        <td className='p-2 truncate max-w-30 2xl:max-w-45'>
                           {product.name}
                         </td>
                         <td
@@ -1215,12 +1066,14 @@ function KPICard({
       <div className='flex flex-row items-center justify-between pb-1 pt-1.5 2xl:pt-3 px-2 2xl:px-3'>
         <div className='text-[10px] md:text-[11px] 2xl:text-sm font-medium text-muted-foreground truncate flex items-center gap-1'>
           {title}
-          {tooltip && (
+          {tooltip !== undefined && tooltip !== '' && (
             <UITooltip>
-              <TooltipTrigger>
-                <Info className='h-3 w-3 2xl:h-4 2xl:w-4 text-muted-foreground/60' />
+              <TooltipTrigger asChild>
+                <div className='cursor-help'>
+                  <Info className='h-3 w-3 2xl:h-4 2xl:w-4 text-muted-foreground/60' />
+                </div>
               </TooltipTrigger>
-              <TooltipContent className='max-w-[250px] text-xs 2xl:text-sm'>
+              <TooltipContent className='max-w-62.5 text-xs 2xl:text-sm'>
                 {tooltip}
               </TooltipContent>
             </UITooltip>
@@ -1239,12 +1092,12 @@ function KPICard({
         <div className='text-lg md:text-xl 2xl:text-2xl font-bold tracking-tight'>
           {value}
         </div>
-        {subValue && (
+        {subValue !== undefined && subValue !== '' && (
           <div className='text-[9px] md:text-[10px] 2xl:text-sm text-muted-foreground'>
             {subValue}
           </div>
         )}
-        {trend && (
+        {trend !== undefined && trend !== '' && (
           <div className='flex items-center mt-0.5 2xl:mt-1'>
             <span
               className={cn(

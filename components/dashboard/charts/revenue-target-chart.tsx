@@ -19,10 +19,10 @@ import {
   CardTitle,
 } from '@/components/ui/shared/card';
 
-import { RevenueChartData } from '@/data/mock-data';
+import { RevenueChartItem } from '@/services/types/api';
 
 interface RevenueTargetChartProps {
-  data: RevenueChartData[];
+  data: RevenueChartItem[];
 }
 
 export function RevenueTargetChart({ data }: RevenueTargetChartProps) {
@@ -85,7 +85,7 @@ export function RevenueTargetChart({ data }: RevenueTargetChartProps) {
               formatter={(value, name) => {
                 const numValue =
                   typeof value === 'number' ? value : Number(value);
-                const label = name === 'actual' ? 'Gerçekleşen' : 'Hedef';
+                const label = name === 'actualCiro' ? 'Gerçekleşen' : 'Hedef';
                 return [`₺${(numValue / 1000000).toFixed(2)}M`, label];
               }}
             />
@@ -96,7 +96,7 @@ export function RevenueTargetChart({ data }: RevenueTargetChartProps) {
               iconType='plainline'
             />
             <Bar
-              dataKey='actual'
+              dataKey='actualCiro'
               name='Gerçekleşen Ciro'
               fill='#3b82f6'
               radius={[0, 0, 0, 0]}

@@ -21,20 +21,17 @@ import {
 // Mock Options for Filters (matching overview style for consistency)
 import { SaleRateChart } from '@/components/ui/inventory-planning/sale-rate-chart';
 import { FastestMovingTable } from '@/components/ui/inventory-planning/fastest-moving-table';
-import {
-  REGIONS_FLAT,
-  getStoresByRegions,
-  getCategoriesByStores,
-  getProductsByContext,
-  getInventoryKPIs,
-  generateInventoryItems,
-  generateStockTrendsWithPeriod,
-  generateStorePerformance,
-  generateInventoryAlerts,
-} from '@/data/mock-data';
+import { getInventoryKPIs, generateInventoryAlerts } from '@/data/mock-data';
 import { InventoryItem } from '@/types/inventory';
 
 import { usePermissions } from '@/hooks/use-permissions';
+import {
+  useInventoryKPIs,
+  useInventoryItems,
+  useStockTrends,
+  useStorePerformance,
+} from '@/services';
+import { useFilterOptions } from '@/services/hooks/filters/use-filter-options';
 
 export function InventoryPlanningSection() {
   // Get user permissions and data scope
@@ -43,13 +40,6 @@ export function InventoryPlanningSection() {
     userRole,
     isLoading: permissionsLoading,
   } = usePermissions();
-
-  const filteredRegionOptions = useMemo(() => {
-    if (dataScope.regions.length > 0) {
-      return REGIONS_FLAT.filter((r) => dataScope.regions.includes(r.value));
-    }
-    return REGIONS_FLAT;
-  }, [dataScope.regions]);
 
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
@@ -69,36 +59,32 @@ export function InventoryPlanningSection() {
     useState<InventoryItem | null>(null);
   const [alertSheetOpen, setAlertSheetOpen] = useState(false);
 
-  // Hierarchical Filter Options
-  const storeOptions = useMemo(
-    () => getStoresByRegions(selectedRegions),
-    [selectedRegions],
-  );
+  // Get filter options from API
+  const { regionOptions, storeOptions, categoryOptions, productOptions } =
+    useFilterOptions({
+      selectedRegions,
+      selectedStores,
+      selectedCategories,
+    });
 
+  // Filter region options based on user permissions
+  const filteredRegionOptions = useMemo(() => {
+    if (dataScope.regions.length > 0) {
+      return regionOptions.filter((r) => dataScope.regions.includes(r.value));
+    }
+    return regionOptions;
+  }, [dataScope.regions, regionOptions]);
+
+  // Compute effective selections (filter out invalid values)
   const effectiveSelectedStores = useMemo(() => {
     const validValues = new Set(storeOptions.map((s) => s.value));
     return selectedStores.filter((s) => validValues.has(s));
   }, [selectedStores, storeOptions]);
 
-  const categoryOptions = useMemo(
-    () => getCategoriesByStores(effectiveSelectedStores, selectedRegions),
-    [effectiveSelectedStores, selectedRegions],
-  );
-
   const effectiveSelectedCategories = useMemo(() => {
     const validValues = new Set(categoryOptions.map((c) => c.value));
     return selectedCategories.filter((c) => validValues.has(c));
   }, [selectedCategories, categoryOptions]);
-
-  const productOptions = useMemo(
-    () =>
-      getProductsByContext(
-        selectedRegions,
-        effectiveSelectedStores,
-        effectiveSelectedCategories,
-      ),
-    [selectedRegions, effectiveSelectedStores, effectiveSelectedCategories],
-  );
 
   const effectiveSelectedProducts = useMemo(() => {
     const validValues = new Set(productOptions.map((p) => p.value));
@@ -133,8 +119,16 @@ export function InventoryPlanningSection() {
     setChartSelectedProductId(undefined);
   }
 
-  // Derived Data based on ALL filters
-  const kpis = useMemo(
+  // Fetch real KPIs from API
+  const { data: kpis, isLoading: kpisLoading } = useInventoryKPIs({
+    regionIds: selectedRegions,
+    storeIds: effectiveSelectedStores,
+    categoryIds: effectiveSelectedCategories,
+    productIds: effectiveSelectedProducts,
+  });
+
+  // Fallback to mock data if API is not available
+  const fallbackKpis = useMemo(
     () =>
       getInventoryKPIs(
         selectedRegions,
@@ -150,59 +144,43 @@ export function InventoryPlanningSection() {
     ],
   );
 
+  const displayKpis = kpis || fallbackKpis;
+
   // 2. Period-Aware Data (Lists & Charts)
-  const periodItems = useMemo(
-    () =>
-      generateInventoryItems(
-        selectedRegions,
-        effectiveSelectedStores,
-        effectiveSelectedCategories,
-        effectiveSelectedProducts,
-        periodDays, // Variable
-      ),
-    [
-      selectedRegions,
-      effectiveSelectedStores,
-      effectiveSelectedCategories,
-      effectiveSelectedProducts,
-      periodDays,
-    ],
-  );
+  // Fetch real data from API
+  const { data: inventoryItemsData } = useInventoryItems({
+    regionIds: selectedRegions,
+    storeIds: effectiveSelectedStores,
+    categoryIds: effectiveSelectedCategories,
+    productIds: effectiveSelectedProducts,
+    limit: 100,
+  });
 
-  const stockTrends = useMemo(
-    () =>
-      generateStockTrendsWithPeriod(
-        periodDays, // Variable
-        selectedRegions,
-        effectiveSelectedStores,
-        effectiveSelectedCategories,
-        chartSelectedProductId ? [chartSelectedProductId] : [],
-      ),
-    [
-      selectedRegions,
-      effectiveSelectedStores,
-      effectiveSelectedCategories,
-      chartSelectedProductId,
-      periodDays,
-    ],
-  );
+  const { data: stockTrendsData } = useStockTrends({
+    regionIds: selectedRegions,
+    storeIds: effectiveSelectedStores,
+    categoryIds: effectiveSelectedCategories,
+    productIds: chartSelectedProductId
+      ? [chartSelectedProductId]
+      : effectiveSelectedProducts,
+    days: periodDays,
+  });
 
-  const storePerformance = useMemo(
-    () =>
-      generateStorePerformance(
-        selectedRegions,
-        effectiveSelectedStores,
-        effectiveSelectedProducts,
-        effectiveSelectedCategories,
-        periodDays, // Added period
-      ),
-    [
-      selectedRegions,
-      effectiveSelectedStores,
-      effectiveSelectedProducts,
-      effectiveSelectedCategories,
-      periodDays,
-    ],
+  const { data: storePerformanceData } = useStorePerformance({
+    regionIds: selectedRegions,
+    storeIds: effectiveSelectedStores,
+    categoryIds: effectiveSelectedCategories,
+    productIds: effectiveSelectedProducts,
+  });
+
+  // Use API data or fallback to empty arrays
+  const periodItems = inventoryItemsData?.items ?? [];
+  const stockTrends = stockTrendsData?.trends ?? [];
+  const storePerformance = (storePerformanceData?.stores ?? []).map(
+    (store) => ({
+      ...store,
+      stockEfficiency: store.stockEfficiency ?? store.storeEfficiency ?? 0,
+    }),
   );
 
   const inventoryAlerts = useMemo(() => {
@@ -228,20 +206,12 @@ export function InventoryPlanningSection() {
   // Handle alert action click - find the matching inventory item and open the detail sheet
   const handleAlertActionClick = useCallback(
     (sku: string) => {
-      // Search in all inventory items (not filtered)
-      const allItems = generateInventoryItems([], [], [], []);
-      const matchingItem = allItems.find((item) => item.sku === sku);
+      // Search in current inventory items from API
+      const matchingItem = periodItems.find((item) => item.sku === sku);
 
       if (matchingItem) {
         setAlertSelectedItem(matchingItem);
         setAlertSheetOpen(true);
-      } else {
-        // If not found in all items, try filtered items
-        const filteredItem = periodItems.find((item) => item.sku === sku);
-        if (filteredItem) {
-          setAlertSelectedItem(filteredItem);
-          setAlertSheetOpen(true);
-        }
       }
     },
     [periodItems],
@@ -259,12 +229,12 @@ export function InventoryPlanningSection() {
       products: effectiveSelectedProducts,
     });
 
-    if (kpis && inventoryAlerts) {
+    if (displayKpis && inventoryAlerts) {
       setMetrics({
-        'Toplam Stok Değeri': `${(kpis.totalStockValue / 1000000).toFixed(1)}M TL`,
-        'Stok Kapsam Süresi': `${kpis.stockCoverageDays.toFixed(1)} Gün`,
-        'Stoksuz Kalma Riski': `${kpis.stockOutRiskItems} Ürün`,
-        'Fazla Stok': `${kpis.excessInventoryItems} Ürün`,
+        'Toplam Stok Değeri': `${(displayKpis.totalStockValue / 1000000).toFixed(1)}M TL`,
+        'Stok Kapsam Süresi': `${displayKpis.stockCoverageDays.toFixed(1)} Gün`,
+        'Stoksuz Kalma Riski': `${displayKpis.stockOutRiskItems} Ürün`,
+        'Fazla Stok': `${displayKpis.excessInventoryItems} Ürün`,
         'Aktif Uyarılar': inventoryAlerts.length,
       });
     }
@@ -312,7 +282,7 @@ export function InventoryPlanningSection() {
         </div>
       </FilterBar>
 
-      <InventoryKpiSection data={kpis} />
+      <InventoryKpiSection data={displayKpis} />
 
       <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
         <div className='lg:col-span-1'>

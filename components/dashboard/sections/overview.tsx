@@ -22,19 +22,30 @@ import {
   CalendarRange,
   Info,
 } from 'lucide-react';
+import { generateInventoryAlerts } from '@/data/mock-data';
+import { useRef } from 'react';
 import {
-  REGIONS,
-  getStoresByRegions,
-  getCategoriesByStores,
-  getMetrics,
-  getRevenueChartData,
-  getHistoricalChartData,
-  getPromotions,
-  generateInventoryAlerts,
-} from '@/data/mock-data';
+  useHistoricalChart,
+  useAlertsSummary,
+  useDashboardMetrics,
+  useRevenueChart,
+  useDashboardPromotions,
+} from '@/services';
+import { useFilterOptions } from '@/services/hooks/filters/use-filter-options';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useVisibility } from '@/hooks/use-visibility';
-import type { UserRole } from '@/types/auth';
+
+const DEFAULT_METRICS = {
+  accuracy: 0,
+  accuracyChange: 0,
+  forecastValue: 0,
+  forecastUnit: 0,
+  forecastChange: 0,
+  ytdValue: 0,
+  ytdChange: 0,
+  gapToSales: 0,
+  gapToSalesChange: 0,
+};
 
 export function OverviewSection() {
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
@@ -42,70 +53,99 @@ export function OverviewSection() {
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
 
   // Get visibility config
-  const { canSeeKpi, canSeeChart, canSeeTable, canSeeAlert, canSeeFilter } = useVisibility('overview');
+  const { canSeeKpi, canSeeChart, canSeeTable } = useVisibility('overview');
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const { dataScope } = usePermissions();
 
-  // Compute filtered options based on parent selections
-  const regionOptions = useMemo(
-    () => REGIONS.map((r) => ({ value: r.value, label: r.label })),
-    [],
-  );
+  // Get filter options from API
+  const { regionOptions, storeOptions, categoryOptions } = useFilterOptions({
+    selectedRegions,
+    selectedStores,
+    selectedCategories,
+  });
 
-  const storeOptions = useMemo(
-    () => getStoresByRegions(selectedRegions),
-    [selectedRegions],
-  );
-
-  const categoryOptions = useMemo(
-    () => getCategoriesByStores(selectedStores),
-    [selectedStores],
+  const filterParams = useMemo(
+    () => ({
+      regionIds: selectedRegions,
+      storeIds: selectedStores,
+      categoryIds: selectedCategories,
+    }),
+    [selectedRegions, selectedStores, selectedCategories],
   );
 
   // --- Dynamic Data Calculation ---
-  const metrics = useMemo(
-    () => getMetrics(selectedRegions, selectedStores, selectedCategories),
-    [selectedRegions, selectedStores, selectedCategories],
-  );
+  // Metrics from API
+  const { data: metricsData } = useDashboardMetrics(filterParams);
+  const metrics = metricsData || DEFAULT_METRICS;
 
-  const revenueData = useMemo(
-    () =>
-      getRevenueChartData(selectedRegions, selectedStores, selectedCategories),
-    [selectedRegions, selectedStores, selectedCategories],
-  );
+  // Helper to format large numbers to M (Millions) or K (Thousands)
+  const formatMetricValue = (value: number | undefined, suffix: string) => {
+    if (value === undefined || value === 0) return `0 ${suffix}`;
+    if (value >= 1_000_000) {
+      return `${(value / 1_000_000).toFixed(1)}M ${suffix}`;
+    }
+    if (value >= 1_000) {
+      return `${(value / 1_000).toFixed(0)}K ${suffix}`;
+    }
+    return `${value} ${suffix}`;
+  };
 
-  const historicalData = useMemo(
-    () =>
-      getHistoricalChartData(
-        selectedRegions,
-        selectedStores,
-        selectedCategories,
-      ),
-    [selectedRegions, selectedStores, selectedCategories],
-  );
+  // Revenue Chart
+  const { data: revenueResponse } = useRevenueChart(filterParams);
+  const revenueData = revenueResponse?.data || [];
+  console.log('OverviewSection: Revenue Chart Data:', revenueData);
 
-  const promotions = useMemo(() => getPromotions(), []);
+  // Historical Chart
+  const { data: historicalChartData } = useHistoricalChart(filterParams);
+  const historicalData = historicalChartData?.data || [];
 
+  // Alerts
+  const { data: alertsSummaryData } = useAlertsSummary(filterParams);
+
+  // Promotions
+  const { data: promotionsResponse } = useDashboardPromotions(filterParams);
+  const promotions = promotionsResponse?.promotions || [];
+
+  // Inventory Alerts
   const inventoryAlerts = useMemo(
     () => generateInventoryAlerts(selectedRegions, selectedStores),
     [selectedRegions, selectedStores],
   );
 
-  // Sync with Dashboard Context
+  // Sync with Dashboard Context - Optimized to prevent loops
   const { setSection, setFilters, setMetrics } = useDashboardContext();
+  const prevMetricsRef = useRef<string>('');
+  const prevFiltersRef = useRef<string>('');
 
   useEffect(() => {
     setSection('Genel Bakış');
-    setFilters({
+
+    const currentFilters = {
       regions: selectedRegions,
       stores: selectedStores,
       categories: selectedCategories,
-    });
-    setMetrics({
+    };
+    const filtersStr = JSON.stringify(currentFilters);
+    if (prevFiltersRef.current !== filtersStr) {
+      setFilters(currentFilters);
+      prevFiltersRef.current = filtersStr;
+    }
+
+    const currentMetrics = {
       'Model Doğruluğu': `${metrics.accuracy.toFixed(1)}%`,
-      'Gelecek 30 Günlük Tahmin': `${(metrics.forecastValue / 1000000).toFixed(1)}M TL (${(metrics.forecastUnit / 1000).toFixed(0)}K Adet)`,
-      'YTD Başarı': `${(metrics.ytdValue / 1000000).toFixed(1)}M TL`,
+      'Gelecek 30 Günlük Tahmin': formatMetricValue(
+        metrics.forecastRevenue,
+        'TL',
+      ),
+      'YTD Başarı Miktarı': formatMetricValue(metrics.ytdRevenue, 'TL'),
       'Tahmin Sapması': `${metrics.gapToSales.toFixed(1)}%`,
-    });
+    };
+    const metricsStr = JSON.stringify(currentMetrics);
+
+    if (prevMetricsRef.current !== metricsStr) {
+      setMetrics(currentMetrics);
+      prevMetricsRef.current = metricsStr;
+    }
   }, [
     selectedRegions,
     selectedStores,
@@ -151,37 +191,44 @@ export function OverviewSection() {
           {canSeeKpi('overview-model-accuracy') && (
             <MetricCard
               title='Genel Model Doğruluğu'
-              value={`${metrics.accuracy.toFixed(1)}%`}
+              value={`${(metrics.accuracy || 0).toFixed(1)}%`}
               subtext='Ortalama Başarı'
               icon={Target}
-              change={`${metrics.accuracyChange > 0 ? '+' : ''}${metrics.accuracyChange.toFixed(1)}%`}
-              changeType={metrics.accuracyChange >= 0 ? 'positive' : 'negative'}
+              change={`${(metrics.accuracyChange || 0) > 0 ? '+' : ''}${(metrics.accuracyChange || 0).toFixed(1)}%`}
+              changeType={
+                (metrics.accuracyChange || 0) >= 0 ? 'positive' : 'negative'
+              }
               delay={0}
             />
           )}
 
-          {/* 30-Day Forecast KPI */}
+          {/* Forecast KPI */}
           {canSeeKpi('overview-30day-forecast') && (
             <MetricCard
               title='Gelecek 30 Günlük Tahmin'
-              value={`${(metrics.forecastValue / 1000000).toFixed(1)}M TL`}
-              secondaryValue={`${(metrics.forecastUnit / 1000).toFixed(0)}K Adet`}
+              value={formatMetricValue(metrics.forecastRevenue, 'TL')}
+              secondaryValue={formatMetricValue(metrics.forecastValue, 'Adet')}
               icon={TrendingUp}
-              change={`${metrics.forecastChange > 0 ? '+' : ''}${metrics.forecastChange.toFixed(1)}%`}
-              changeType={metrics.forecastChange >= 0 ? 'positive' : 'negative'}
+              change={`${(metrics.forecastChange || 0) > 0 ? '+' : ''}${(metrics.forecastChange || 0).toFixed(1)}%`}
+              changeType={
+                (metrics.forecastChange || 0) >= 0 ? 'positive' : 'negative'
+              }
               delay={0.1}
             />
           )}
 
-          {/* YTD Value KPI */}
+          {/* Actual Sales KPI */}
           {canSeeKpi('overview-ytd-value') && (
             <MetricCard
               title='YTD Başarı Miktarı'
-              value={`${(metrics.ytdValue / 1000000).toFixed(1)}M TL`}
+              value={formatMetricValue(metrics.ytdRevenue, 'TL')}
               subtext='Yılbaşından Bugüne'
+              secondaryValue={formatMetricValue(metrics.ytdValue, 'Adet')}
               icon={CalendarRange}
-              change={`${metrics.ytdChange > 0 ? '+' : ''}${metrics.ytdChange.toFixed(0)}%`}
-              changeType={metrics.ytdChange >= 0 ? 'positive' : 'negative'}
+              change={`${(metrics.ytdChange || 0) > 0 ? '+' : ''}${(metrics.ytdChange || 0).toFixed(0)}%`}
+              changeType={
+                (metrics.ytdChange || 0) >= 0 ? 'positive' : 'negative'
+              }
               delay={0.2}
             />
           )}
@@ -190,11 +237,13 @@ export function OverviewSection() {
           {canSeeKpi('overview-forecast-gap') && (
             <MetricCard
               title='Forecast Gap to Sales'
-              value={`${metrics.gapToSales.toFixed(1)}%`}
+              value={`${(metrics.gapToSales || 0).toFixed(1)}%`}
               subtext='Tahmin Sapması'
               icon={AlertTriangle}
-              change={`${metrics.gapToSalesChange > 0 ? '+' : ''}${metrics.gapToSalesChange.toFixed(1)}%`}
-              changeType={metrics.gapToSalesChange >= 0 ? 'positive' : 'negative'}
+              change={`${(metrics.gapToSalesChange || 0) > 0 ? '+' : ''}${(metrics.gapToSalesChange || 0).toFixed(1)}%`}
+              changeType={
+                (metrics.gapToSalesChange || 0) >= 0 ? 'positive' : 'negative'
+              }
               delay={0.3}
             />
           )}
@@ -238,7 +287,7 @@ export function OverviewSection() {
                     Düşük Büyüme
                   </span>
                   <span className='text-2xl 2xl:text-3xl font-bold text-red-600'>
-                    4
+                    {alertsSummaryData?.summary?.lowGrowth?.count ?? 4}
                   </span>
                 </div>
                 <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
@@ -260,7 +309,7 @@ export function OverviewSection() {
                     Yüksek Büyüme
                   </span>
                   <span className='text-2xl 2xl:text-3xl font-bold text-green-600'>
-                    12
+                    {alertsSummaryData?.summary.highGrowth.count ?? 12}
                   </span>
                 </div>
                 <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
@@ -282,7 +331,7 @@ export function OverviewSection() {
                     Tahmin Hataları
                   </span>
                   <span className='text-2xl 2xl:text-3xl font-bold text-orange-600'>
-                    7
+                    {alertsSummaryData?.summary.forecastErrors.count ?? 7}
                   </span>
                 </div>
                 <Link
@@ -326,7 +375,10 @@ export function OverviewSection() {
         {/* Historical Units Chart */}
         {canSeeChart('overview-historical-units-chart') && (
           <div className='lg:col-span-6'>
-            <HistoricalUnitsChart data={historicalData} />
+            <HistoricalUnitsChart
+              data={historicalData}
+              currentWeek={historicalChartData?.currentWeek}
+            />
           </div>
         )}
 

@@ -18,16 +18,17 @@ import {
   CardTitle,
 } from '@/components/ui/shared/card';
 
-// Current date: 2026-01-28 = Week 4
-const CURRENT_WEEK = 4;
-
-import { HistoricalChartData } from '@/data/mock-data';
+import { HistoricalChartData } from '@/services/types/api';
 
 interface HistoricalUnitsChartProps {
   data: HistoricalChartData[];
+  currentWeek?: number;
 }
 
-export function HistoricalUnitsChart({ data }: HistoricalUnitsChartProps) {
+export function HistoricalUnitsChart({
+  data,
+  currentWeek,
+}: HistoricalUnitsChartProps) {
   return (
     <Card className='col-span-1'>
       <CardHeader className='pb-0 pt-3 px-4'>
@@ -36,7 +37,7 @@ export function HistoricalUnitsChart({ data }: HistoricalUnitsChartProps) {
         </CardTitle>
         <CardDescription className='text-xs md:text-sm lg:text-base text-gray-500'>
           Mevcut tahminler ve geçmiş yılların satış karşılaştırması. (Hafta{' '}
-          {CURRENT_WEEK})
+          {currentWeek ?? 4})
         </CardDescription>
       </CardHeader>
       <CardContent className='pt-2'>
@@ -84,7 +85,9 @@ export function HistoricalUnitsChart({ data }: HistoricalUnitsChartProps) {
                 color: '#374151',
               }}
               formatter={(value, name) => {
-                if (value === null || value === undefined) {return ['—', ''];}
+                if (value === null || value === undefined) {
+                  return ['—', ''];
+                }
                 const numValue =
                   typeof value === 'number' ? value : Number(value);
                 const yearLabel =
@@ -102,8 +105,12 @@ export function HistoricalUnitsChart({ data }: HistoricalUnitsChartProps) {
               wrapperStyle={{ paddingBottom: '10px', fontSize: '14px' }}
               iconType='plainline'
               formatter={(value) => {
-                if (value === 'y2024') {return '2024';}
-                if (value === 'y2025') {return '2025';}
+                if (value === 'y2024') {
+                  return '2024';
+                }
+                if (value === 'y2025') {
+                  return '2025';
+                }
                 return '2026';
               }}
             />
