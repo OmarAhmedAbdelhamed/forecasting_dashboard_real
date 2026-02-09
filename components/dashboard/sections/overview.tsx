@@ -102,9 +102,27 @@ export function OverviewSection() {
   // Alerts
   const { data: alertsSummaryData } = useAlertsSummary(filterParams);
 
+  useEffect(() => {
+    if (alertsSummaryData) {
+      console.log(
+        'OverviewSection: Alerts Summary API Response:',
+        alertsSummaryData,
+      );
+    }
+  }, [alertsSummaryData]);
+
   // Promotions
   const { data: promotionsResponse } = useDashboardPromotions(filterParams);
   const promotions = promotionsResponse?.promotions || [];
+
+  useEffect(() => {
+    if (promotionsResponse) {
+      console.log(
+        'OverviewSection: Dashboard Promotions API Response:',
+        promotionsResponse,
+      );
+    }
+  }, [promotionsResponse]);
 
   // Inventory Alerts
   const inventoryAlerts = useMemo(
@@ -309,7 +327,7 @@ export function OverviewSection() {
                     Yüksek Büyüme
                   </span>
                   <span className='text-2xl 2xl:text-3xl font-bold text-green-600'>
-                    {alertsSummaryData?.summary.highGrowth.count ?? 12}
+                    {alertsSummaryData?.summary?.highGrowth?.count ?? 12}
                   </span>
                 </div>
                 <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
@@ -331,7 +349,7 @@ export function OverviewSection() {
                     Tahmin Hataları
                   </span>
                   <span className='text-2xl 2xl:text-3xl font-bold text-orange-600'>
-                    {alertsSummaryData?.summary.forecastErrors.count ?? 7}
+                    {alertsSummaryData?.summary?.forecastErrors?.count ?? 7}
                   </span>
                 </div>
                 <Link
@@ -356,7 +374,8 @@ export function OverviewSection() {
                     Stok uyarıları
                   </span>
                   <span className='text-2xl 2xl:text-3xl font-bold text-red-600'>
-                    {inventoryAlerts.length}
+                    {alertsSummaryData?.summary?.inventory?.count ??
+                      inventoryAlerts.length}
                   </span>
                 </Link>
               </div>

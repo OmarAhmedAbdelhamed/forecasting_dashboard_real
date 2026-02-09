@@ -17,7 +17,7 @@ export const demandApi = {
   /**
    * Get demand forecasting KPIs
    */
-  getKPIs: (params?: FilterParams) =>
+  getKPIs: (params?: FilterParams & { periodValue?: number; periodUnit?: string }) =>
     apiClient.get<DemandKPIs>('/api/demand/kpis', params),
 
   /**
@@ -26,6 +26,7 @@ export const demandApi = {
   getTrendForecast: (params: {
     storeIds?: string[];
     productIds?: string[];
+    categoryIds?: string[];
     period?: 'daily' | 'weekly' | 'monthly';
   }) =>
     apiClient.get<{ data: DemandTrendData[] }>(
@@ -36,8 +37,12 @@ export const demandApi = {
   /**
    * Get year-over-year comparison
    */
-  getYearComparison: (params: { storeIds?: string[]; productIds?: string[] }) =>
-    apiClient.get<{ data: YearComparisonData[] }>(
+  getYearComparison: (params: {
+    storeIds?: string[];
+    productIds?: string[];
+    categoryIds?: string[];
+  }) =>
+    apiClient.get<{ data: YearComparisonData[]; currentWeek?: number }>(
       '/api/demand/year-comparison',
       params,
     ),
@@ -45,7 +50,11 @@ export const demandApi = {
   /**
    * Get monthly bias
    */
-  getMonthlyBias: (params: { storeIds?: string[]; productIds?: string[] }) =>
+  getMonthlyBias: (params: {
+    storeIds?: string[];
+    productIds?: string[];
+    categoryIds?: string[];
+  }) =>
     apiClient.get<{ data: MonthlyBiasData[] }>(
       '/api/demand/monthly-bias',
       params,
@@ -54,7 +63,12 @@ export const demandApi = {
   /**
    * Get high or low growth products
    */
-  getGrowthProducts: (params: { storeIds?: string[]; type: 'high' | 'low' }) =>
+  getGrowthProducts: (params: {
+    storeIds?: string[];
+    categoryIds?: string[];
+    productIds?: string[];
+    type: 'high' | 'low';
+  }) =>
     apiClient.get<{ products: GrowthProduct[] }>(
       '/api/demand/growth-products',
       params,
@@ -65,6 +79,8 @@ export const demandApi = {
    */
   getForecastErrors: (params?: {
     storeIds?: string[];
+    categoryIds?: string[];
+    productIds?: string[];
     severityFilter?: string;
   }) =>
     apiClient.get<{ products: ForecastErrorProduct[] }>(

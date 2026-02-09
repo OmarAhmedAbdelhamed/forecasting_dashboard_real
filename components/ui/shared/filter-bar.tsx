@@ -212,7 +212,7 @@ export function FilterBar({
         {children}
 
         {/* Standard Filters */}
-        {regionOptions && onRegionChange && (
+        {regionOptions && regionOptions.length > 0 && onRegionChange && (
           <div className='w-full md:w-auto min-w-37.5'>
             <MultiSelect
               options={regionOptions}

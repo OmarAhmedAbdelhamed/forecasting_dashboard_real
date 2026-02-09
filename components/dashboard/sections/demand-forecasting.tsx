@@ -90,8 +90,7 @@ export function DemandForecastingSection() {
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
   const [selectedReyonlar, setSelectedReyonlar] = useState<string[]>([]);
-  const [periodValue, setPeriodValue] = useState('30');
-  const [periodUnit, setPeriodUnit] = useState('gun');
+  const [selectedPeriod, setSelectedPeriod] = useState('30');
 
   // Table search/filter states
   const [growthSearch, setGrowthSearch] = useState('');
@@ -101,6 +100,7 @@ export function DemandForecastingSection() {
 
   // Screen size detection for responsive charts
   const [is2xl, setIs2xl] = useState(false);
+  const [screenWidth, setScreenWidth] = useState<number>(1920);
 
   // Get filter options from API
   const {
@@ -129,6 +129,7 @@ export function DemandForecastingSection() {
   const [trendDataState, setTrendDataState] = useState<DemandTrendData[]>([]);
   const [biasDataState, setBiasDataState] = useState<MonthlyBiasData[]>([]);
   const [yearDataState, setYearDataState] = useState<YearComparisonData[]>([]);
+  const [yearCurrentWeek, setYearCurrentWeek] = useState<number | null>(null);
   const [growthProductsState, setGrowthProductsState] = useState<
     GrowthProduct[]
   >([]);
@@ -140,6 +141,7 @@ export function DemandForecastingSection() {
   useEffect(() => {
     const checkScreenSize = () => {
       setIs2xl(window.innerWidth >= 1536);
+      setScreenWidth(window.innerWidth);
     };
     checkScreenSize();
     window.addEventListener('resize', checkScreenSize);
@@ -150,16 +152,84 @@ export function DemandForecastingSection() {
 
   const chartConfig = getChartConfig(is2xl);
 
-  // Determine granularity based on period unit
+  const xAxisInterval = useMemo(() => {
+    if (screenWidth >= 2100) return 0; // show every week
+    if (screenWidth >= 1280) return 1; // skip 1 week
+    return 3; // skip 3 weeks
+  }, [screenWidth]);
+
+  const monthNames = useMemo(
+    () => [
+      'ocak',
+      'subat',
+      'mart',
+      'nisan',
+      'mayis',
+      'haziran',
+      'temmuz',
+      'agustos',
+      'eylul',
+      'ekim',
+      'kasim',
+      'aralik',
+    ],
+    [],
+  );
+
+  const getWeekNumber = (weekLabel: string) => {
+    const match = weekLabel.match(/\d+/);
+    return match ? Number(match[0]) : NaN;
+  };
+
+  const getWeekEndDate = (weekNumber: number, year: number) => {
+    // ISO week 1 starts on the week containing Jan 4. We display the week-end (Sunday).
+    const jan4 = new Date(year, 0, 4);
+    const jan4Day = jan4.getDay() === 0 ? 7 : jan4.getDay();
+    const firstIsoMonday = new Date(jan4);
+    firstIsoMonday.setDate(jan4.getDate() - jan4Day + 1);
+
+    const weekEnd = new Date(firstIsoMonday);
+    weekEnd.setDate(firstIsoMonday.getDate() + (weekNumber - 1) * 7 + 6);
+    return weekEnd;
+  };
+
+  const formatWeekTick = (weekLabel: string) => {
+    const weekNumber = getWeekNumber(weekLabel);
+    if (!weekNumber || Number.isNaN(weekNumber)) return weekLabel;
+
+    const year = new Date().getFullYear();
+    const weekEndDate = getWeekEndDate(weekNumber, year);
+    const day = weekEndDate.getDate();
+    const month = monthNames[weekEndDate.getMonth()];
+    return `H${weekNumber} (${day} ${month})`;
+  };
+
+  const formatYAxisTick = (value: number) => {
+    if (value >= 1_000_000) {
+      const millions = value / 1_000_000;
+      return `${millions % 1 === 0 ? millions.toFixed(0) : millions.toFixed(1)}M`;
+    }
+    if (value >= 1_000) {
+      return `${(value / 1_000).toFixed(0)}K`;
+    }
+    return value.toLocaleString('tr-TR');
+  };
+
+  const periodDays = useMemo(() => {
+    const parsed = Number(selectedPeriod);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 30;
+  }, [selectedPeriod]);
+
+  // Determine granularity based on selected period length
   const granularity = useMemo<'daily' | 'weekly' | 'monthly'>(() => {
-    if (periodUnit === 'yil') {
+    if (periodDays >= 365) {
       return 'monthly';
     }
-    if (periodUnit === 'ay') {
+    if (periodDays >= 180) {
       return 'weekly';
     }
     return 'daily';
-  }, [periodUnit]);
+  }, [periodDays]);
 
   // Fetch data on filter change
   useEffect(() => {
@@ -167,28 +237,41 @@ export function DemandForecastingSection() {
       setIsLoading(true);
       try {
         const filterParams = {
-          storeIds: selectedStores,
-          productIds: selectedProducts,
-          categoryIds: selectedReyonlar,
+          storeIds: selectedStores.length > 0 ? selectedStores : undefined,
+          productIds: selectedProducts.length > 0 ? selectedProducts : undefined,
+          categoryIds:
+            selectedReyonlar.length > 0 ? selectedReyonlar : undefined,
+          periodValue: periodDays,
+          periodUnit: 'gun' as const,
         };
 
         // Fetch KPIs
         const kpiRes = await demandApi.getKPIs(filterParams);
         if (kpiRes) {
           setKpis(kpiRes);
+          console.log(
+            'DemandForecastingSection: KPIs API Response:',
+            kpiRes,
+            'filters:',
+            filterParams,
+          );
         }
 
         // Fetch tables (parallel for better performance)
         const [growthRes, errorRes] = await Promise.all([
           demandApi.getGrowthProducts({
-            storeIds: selectedStores,
+            storeIds: filterParams.storeIds,
+            categoryIds: filterParams.categoryIds,
+            productIds: filterParams.productIds,
             type:
               growthFilter === 'all'
                 ? 'high'
                 : (growthFilter as 'high' | 'low'),
           }),
           demandApi.getForecastErrors({
-            storeIds: selectedStores,
+            storeIds: filterParams.storeIds,
+            categoryIds: filterParams.categoryIds,
+            productIds: filterParams.productIds,
             severityFilter: errorFilter,
           }),
         ]);
@@ -202,8 +285,9 @@ export function DemandForecastingSection() {
 
         // Aggregate charts - fetch always with current filters
         const detailParams = {
-          storeIds: selectedStores,
-          productIds: selectedProducts,
+          storeIds: filterParams.storeIds,
+          productIds: filterParams.productIds,
+          categoryIds: filterParams.categoryIds,
         };
 
         const [trendRes, biasRes, yearRes] = await Promise.all([
@@ -223,6 +307,9 @@ export function DemandForecastingSection() {
         }
         if (yearRes?.data) {
           setYearDataState(yearRes.data);
+          setYearCurrentWeek(
+            typeof yearRes.currentWeek === 'number' ? yearRes.currentWeek : null,
+          );
         }
       } catch (error) {
         console.error('Demand Forecasting fetch error:', error);
@@ -237,6 +324,7 @@ export function DemandForecastingSection() {
     selectedStores,
     selectedProducts,
     selectedReyonlar,
+    periodDays,
     granularity,
     growthFilter,
     errorFilter,
@@ -275,6 +363,19 @@ export function DemandForecastingSection() {
       highGrowth: kpis.highGrowthCount,
     };
   }, [kpis]);
+
+  const formatSignedPercent = (value: number) => {
+    const rounded = Math.round(value * 10) / 10;
+    const str = Number.isInteger(rounded)
+      ? rounded.toFixed(0)
+      : rounded.toFixed(1);
+    return `${rounded > 0 ? '+' : ''}${str}%`;
+  };
+
+  const totalForecastTrend =
+    typeof kpis.totalForecast.trend === 'number' ? kpis.totalForecast.trend : 0;
+  const accuracyTrend =
+    typeof kpis.accuracy.trend === 'number' ? kpis.accuracy.trend : 0;
 
   // Filtered table data
   const filteredGrowthProducts = useMemo(() => {
@@ -319,66 +420,31 @@ export function DemandForecastingSection() {
         selectedStores={selectedStores}
         onStoreChange={(val) => {
           setSelectedStores(val);
-          // Reset dependent filters if needed, though they handle themselves mostly
+          setSelectedReyonlar([]);
+          setSelectedProducts([]);
         }}
         categoryOptions={categoryOptions}
         selectedCategories={selectedReyonlar}
-        onCategoryChange={setSelectedReyonlar}
+        onCategoryChange={(val) => {
+          setSelectedReyonlar(val);
+          setSelectedProducts([]);
+        }}
         productOptions={productOptions}
         selectedProducts={selectedProducts}
         onProductChange={setSelectedProducts}
       >
         {/* Period Selector */}
         {canSeeFilter('filter-period') && (
-          <div className='flex items-center gap-2'>
-            <Input
-              type='number'
-              min='1'
-              max={
-                periodUnit === 'yil'
-                  ? 1
-                  : periodUnit === 'ay'
-                    ? 12
-                    : periodUnit === 'hafta'
-                      ? 52
-                      : 365
-              }
-              value={periodValue}
-              onChange={(e) => {
-                setPeriodValue(e.target.value);
-              }}
-              className='w-14 2xl:w-16 h-8 2xl:h-10 text-center text-xs 2xl:text-sm bg-white dark:bg-slate-900'
-              disabled={periodUnit === 'yil'}
-            />
-            <Select
-              value={periodUnit}
-              onValueChange={(newUnit) => {
-                setPeriodUnit(newUnit);
-                const val = parseInt(periodValue) || 0;
-                let max = 365;
-                if (newUnit === 'ay') {
-                  max = 12;
-                }
-                if (newUnit === 'hafta') {
-                  max = 52;
-                }
-                if (newUnit === 'yil') {
-                  max = 1;
-                }
-
-                if (val > max) {
-                  setPeriodValue(max.toString());
-                }
-              }}
-            >
-              <SelectTrigger className='w-16 2xl:w-20 h-8 2xl:h-10 text-xs 2xl:text-sm bg-white dark:bg-slate-900'>
-                <SelectValue />
+          <div className='w-full md:w-auto min-w-32'>
+            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+              <SelectTrigger className='h-8 2xl:h-10 text-xs 2xl:text-sm bg-white dark:bg-slate-900'>
+                <SelectValue placeholder='Periyot' />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value='gun'>gün</SelectItem>
-                <SelectItem value='hafta'>hafta</SelectItem>
-                <SelectItem value='ay'>ay</SelectItem>
-                <SelectItem value='yil'>yıl</SelectItem>
+                <SelectItem value='30'>30 Gün</SelectItem>
+                <SelectItem value='60'>60 Gün</SelectItem>
+                <SelectItem value='180'>180 Gün</SelectItem>
+                <SelectItem value='365'>1 Yıl</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -404,8 +470,12 @@ export function DemandForecastingSection() {
               title='Toplam Tahmin'
               value={kpiValues.totalForecast}
               subValue={kpiValues.totalUnits}
-              trend='+8.5%'
-              trendUp={true}
+              trend={
+                totalForecastTrend !== 0
+                  ? formatSignedPercent(totalForecastTrend)
+                  : ''
+              }
+              trendUp={totalForecastTrend >= 0}
               icon={TrendingUp}
               tooltip='Seçilen dönem için AI modelinin öngördüğü toplam satış tutarı ve adet.'
             />
@@ -416,8 +486,8 @@ export function DemandForecastingSection() {
               title='Doğruluk Oranı'
               value={kpiValues.accuracy}
               subValue='Geçen Ay'
-              trend='+1.2%'
-              trendUp={true}
+              trend={accuracyTrend !== 0 ? formatSignedPercent(accuracyTrend) : ''}
+              trendUp={accuracyTrend >= 0}
               icon={Target}
               tooltip='Model doğruluğu. Tahmin ile gerçekleşen arasındaki tutarlılık.'
             />
@@ -428,8 +498,8 @@ export function DemandForecastingSection() {
               title='Yıllık Büyüme'
               value={kpiValues.yoyGrowth}
               subValue='vs. Geçen Yıl'
-              trend='-2.1%'
-              trendUp={false}
+              trend=''
+              trendUp={kpis.yoyGrowth.value >= 0}
               icon={Calendar}
               tooltip='Geçen yılın aynı dönemine kıyasla satışlardaki büyüme oranı (YoY).'
             />
@@ -439,8 +509,10 @@ export function DemandForecastingSection() {
             <KPICard
               title='Bias (Sapma)'
               value={kpiValues.bias}
-              subValue='Over-forecast'
-              trend='Stabil'
+              subValue={
+                kpis.bias.type === 'over' ? 'Over-forecast' : 'Under-forecast'
+              }
+              trend={kpis.bias.trend === 'stable' ? 'Stabil' : kpis.bias.trend}
               trendUp={true}
               icon={AlertTriangle}
               tooltip='Pozitif: Tahmin > Gerçek (Over). Negatif: Tahmin < Gerçek (Under).'
@@ -598,14 +670,14 @@ export function DemandForecastingSection() {
                 </CardTitle>
                 <CardDescription className='text-xs md:text-xs 2xl:text-sm'>
                   Mevcut yıl ile geçmiş 2 yıl satış karşılaştırması (Haftalık) -
-                  H4
+                  {` H${yearCurrentWeek ?? '-'}`}
                 </CardDescription>
               </CardHeader>
               <CardContent className='h-[250px] 2xl:h-[350px]'>
                 <ResponsiveContainer width='100%' height='100%'>
                   <LineChart
                     data={yearData}
-                    margin={{ top: 10, right: 30, left: 0, bottom: 10 }}
+                    margin={{ top: 0, right: 10, left: 0, bottom: 20}}
                   >
                     <CartesianGrid
                       strokeDasharray='3 3'
@@ -617,14 +689,18 @@ export function DemandForecastingSection() {
                       fontSize={chartConfig.axisFontSize}
                       tickLine={false}
                       axisLine={false}
-                      interval={is2xl ? 2 : 3}
+                      interval={xAxisInterval}
+                      tickFormatter={formatWeekTick}
+                      angle={-45}
+                      textAnchor='end'
+                      height={60}
                     />
                     <YAxis
                       fontSize={chartConfig.axisFontSize}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(v) => `${(v / 1000).toFixed(0)}K`}
-                      width={chartConfig.yAxisWidth}
+                      tickFormatter={formatYAxisTick}
+                      width={Math.max(60, chartConfig.yAxisWidth)}
                     />
                     <Tooltip
                       formatter={(value: number, name: string) => {
@@ -637,9 +713,10 @@ export function DemandForecastingSection() {
                             : name === 'y2025'
                               ? '2025'
                               : '2026';
-                        return [value.toLocaleString(), year];
+                        return [value.toLocaleString('tr-TR'), year];
                       }}
-                      contentStyle={{ fontSize: chartConfig.tooltipFontSize }}
+                      labelFormatter={(label) => formatWeekTick(String(label))}
+                      contentStyle={{ fontSize: chartConfig.tooltipFontSize, marginBottom: '50px' }}
                     />
                     <Legend
                       formatter={(value) =>
@@ -651,7 +728,7 @@ export function DemandForecastingSection() {
                       }
                       wrapperStyle={{
                         fontSize: chartConfig.legendFontSize,
-                        paddingTop: '10px',
+                        paddingTop: '10px', marginBottom: '-50px'
                       }}
                     />
                     <Line
@@ -1118,3 +1195,4 @@ function KPICard({
     </div>
   );
 }
+

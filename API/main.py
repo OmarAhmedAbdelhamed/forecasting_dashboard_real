@@ -11,7 +11,7 @@ import os
 from dotenv import load_dotenv
 
 # Import all functions from omerApi_combined
-from omerApi_combined import (
+from omerApiYan import (
     get_regions_hierarchy,
     get_stores,
     get_categories,
@@ -21,23 +21,17 @@ from omerApi_combined import (
     get_dashboard_revenue_chart,
     get_dashboard_historical_chart,
     get_product_promotions,
-    get_forecast_promotion_history,
     get_demand_kpis,
+    get_demand_trend_forecast,
     get_demand_year_comparison,
     get_demand_monthly_bias,
     get_growth_products,
     get_inventory_kpis,
-    get_inventory_store_performance_main,
     get_inventory_stock_trends,
     get_inventory_store_performance,
     get_alerts_summary,
-    get_alerts_growth_products,
     get_forecast_errors,
     get_inventory_items,
-    get_inventory_stock_trends,
-    get_inventory_store_performance,
-    get_inventory_alerts,
-    get_forecast_promotion_history,
     get_similar_campaigns,
     get_forecast_calendar,
 )
@@ -138,89 +132,17 @@ def api_get_dashboard_promotions(
     Get upcoming promotions list.
     """
     try:
-        from datetime import datetime
         client = get_client()
-        # Note: Depending on requirements, we might want to use get_product_promotions
-        # or a function that returns dashboard-specific promotions.
-        # Assuming get_product_promotions is suitable here, but it takes magaza_kodu and urun_kodu.
-        # The original code called get_product_promotions with list filters.
-        # Checking omerApi_combined.py signatures:
-        # get_product_promotions(client, magaza_kodu: int, urun_kodu: int, table_name="demoVerileri")
-        #
-        # WAIT! The original main.py called get_product_promotions with regionIds, storeIds, etc.
-        # But omerApi_combined.py defines it for a SINGLE product/store.
-        #
-        # Let's check get_product_promotions_with_future used in previous file? NO.
-        #
-        # Let's re-examine omerApi_combined.py for a promotion function that takes lists/filters.
-        # Lines 2403-2562 define a DIFFERENT function closure/nested structure? No, it's indented.
-        # Line 2388: def get_promotions_export(...)
-        #
-        # Let's check if there is a function for dashboard promotions list.
-        # In omerApi_combined.py, lines 800-915 seem to be `get_product_promotions_with_future`.
-        # lines 2565-2660 is `get_product_promotions`.
-        #
-        # The previous `api_get_dashboard_promotions` called `get_product_promotions` with `region_ids`, `store_ids`, `category_ids`.
-        # Neither `get_product_promotions` (single store/product) nor `get_product_promotions_with_future` (single store/product) seems intended for the dashboard list.
-        #
-        # The user said "adjust the main.py for the omerApi_combined.py file functions".
-        # Maybe I missed a function?
-        # Let's look for any function returning "promotions".
-        # `get_product_promotions`: single item.
-        # `get_forecast_promotion_history`: list of products.
-        # `get_promotions_export`: takes filters! Line 2388.
-        # `get_product_promotions_with_future`: single item.
-        #
-        # It's possible the user INTENDS for me to allow `get_promotions_export` to serve the dashboard or use logic similar to what was there.
-        # However, looking at `omerApi_combined.py`, there isn't a direct "get_dashboard_promotions" function.
-        #
-        # BUT, looking at `get_promotions_export` (lines 2388+), it supports filters and pagination.
-        # Maybe I should use that or verify if I missed something.
-        #
-        # Let's try to search `omerApi_combined.py` for "promotions" again to be sure.
-        # I will assume for now I should use `get_promotions_export` for the dashboard list if it fits the shape,
-        # OR I might have to accept that the old function is gone and I must pick the closest one.
-        # The old `get_product_promotions` in `omerApiYan` (from previous context not shown but implied) likely handled lists.
-        #
-        # Reviewing `omerApi_combined.py` content I read:
-        # Line 787: `get_product_promotions_with_future(client, magaza_kodu, urun_kodu, ...)`
-        # Line 2565: `get_product_promotions(client, magaza_kodu, urun_kodu, ...)`
-        # Line 2388: `get_promotions_export(...)`
-        #
-        # I'll use `get_promotions_export` for the dashboard endpoint but rename/map it, OR
-        # if the frontend expects a specific format, I might need to adapt.
-        #
-        # Let's check `get_promotions_export` return format.
-        # It returns `{"data": [...], "pagination": {...}}`.
-        # Frontend likely expects `{"promotions": [...]}` or similar.
-        #
-        # I will map `/api/dashboard/promotions` to `get_promotions_export` but reformat the output to match the expected schema if possible,
-        # or just return what it gives if flexbile.
-        #
-        # Actually, `main.py` had an endpoint `/api/dashboard/promotions` calling `get_product_promotions`.
-        # If I look at the previous `get_product_promotions` call in `main.py` (lines 131-136), it passed lists.
-        # The NEW `get_product_promotions` takes `magaza_kodu` (int) and `urun_kodu` (int). It does NOT take lists.
-        # SO `get_product_promotions` in the combined file is DIFFERENT.
-        #
-        # I will use `get_promotions_export` as a fallback for the list endpoint, as it supports filters.
-        #
-        pass
 
-        # For this specific endpoint, I will Comment it out or use get_promotions_export if parameters match.
-        # get_promotions_export(client, region_ids, store_ids, reyon_ids, search, page, limit, table_name)
-        # It seems suitable for a list. I will try to use it.
-        
-        result = get_promotions_export(
-             client,
-             region_ids=regionIds,
-             store_ids=[int(s) for s in storeIds] if storeIds else None,
-             reyon_ids=[int(c) for c in categoryIds] if categoryIds else None,
-             table_name=TABLE_NAME,
-             limit=20 # Default limit for dashboard
+        result = get_product_promotions(
+            client,
+            table_name=TABLE_NAME,
+            region_ids=regionIds,
+            store_ids=storeIds,
+            category_ids=categoryIds,
         )
-        # Adapt output to "promotions" key if needed, or just return result.
-        # The previous output had "promotions" key. `get_promotions_export` has "data".
-        return {"promotions": result.get("data", [])}
+        print(f"DEBUG: Dashboard Promotions Response: {result}")
+        return result
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -330,7 +252,66 @@ def api_get_alerts_summary(
             store_ids=[int(s) for s in storeIds] if storeIds else None,
             category_ids=[int(c) for c in categoryIds] if categoryIds else None,
         )
-        return raw_data
+
+        # Keep compatibility with both old and new alerts-summary formats.
+        # Frontend expects:
+        # { summary: { lowGrowth, highGrowth, forecastErrors, inventory }, totalAlerts }
+        if isinstance(raw_data, dict) and "summary" in raw_data:
+            print(f"DEBUG: Alerts Summary Response (new format): {raw_data}")
+            return raw_data
+
+        low_growth_count = int(
+            (raw_data.get("sharp_decline") or {}).get("count", 0)
+        )
+        high_growth_count = int(
+            (raw_data.get("explosive_growth") or {}).get("count", 0)
+        )
+        major_errors_count = int(
+            (raw_data.get("major_forecast_errors") or {}).get("count", 0)
+        )
+        anomaly_errors_count = int(
+            (raw_data.get("anomaly_errors") or {}).get("count", 0)
+        )
+        stockout_count = int((raw_data.get("stockout") or {}).get("count", 0))
+        overstock_count = int(
+            (raw_data.get("extreme_overstock") or {}).get("count", 0)
+        )
+        reorder_count = int((raw_data.get("urgent_reorder") or {}).get("count", 0))
+
+        normalized_data = {
+            "summary": {
+                "lowGrowth": {
+                    "count": low_growth_count,
+                    "severity": (raw_data.get("sharp_decline") or {}).get(
+                        "severity", "low"
+                    ),
+                },
+                "highGrowth": {
+                    "count": high_growth_count,
+                    "severity": (raw_data.get("explosive_growth") or {}).get(
+                        "severity", "low"
+                    ),
+                },
+                "forecastErrors": {
+                    "count": major_errors_count,
+                    "criticalCount": anomaly_errors_count,
+                    "severity": (raw_data.get("major_forecast_errors") or {}).get(
+                        "severity", "low"
+                    ),
+                },
+                "inventory": {
+                    "count": stockout_count + overstock_count + reorder_count,
+                    "stockout": stockout_count,
+                    "overstock": overstock_count,
+                    "reorder": reorder_count,
+                    "severity": "high" if stockout_count > 0 else "medium",
+                },
+            },
+            "totalAlerts": int(raw_data.get("total_alerts", 0)),
+        }
+
+        print(f"DEBUG: Alerts Summary Response (normalized): {normalized_data}")
+        return normalized_data
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -373,88 +354,77 @@ def api_get_demand_kpis(
     storeIds: Optional[List[str]] = Query(None),
     categoryIds: Optional[List[str]] = Query(None),
     productIds: Optional[List[str]] = Query(None),
+    periodValue: int = Query(30, ge=1, le=3650),
+    periodUnit: str = Query("gun"),
 ):
     """Get demand forecasting KPIs"""
     client = get_client()
     return get_demand_kpis(
         client,
-        region_ids=[int(r) for r in regionIds] if regionIds else None, # check if region is int or str. usually str in frontend but int in DB? 
-        # In get_demand_kpis docstring: region_ids: list[int]. But region is often a string description?
-        # Let's check get_demand_kpis implementation.
-        # It converts to comma separated string. "cografi_bolge IN ({...})".
-        # If DB column cografi_bolge is String, we need quotes.
-        # In omerApi_combined.py: 
-        # if region_ids: filters.append(f"cografi_bolge IN ({','.join(map(str, region_ids))})") <-- This creates numbers if input is int, or strings without quotes?
-        # Wait, if region_ids are strings, map(str, region_ids) just returns strings.
-        # If the SQL does NOT add quotes, and regions are strings (e.g. 'Marmara'), this will fail.
-        # Let's check `get_demand_kpis` implementation details I read.
-        # Line 1065: filters.append(f"cografi_bolge IN ({','.join(map(str, region_ids))})")
-        # It does NOT add quotes. So I assume region_ids must be passed as a set of IDs (integers) OR I need to look at if cografi_bolge is numeric.
-        # In `get_regions_hierarchy`, `value` was `lowerUTF8(cografi_bolge)`. It returns strings like "marmara".
-        # So passing strings like "marmara" to `cografi_bolge IN (marmara)` without quotes is invalid SQL if it's a string column.
-        #
-        # However, `get_dashboard_metrics` DOES add quotes: `", ".join(f"'{r.lower()}'" for r in region_ids)`
-        #
-        # `get_demand_kpis` seems potentially buggy if it expects strings but doesn't quote them.
-        # Or maybe region_ids ARE integers?
-        # The frontend usually sends what `get_regions_hierarchy` returns.
-        # `get_regions_hierarchy` returns string values for regions.
-        #
-        # I will leave as is for `regionIds` assuming the function knows what it's doing or I'll fix it if it breaks.
-        # BUT, to be safe, I should probably check if I can modify the call or if the function handles it.
-        # The function `get_demand_kpis` in `omerApi_combined.py` takes `list[int] | None`. The type hint says `int`.
-        # Maybe regions have IDs?
-        #
-        # Let's stick to the type hints.
-        
+        region_ids=regionIds,
         store_ids=[int(s) for s in storeIds] if storeIds else None,
         category_ids=[int(c) for c in categoryIds] if categoryIds else None,
         product_ids=[int(p) for p in productIds] if productIds else None,
+        period_value=periodValue,
+        period_unit=periodUnit,
         table_name=TABLE_NAME
     )
 
-# Removed get_demand_trend_forecast endpoint as it is missing in omerApi_combined.py
+@app.get("/api/demand/trend-forecast")
+def api_get_demand_trend_forecast(
+    storeIds: Optional[List[str]] = Query(None),
+    productIds: Optional[List[str]] = Query(None),
+    categoryIds: Optional[List[str]] = Query(None),
+    period: str = Query("daily"),
+):
+    """Get demand trend + forecast series (daily/weekly/monthly)"""
+    client = get_client()
+    return get_demand_trend_forecast(
+        client,
+        store_ids=[int(s) for s in storeIds] if storeIds else None,
+        product_ids=[int(p) for p in productIds] if productIds else None,
+        category_ids=[int(c) for c in categoryIds] if categoryIds else None,
+        period=period,
+        table_name=TABLE_NAME,
+    )
 
 @app.get("/api/demand/year-comparison")
 def api_get_demand_year_comparison(
     storeIds: Optional[List[str]] = Query(None),
-    productIds: Optional[List[str]] = Query(None)
+    productIds: Optional[List[str]] = Query(None),
+    categoryIds: Optional[List[str]] = Query(None),
 ):
     """Get year-over-year comparison for a product/store"""
     client = get_client()
-    s_ids = int(storeIds[0]) if storeIds else 0 # Function takes SINGLE store_id
-    p_ids = int(productIds[0]) if productIds else 0 # Function takes SINGLE product_id
-    
-    # Check signature: get_demand_year_comparison(client, store_id: int, product_id: int, ...)
-    # It takes single IDs?
-    
     return get_demand_year_comparison(
         client,
-        store_id=s_ids,
-        product_id=p_ids,
+        store_ids=[int(s) for s in storeIds] if storeIds else None,
+        product_ids=[int(p) for p in productIds] if productIds else None,
+        category_ids=[int(c) for c in categoryIds] if categoryIds else None,
         table_name=TABLE_NAME
     )
 
 @app.get("/api/demand/monthly-bias")
 def api_get_demand_monthly_bias(
     storeIds: Optional[List[str]] = Query(None),
-    productIds: Optional[List[str]] = Query(None)
+    productIds: Optional[List[str]] = Query(None),
+    categoryIds: Optional[List[str]] = Query(None),
 ):
     """Get monthly bias for a product/store"""
     client = get_client()
-    s_ids = int(storeIds[0]) if storeIds else 0
-    p_ids = int(productIds[0]) if productIds else 0
-
     return get_demand_monthly_bias(
         client,
-        store_id=s_ids,
-        product_id=p_ids,
+        store_ids=[int(s) for s in storeIds] if storeIds else None,
+        product_ids=[int(p) for p in productIds] if productIds else None,
+        category_ids=[int(c) for c in categoryIds] if categoryIds else None,
         table_name=TABLE_NAME
     )
 
 @app.get("/api/demand/growth-products")
 def api_get_demand_growth_products(
     storeIds: List[str] = Query([]),
+    categoryIds: Optional[List[str]] = Query(None),
+    productIds: Optional[List[str]] = Query(None),
     type: str = "high"
 ):
     """Get high or low growth products"""
@@ -462,6 +432,8 @@ def api_get_demand_growth_products(
     return get_growth_products(
         client,
         store_ids=[int(s) for s in storeIds] if storeIds else [],
+        category_ids=[int(c) for c in categoryIds] if categoryIds else None,
+        product_ids=[int(p) for p in productIds] if productIds else None,
         type_=type,
         table_name=TABLE_NAME
     )
@@ -469,6 +441,8 @@ def api_get_demand_growth_products(
 @app.get("/api/demand/forecast-errors")
 def api_get_demand_forecast_errors(
     storeIds: Optional[List[str]] = Query(None),
+    categoryIds: Optional[List[str]] = Query(None),
+    productIds: Optional[List[str]] = Query(None),
     severityFilter: Optional[str] = Query(None)
 ):
     """Get products with significant forecast errors"""
@@ -477,7 +451,9 @@ def api_get_demand_forecast_errors(
     return get_forecast_errors(
         client,
         store_ids=[int(s) for s in storeIds] if storeIds else None,
-        severity=severityFilter,
+        category_ids=[int(c) for c in categoryIds] if categoryIds else None,
+        product_ids=[int(p) for p in productIds] if productIds else None,
+        severity_filter=severityFilter,
         table_name=TABLE_NAME
     )
 

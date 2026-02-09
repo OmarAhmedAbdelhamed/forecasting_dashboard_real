@@ -23,7 +23,8 @@ import { SaleRateChart } from '@/components/ui/inventory-planning/sale-rate-char
 import { FastestMovingTable } from '@/components/ui/inventory-planning/fastest-moving-table';
 import { getInventoryKPIs } from '@/data/mock-data';
 import { InventoryItem } from '@/types/inventory';
-import type { InventoryAlert } from '@/types/inventory';
+import type { CustomProductList, InventoryAlert } from '@/types/inventory';
+import { useCustomLists } from '@/contexts/custom-lists-context';
 
 import { usePermissions } from '@/hooks/use-permissions';
 import {
@@ -41,6 +42,41 @@ function parseStoreCodeFromAlert(storeName?: string) {
   }
   const match = storeName.match(/-\s*(\d+)\s*$/);
   return match?.[1];
+}
+
+function buildRandomProductLists(
+  productOptions: { value: string; label: string }[],
+): CustomProductList[] {
+  if (productOptions.length === 0) {
+    return [];
+  }
+
+  const shuffled = [...productOptions].sort(() => Math.random() - 0.5);
+  const bucketSize = Math.max(1, Math.floor(shuffled.length / 3));
+  const groups = [
+    shuffled.slice(0, bucketSize),
+    shuffled.slice(bucketSize, bucketSize * 2),
+    shuffled.slice(bucketSize * 2, bucketSize * 3),
+  ];
+
+  const fallback = shuffled.slice(0, Math.min(8, shuffled.length));
+  const today = new Date().toISOString().slice(0, 10);
+  const names = [
+    'Kampanya Adaylari',
+    'Stok Takip Grubu',
+    'Odak Urunler',
+  ];
+
+  return groups.map((group, index) => {
+    const selected = group.length > 0 ? group : fallback;
+    return {
+      id: `AUTO_LIST_${index + 1}`,
+      name: names[index],
+      itemCount: selected.length,
+      lastModified: today,
+      skus: selected.map((item) => item.value),
+    };
+  });
 }
 
 export function InventoryPlanningSection() {
@@ -72,6 +108,7 @@ export function InventoryPlanningSection() {
     sku: string;
     storeCode?: string;
   } | null>(null);
+  const { replaceLists } = useCustomLists();
 
   // Get filter options from API
   const { regionOptions, storeOptions, categoryOptions, productOptions } =
@@ -80,6 +117,10 @@ export function InventoryPlanningSection() {
       selectedStores,
       selectedCategories,
     });
+
+  useEffect(() => {
+    replaceLists(buildRandomProductLists(productOptions));
+  }, [productOptions, replaceLists]);
 
   // Filter region options based on user permissions
   const filteredRegionOptions = useMemo(() => {
@@ -314,13 +355,25 @@ export function InventoryPlanningSection() {
         titleTooltip='Bölge, mağaza ve ürün bazında filtreleme yaparak envanter verilerini özelleştirin.'
         regionOptions={filteredRegionOptions}
         selectedRegions={selectedRegions}
-        onRegionChange={setSelectedRegions}
+        onRegionChange={(regions) => {
+          setSelectedRegions(regions);
+          setSelectedStores([]);
+          setSelectedCategories([]);
+          setSelectedProducts([]);
+        }}
         storeOptions={storeOptions}
         selectedStores={effectiveSelectedStores}
-        onStoreChange={setSelectedStores}
+        onStoreChange={(stores) => {
+          setSelectedStores(stores);
+          setSelectedCategories([]);
+          setSelectedProducts([]);
+        }}
         categoryOptions={categoryOptions}
         selectedCategories={effectiveSelectedCategories}
-        onCategoryChange={setSelectedCategories}
+        onCategoryChange={(categories) => {
+          setSelectedCategories(categories);
+          setSelectedProducts([]);
+        }}
         productOptions={productOptions}
         selectedProducts={effectiveSelectedProducts}
         onProductChange={setSelectedProducts}

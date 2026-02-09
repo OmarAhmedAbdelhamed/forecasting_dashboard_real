@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useMemo, useState } from 'react';
 import {
   ResponsiveContainer,
   LineChart,
@@ -29,6 +30,75 @@ export function HistoricalUnitsChart({
   data,
   currentWeek,
 }: HistoricalUnitsChartProps) {
+  const [screenWidth, setScreenWidth] = useState<number>(1920);
+
+  useEffect(() => {
+    const updateScreenWidth = () => setScreenWidth(window.innerWidth);
+    updateScreenWidth();
+    window.addEventListener('resize', updateScreenWidth);
+    return () => window.removeEventListener('resize', updateScreenWidth);
+  }, []);
+
+  const xAxisInterval = useMemo(() => {
+    if (screenWidth >= 2100) {return 0;} // show every week
+    if (screenWidth >= 1280) {return 1;} // skip 1 week
+    return 3; // skip 3 weeks
+  }, [screenWidth]);
+
+  const monthNames = [
+    'ocak',
+    'subat',
+    'mart',
+    'nisan',
+    'mayis',
+    'haziran',
+    'temmuz',
+    'agustos',
+    'eylul',
+    'ekim',
+    'kasim',
+    'aralik',
+  ];
+
+  const getWeekNumber = (weekLabel: string) => {
+    const match = weekLabel.match(/\d+/);
+    return match ? Number(match[0]) : NaN;
+  };
+
+  const getWeekEndDate = (weekNumber: number, year: number) => {
+    // ISO week 1 starts on the week containing Jan 4. We display the week-end (Sunday).
+    const jan4 = new Date(year, 0, 4);
+    const jan4Day = jan4.getDay() === 0 ? 7 : jan4.getDay();
+    const firstIsoMonday = new Date(jan4);
+    firstIsoMonday.setDate(jan4.getDate() - jan4Day + 1);
+
+    const weekEnd = new Date(firstIsoMonday);
+    weekEnd.setDate(firstIsoMonday.getDate() + (weekNumber - 1) * 7 + 6);
+    return weekEnd;
+  };
+
+  const formatWeekTick = (weekLabel: string) => {
+    const weekNumber = getWeekNumber(weekLabel);
+    if (!weekNumber || Number.isNaN(weekNumber)) return weekLabel;
+
+    const year = new Date().getFullYear();
+    const weekEndDate = getWeekEndDate(weekNumber, year);
+    const day = weekEndDate.getDate();
+    const month = monthNames[weekEndDate.getMonth()];
+    return `H${weekNumber} (${day} ${month})`;
+  };
+
+  const formatYAxisTick = (value: number) => {
+    if (value >= 1_000_000) {
+      const millions = value / 1_000_000;
+      return `${millions % 1 === 0 ? millions.toFixed(0) : millions.toFixed(1)}M`;
+    }
+    if (value >= 1_000) {
+      return `${(value / 1_000).toFixed(0)}K`;
+    }
+    return value.toLocaleString('tr-TR');
+  };
+
   return (
     <Card className='col-span-1'>
       <CardHeader className='pb-0 pt-3 px-4'>
@@ -56,7 +126,8 @@ export function HistoricalUnitsChart({
               tick={{ fontSize: 12, fill: '#6b7280' }}
               axisLine={{ stroke: '#d1d5db' }}
               tickLine={false}
-              interval={3}
+              interval={xAxisInterval}
+              tickFormatter={formatWeekTick}
               angle={-45}
               textAnchor='end'
               height={60}
@@ -66,9 +137,9 @@ export function HistoricalUnitsChart({
               tick={{ fontSize: 13, fill: '#6b7280' }}
               axisLine={false}
               tickLine={false}
-              tickFormatter={(value) => `${(value / 1000).toFixed(0)}K`}
+              tickFormatter={formatYAxisTick}
               domain={['auto', 'auto']}
-              width={45}
+              width={60}
             />
             <Tooltip
               contentStyle={{
@@ -86,7 +157,7 @@ export function HistoricalUnitsChart({
               }}
               formatter={(value, name) => {
                 if (value === null || value === undefined) {
-                  return ['—', ''];
+                  return ['-', ''];
                 }
                 const numValue =
                   typeof value === 'number' ? value : Number(value);
@@ -96,8 +167,9 @@ export function HistoricalUnitsChart({
                     : name === 'y2025'
                       ? '2025'
                       : '2026';
-                return [numValue.toLocaleString(), yearLabel];
+                return [numValue.toLocaleString('tr-TR'), yearLabel];
               }}
+              labelFormatter={(label) => formatWeekTick(String(label))}
             />
             <Legend
               verticalAlign='top'
