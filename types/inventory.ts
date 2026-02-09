@@ -20,7 +20,7 @@ export interface InventoryItem {
   daysOfCoverage: number;
   status: InventoryStatus;
   turnoverRate: number;
-  lastRestockDate: string;
+  lastRestockDate: string | null;
   leadTimeDays: number;
   quantityOnOrder: number;
   todaysSales: number;

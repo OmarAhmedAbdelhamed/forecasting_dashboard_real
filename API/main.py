@@ -29,6 +29,13 @@ from omerApiYan import (
     get_demand_monthly_bias,
     get_growth_products,
     get_forecast_errors,
+    get_inventory_items,
+    get_inventory_stock_trends,
+    get_inventory_store_performance,
+    get_inventory_alerts,
+    get_forecast_promotion_history,
+    get_similar_campaigns,
+    get_forecast_calendar,
 )
 
 # Load environment variables
@@ -302,6 +309,32 @@ def api_get_alerts_summary(
         raise HTTPException(status_code=500, detail=f"Alerts Summary Error: {str(e)}")
 
 
+@app.get("/api/alerts/inventory")
+def api_get_inventory_alerts(
+    regionIds: Optional[List[str]] = Query(None),
+    storeIds: Optional[List[str]] = Query(None),
+    search: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
+):
+    """Get inventory stock alerts"""
+    try:
+        client = get_client()
+        s_ids = [int(s) for s in storeIds] if storeIds else None
+        
+        return get_inventory_alerts(
+            client,
+            region_ids=regionIds,
+            store_ids=s_ids,
+            search=search,
+            limit=limit,
+            table_name=TABLE_NAME
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Inventory Alerts Error: {str(e)}")
+
+
 # =============================================================================
 # DEMAND FORECASTING ENDPOINTS
 # =============================================================================
@@ -425,13 +458,37 @@ def api_get_promotion_history(
 
 
 @app.get("/api/forecast/similar-campaigns")
-def api_get_similar_campaigns():
-    raise HTTPException(status_code=501, detail="Function not available in current API version.")
+def api_get_similar_campaigns(
+    promotionType: Optional[str] = Query(None),
+    productIds: Optional[List[str]] = Query(None),
+    limit: int = 5
+):
+    """Get similar past campaigns"""
+    client = get_client()
+    return get_similar_campaigns(
+        client,
+        table_name=TABLE_NAME,
+        promotion_type=promotionType,
+        product_ids=productIds,
+        limit=limit
+    )
 
 
 @app.get("/api/forecast/calendar")
-def api_get_forecast_calendar():
-    raise HTTPException(status_code=501, detail="Function not available in current API version.")
+def api_get_forecast_calendar(
+    month: int = Query(..., description="Month (1-12)"),
+    year: int = Query(..., description="Year (e.g. 2024)"),
+    storeIds: Optional[List[str]] = Query(None),
+):
+    """Get promotion calendar events"""
+    client = get_client()
+    return get_forecast_calendar(
+        client,
+        table_name=TABLE_NAME,
+        store_ids=storeIds,
+        month=month,
+        year=year
+    )
 
 
 # =============================================================================
@@ -459,18 +516,72 @@ def api_get_inventory_kpis(
 
 
 @app.get("/api/inventory/items")
-def api_get_inventory_items():
-    raise HTTPException(status_code=501, detail="Function not available in current API version.")
+def api_get_inventory_items(
+    regionIds: Optional[List[str]] = Query(None),
+    storeIds: Optional[List[str]] = Query(None),
+    categoryIds: Optional[List[str]] = Query(None),
+    productIds: Optional[List[str]] = Query(None),
+    status: Optional[str] = Query(None),
+    page: int = 1,
+    limit: int = 50,
+    sortBy: str = "stockValue",
+    sortOrder: str = "desc"
+):
+    """Get inventory items with pagination"""
+    client = get_client()
+    return get_inventory_items(
+        client,
+        table_name=TABLE_NAME,
+        region_ids=regionIds,
+        store_ids=storeIds,
+        category_ids=categoryIds,
+        product_ids=productIds,
+        status=status,
+        page=page,
+        limit=limit,
+        sort_by=sortBy,
+        sort_order=sortOrder
+    )
 
 
 @app.get("/api/inventory/stock-trends")
-def api_get_inventory_stock_trends():
-    raise HTTPException(status_code=501, detail="Function not available in current API version.")
+def api_get_inventory_stock_trends(
+    regionIds: Optional[List[str]] = Query(None),
+    storeIds: Optional[List[str]] = Query(None),
+    categoryIds: Optional[List[str]] = Query(None),
+    productIds: Optional[List[str]] = Query(None),
+    days: int = 30
+):
+    """Get aggregated stock trends"""
+    client = get_client()
+    return get_inventory_stock_trends(
+        client,
+        table_name=TABLE_NAME,
+        region_ids=regionIds,
+        store_ids=storeIds,
+        category_ids=categoryIds,
+        product_ids=productIds,
+        days=days
+    )
 
 
 @app.get("/api/inventory/store-performance")
-def api_get_inventory_store_performance():
-    raise HTTPException(status_code=501, detail="Function not available in current API version.")
+def api_get_inventory_store_performance(
+    regionIds: Optional[List[str]] = Query(None),
+    storeIds: Optional[List[str]] = Query(None),
+    categoryIds: Optional[List[str]] = Query(None),
+    productIds: Optional[List[str]] = Query(None),
+):
+    """Get store inventory performance"""
+    client = get_client()
+    return get_inventory_store_performance(
+        client,
+        table_name=TABLE_NAME,
+        region_ids=regionIds,
+        store_ids=storeIds,
+        category_ids=categoryIds,
+        product_ids=productIds
+    )
 
 
 # =============================================================================
