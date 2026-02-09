@@ -43,6 +43,8 @@ export const forecastingApi = {
     month: number;
     year: number;
     storeIds?: string[];
+    includeFuture?: boolean;
+    futureCount?: number;
   }) =>
     apiClient.get<{ events: PromotionCalendarEvent[] }>(
       '/api/forecast/calendar',

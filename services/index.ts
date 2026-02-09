@@ -26,6 +26,7 @@ export { useInventoryKPIs } from './hooks/inventory/use-inventory-kpis';
 export { useInventoryItems } from './hooks/inventory/use-inventory-items';
 export { useStockTrends } from './hooks/inventory/use-stock-trends';
 export { useStorePerformance } from './hooks/inventory/use-store-performance';
+export { useInventoryAlerts } from './hooks/inventory/use-inventory-alerts';
 
 // Export types
 export type * from './types/api';

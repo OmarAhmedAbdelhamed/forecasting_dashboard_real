@@ -363,7 +363,7 @@ export function ProductDetailSheet({
               </div>
 
               <div className='pt-2 text-xs text-muted-foreground text-center border-t'>
-                Son güncelleme: {item.lastRestockDate}
+                Son güncelleme: {item.lastRestockDate ?? 'Bilinmiyor'}
               </div>
             </div>
           </>

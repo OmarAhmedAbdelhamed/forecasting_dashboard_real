@@ -12,6 +12,7 @@ import type {
   FilterParams,
   PaginationParams,
 } from '../types/api';
+import type { InventoryAlert } from '@/types/inventory';
 
 export const inventoryApi = {
   /**
@@ -53,6 +54,15 @@ export const inventoryApi = {
   getStorePerformance: (params?: FilterParams) =>
     apiClient.get<{ stores: StorePerformance[] }>(
       '/api/inventory/store-performance',
+      params,
+    ),
+
+  /**
+   * Get inventory alerts
+   */
+  getAlerts: (params?: FilterParams & { limit?: number }) =>
+    apiClient.get<{ alerts: InventoryAlert[] }>(
+      '/api/alerts/inventory',
       params,
     ),
 };

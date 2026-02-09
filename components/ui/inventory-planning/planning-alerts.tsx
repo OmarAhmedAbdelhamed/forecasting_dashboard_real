@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils';
 
 interface PlanningAlertsProps {
   data: InventoryAlert[];
-  onActionClick?: (sku: string) => void;
+  onActionClick?: (alert: InventoryAlert) => void;
   period?: number;
 }
 
@@ -81,7 +81,7 @@ export function PlanningAlerts({
 
 interface AlertItemProps {
   alert: InventoryAlert;
-  onActionClick?: (sku: string) => void;
+  onActionClick?: (alert: InventoryAlert) => void;
   period?: number;
 }
 
@@ -120,7 +120,7 @@ function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
 
   const handleActionClick = () => {
     if (onActionClick && alert.sku) {
-      onActionClick(alert.sku);
+      onActionClick(alert);
     }
   };
 

@@ -133,7 +133,7 @@ export function FastestMovingTable({
                   {item.stockLevel}
                 </TableCell>
                 <TableCell className='text-center text-xs py-3 text-emerald-600 font-medium'>
-                  {Math.round(item.forecastedDemand / period)}
+                  {Math.round(item.forecastedDemand)}
                 </TableCell>
                 <TableCell className='text-center text-xs py-3'>
                   ₺{item.stockValue.toLocaleString('tr-TR')}

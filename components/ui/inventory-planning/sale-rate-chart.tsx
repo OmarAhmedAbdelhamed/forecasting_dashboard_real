@@ -17,21 +17,64 @@ interface CategoryDistributionChartProps {
   onCategoryClick?: (categoryValue: string) => void;
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  gida: '#10b981', // Green - Food
-  icecek: '#06b6d4', // Cyan - Drinks
-  temizlik: '#3b82f6', // Blue - Cleaning
-  kisisel_bakim: '#ec4899', // Pink - Personal Care
-  elektronik: '#8b5cf6', // Purple - Electronics
+const CATEGORY_LABELS: Record<string, string> = {
+  '1': 'Temel Gida ve Temizlik',
+  '2': 'Taze Gida ve Servis',
+  '3': 'Diger Kategoriler',
+  '100': 'Likitler',
+  '101': 'Temizlik',
+  '102': 'Parfumeri ve Hijyen',
+  '104': 'Kuru Gidalar',
+  '105': 'Self Servis',
+  '109': 'Parapharmacie',
+  '200': 'Sarkuteri',
+  '201': 'Balik',
+  '202': 'Meyve ve Sebze',
+  '203': 'Pasta-Ekmek',
+  '204': 'Kasap',
+  '206': 'Lezzet Arasi',
+  '207': 'L.A Mutfak',
+  '300': 'Tamir ve Onarim',
+  '301': 'Ev Yasam',
+  '302': 'Kultur',
+  '303': 'Oyuncak-Eglence',
+  '304': 'Bahcecilik',
+  '305': 'Oto',
+  '306': 'Ticari Diger Urunler',
+  '307': 'Bebek',
+  '309': 'Diger Satislar',
+  '400': 'Buyuk Beyaz Esyalar',
+  '401': 'Kucuk Beyaz Esyalar',
+  '402': 'Telekom ve Dijital Urunler',
+  '403': 'Televizyon ve Aks.',
+  '404': 'Bilgisayar',
+  '405': 'Altin-Or',
+  '407': 'Ek Garanti',
+  '600': 'Ayakkabi',
+  '601': 'Ic Giyim ve Plaj Giyim',
+  '602': 'Cocuk',
+  '603': 'Kadin',
+  '604': 'Erkek',
+  '605': 'Ev Tekstil',
+  '801': 'Ic Satinalma',
+  '803': 'Yatirim ve Insaat',
+  '804': 'Pazarlama',
+  '809': 'Lojistik',
+  '811': 'AVM',
 };
 
-const CATEGORY_LABELS: Record<string, string> = {
-  gida: 'Gıda',
-  icecek: 'İçecek',
-  temizlik: 'Temizlik',
-  kisisel_bakim: 'Kişisel Bakım',
-  elektronik: 'Elektronik',
-};
+const CATEGORY_COLORS = [
+  '#10b981',
+  '#06b6d4',
+  '#3b82f6',
+  '#ec4899',
+  '#8b5cf6',
+  '#f59e0b',
+  '#ef4444',
+  '#14b8a6',
+  '#0ea5e9',
+  '#a855f7',
+];
 
 interface CategoryData {
   name: string;
@@ -80,34 +123,25 @@ export function CategoryDistributionChart({
   const chartData = useMemo(() => {
     const categoryCounts: Record<string, number> = {};
 
-    // Initialize all categories with 0
-    Object.keys(CATEGORY_LABELS).forEach((key) => {
-      categoryCounts[key] = 0;
-    });
-
-    // Count products per category
-    // Note: item.category is already in lowercase format (e.g., "gida", "temizlik")
+    // Count products per category from live API category values (usually numeric codes)
     items.forEach((item) => {
-      const categoryKey = item.category.toLowerCase();
-      if (categoryCounts[categoryKey] !== undefined) {
-        categoryCounts[categoryKey]++;
-      }
+      const categoryKey = String(item.category);
+      categoryCounts[categoryKey] = (categoryCounts[categoryKey] ?? 0) + 1;
     });
 
     const total = items.length || 1;
 
-    const data: CategoryData[] = Object.entries(categoryCounts).map(
-      ([key, count]) => ({
-        name: CATEGORY_LABELS[key] || key,
+    const data: CategoryData[] = Object.entries(categoryCounts)
+      .sort((a, b) => b[1] - a[1])
+      .map(([key, count], index) => ({
+        name: CATEGORY_LABELS[key] || `Kategori ${key}`,
         value: count,
         categoryValue: key,
-        color: CATEGORY_COLORS[key] || '#94a3b8',
+        color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
         percentage: (count / total) * 100,
-      }),
-    );
+      }));
 
-    // Filter out categories with 0 products for cleaner visualization
-    return data.filter((d) => d.value > 0);
+    return data;
   }, [items]);
 
   const totalProducts = items.length;

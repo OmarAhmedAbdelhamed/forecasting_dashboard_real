@@ -21,8 +21,9 @@ import {
 // Mock Options for Filters (matching overview style for consistency)
 import { SaleRateChart } from '@/components/ui/inventory-planning/sale-rate-chart';
 import { FastestMovingTable } from '@/components/ui/inventory-planning/fastest-moving-table';
-import { getInventoryKPIs, generateInventoryAlerts } from '@/data/mock-data';
+import { getInventoryKPIs } from '@/data/mock-data';
 import { InventoryItem } from '@/types/inventory';
+import type { InventoryAlert } from '@/types/inventory';
 
 import { usePermissions } from '@/hooks/use-permissions';
 import {
@@ -30,8 +31,17 @@ import {
   useInventoryItems,
   useStockTrends,
   useStorePerformance,
+  useInventoryAlerts,
 } from '@/services';
 import { useFilterOptions } from '@/services/hooks/filters/use-filter-options';
+
+function parseStoreCodeFromAlert(storeName?: string) {
+  if (!storeName) {
+    return undefined;
+  }
+  const match = storeName.match(/-\s*(\d+)\s*$/);
+  return match?.[1];
+}
 
 export function InventoryPlanningSection() {
   // Get user permissions and data scope
@@ -58,6 +68,10 @@ export function InventoryPlanningSection() {
   const [alertSelectedItem, setAlertSelectedItem] =
     useState<InventoryItem | null>(null);
   const [alertSheetOpen, setAlertSheetOpen] = useState(false);
+  const [pendingAlertTarget, setPendingAlertTarget] = useState<{
+    sku: string;
+    storeCode?: string;
+  } | null>(null);
 
   // Get filter options from API
   const { regionOptions, storeOptions, categoryOptions, productOptions } =
@@ -96,28 +110,31 @@ export function InventoryPlanningSection() {
     string | undefined
   >(undefined);
 
-  // 1. If global filter has exactly 1 product, force chart to match
-  if (
-    effectiveSelectedProducts.length === 1 &&
-    chartSelectedProductId !== effectiveSelectedProducts[0]
-  ) {
-    setChartSelectedProductId(effectiveSelectedProducts[0]);
-  }
-  // 2. If current chart selection is invalid or empty, pick the first available option
-  else if (productOptions.length > 0) {
-    const isValid =
-      chartSelectedProductId &&
-      productOptions.some((p) => p.value === chartSelectedProductId);
-
-    if (!isValid && chartSelectedProductId !== productOptions[0].value) {
-      setChartSelectedProductId(productOptions[0].value);
+  useEffect(() => {
+    // 1. If global filter has exactly 1 product, force chart to match
+    if (
+      effectiveSelectedProducts.length === 1 &&
+      chartSelectedProductId !== effectiveSelectedProducts[0]
+    ) {
+      setChartSelectedProductId(effectiveSelectedProducts[0]);
+      return;
     }
-  } else if (
-    productOptions.length === 0 &&
-    chartSelectedProductId !== undefined
-  ) {
-    setChartSelectedProductId(undefined);
-  }
+
+    // 2. If current chart selection is invalid or empty, pick the first option
+    if (productOptions.length > 0) {
+      const isValid =
+        chartSelectedProductId &&
+        productOptions.some((p) => p.value === chartSelectedProductId);
+      if (!isValid && chartSelectedProductId !== productOptions[0].value) {
+        setChartSelectedProductId(productOptions[0].value);
+      }
+      return;
+    }
+
+    if (chartSelectedProductId !== undefined) {
+      setChartSelectedProductId(undefined);
+    }
+  }, [chartSelectedProductId, effectiveSelectedProducts, productOptions]);
 
   // Fetch real KPIs from API
   const { data: kpis, isLoading: kpisLoading } = useInventoryKPIs({
@@ -183,13 +200,12 @@ export function InventoryPlanningSection() {
     }),
   );
 
-  const inventoryAlerts = useMemo(() => {
-    return generateInventoryAlerts(
-      selectedRegions,
-      effectiveSelectedStores,
-      periodDays, // Added period
-    );
-  }, [selectedRegions, effectiveSelectedStores, periodDays]);
+  const { data: inventoryAlerts = [] } = useInventoryAlerts({
+    regionIds: selectedRegions,
+    storeIds: effectiveSelectedStores,
+    limit: 40,
+  });
+  const inventoryAlertCount = inventoryAlerts.length;
 
   const hasChartSelection =
     effectiveSelectedStores.length > 0 ||
@@ -204,18 +220,59 @@ export function InventoryPlanningSection() {
   };
 
   // Handle alert action click - find the matching inventory item and open the detail sheet
+  const findMatchingItem = useCallback(
+    (sku: string, storeCode?: string) => {
+      if (!storeCode) {
+        return periodItems.find((item) => item.sku === sku);
+      }
+      const prefix = `${storeCode}_`;
+      return periodItems.find(
+        (item) => item.sku === sku && item.productKey.startsWith(prefix),
+      );
+    },
+    [periodItems],
+  );
+
   const handleAlertActionClick = useCallback(
-    (sku: string) => {
-      // Search in current inventory items from API
-      const matchingItem = periodItems.find((item) => item.sku === sku);
+    (alert: InventoryAlert) => {
+      const sku = alert.sku;
+      const storeCode = parseStoreCodeFromAlert(alert.storeName);
+      const matchingItem = findMatchingItem(sku, storeCode);
 
       if (matchingItem) {
         setAlertSelectedItem(matchingItem);
         setAlertSheetOpen(true);
+        return;
       }
+
+      // If item is not in the current page/filter context, narrow filters
+      // so the target can be fetched and opened automatically.
+      if (storeCode) {
+        setSelectedStores([storeCode]);
+      }
+      setSelectedProducts([sku]);
+      setPendingAlertTarget({ sku, storeCode });
     },
-    [periodItems],
+    [findMatchingItem],
   );
+
+  useEffect(() => {
+    if (!pendingAlertTarget) {
+      return;
+    }
+
+    const matchingItem = findMatchingItem(
+      pendingAlertTarget.sku,
+      pendingAlertTarget.storeCode,
+    );
+    if (!matchingItem) {
+      return;
+    }
+
+    setAlertSelectedItem(matchingItem);
+    setAlertSheetOpen(true);
+    setPendingAlertTarget(null);
+  }, [pendingAlertTarget, findMatchingItem]);
 
   // Sync with Dashboard Context
   const { setSection, setFilters, setMetrics } = useDashboardContext();
@@ -235,7 +292,7 @@ export function InventoryPlanningSection() {
         'Stok Kapsam Süresi': `${displayKpis.stockCoverageDays.toFixed(1)} Gün`,
         'Stoksuz Kalma Riski': `${displayKpis.stockOutRiskItems} Ürün`,
         'Fazla Stok': `${displayKpis.excessInventoryItems} Ürün`,
-        'Aktif Uyarılar': inventoryAlerts.length,
+        'Aktif Uyarılar': inventoryAlertCount,
       });
     }
   }, [
@@ -244,7 +301,7 @@ export function InventoryPlanningSection() {
     effectiveSelectedCategories,
     effectiveSelectedProducts,
     kpis,
-    inventoryAlerts,
+    inventoryAlertCount,
     setSection,
     setFilters,
     setMetrics,

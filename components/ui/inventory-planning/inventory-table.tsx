@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Table,
   TableBody,
@@ -66,14 +66,9 @@ export function InventoryTable({
     externalPerformanceFilter || 'all',
   ); // all, fast, slow
 
-  // Update state during render when prop changes
-  const [prevExternalFilter, setPrevExternalFilter] = useState(
-    externalPerformanceFilter,
-  );
-  if (externalPerformanceFilter !== prevExternalFilter) {
-    setPrevExternalFilter(externalPerformanceFilter);
+  useEffect(() => {
     setPerformanceFilter(externalPerformanceFilter || 'all');
-  }
+  }, [externalPerformanceFilter]);
 
   // Sheet State
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);

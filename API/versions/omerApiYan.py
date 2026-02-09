@@ -2,6 +2,8 @@ import clickhouse_connect
 import pandas as pd
 import numpy as np
 from datetime import date, timedelta
+import random
+from typing import List, Optional
 
 
 
@@ -1342,10 +1344,15 @@ def get_inventory_kpis(
     table_name="demoVerileri"
 ):
     """
-    Inventory KPI hesaplama (ClickHouse uyumlu)
+    Inventory KPI calculator (ClickHouse compatible)
     """
 
     where = ["1=1"]
+
+    if region_ids:
+        # Assuming region matches 'cografi_bolge' based on other functions
+        regions = ", ".join(f"'{r}'" for r in region_ids)
+        where.append(f"cografi_bolge IN ({regions})")
 
     if store_ids:
         where.append(f"magazakodu IN ({','.join(map(str, store_ids))})")
@@ -1560,6 +1567,8 @@ def get_forecast_calendar(
     store_ids: Optional[List[str]] = None,
     month: int = None,
     year: int = None,
+    include_future: bool = False,
+    future_count: int = 10,
 ) -> dict:
     """
     GET /api/forecast/calendar
@@ -1568,9 +1577,7 @@ def get_forecast_calendar(
     if month is None or year is None:
         raise ValueError("month ve year zorunludur")
 
-    where_clauses = [
-        "aktifPromosyonKodu IS NOT NULL"
-    ]
+    where_clauses = ["aktifPromosyonKodu IS NOT NULL"]
 
     # 🔴 FIX: magazakodu UInt → toString + lower
     if store_ids:
@@ -1621,10 +1628,82 @@ def get_forecast_calendar(
             "discount": int(discount) if discount is not None else None
         })
 
+    if include_future:
+        hist_where_clauses = ["aktifPromosyonKodu IS NOT NULL", "tarih >= today() - 365"]
+
+        if store_ids:
+            store_list = ", ".join(f"'{s.lower()}'" for s in store_ids)
+            hist_where_clauses.append(f"lower(toString(magazakodu)) IN ({store_list})")
+
+        hist_where_sql = " AND ".join(hist_where_clauses)
+
+        history_query = f"""
+            SELECT
+                any(aktifPromosyonAdi) AS promo_name,
+                multiIf(
+                    KATALOG = 1, 'Katalog',
+                    LEAFLET = 1, 'Leaflet',
+                    `GAZETE ILANI` = 1, 'Gazete İlanı',
+                    `Hybris % Kampanya` = 1, 'Hybris % Kampanya',
+                    HYBR = 1, 'Hybrid',
+                    'Diğer'
+                ) AS promo_type,
+                round(avg(indirimYuzdesi), 0) AS avg_discount,
+                count() AS freq
+            FROM {table_name}
+            WHERE {hist_where_sql}
+            GROUP BY promo_type, aktifPromosyonAdi
+            ORDER BY freq DESC
+            LIMIT 12
+        """
+
+        history_rows = client.query(history_query).result_rows
+
+        promo_pool = [
+            {
+                "name": r[0] or "Tayin edilmedi",
+                "type": r[1] or "Diğer",
+                "discount": int(r[2]) if r[2] is not None else 10,
+            }
+            for r in history_rows
+        ]
+
+        if not promo_pool:
+            promo_pool = [
+                {"name": "Mağ.İçi Akt-FMCG", "type": "Diğer", "discount": 12},
+                {"name": "HYBR", "type": "Hybrid", "discount": 9},
+                {"name": "GAZETE ILANI", "type": "Gazete İlanı", "discount": 15},
+                {"name": "LEAFLET", "type": "Leaflet", "discount": 10},
+            ]
+
+        today = date.today()
+        generation_count = max(1, min(int(future_count or 10), 60))
+
+        for i in range(generation_count):
+            template = random.choice(promo_pool)
+            start_offset = random.randint(1, 30)
+            duration = random.randint(2, 8)
+            start_day = today + timedelta(days=start_offset)
+
+            discount_base = template["discount"] if template["discount"] is not None else 10
+            discount_value = int(max(-10, min(70, discount_base + random.randint(-4, 4))))
+
+            for day_offset in range(duration):
+                event_day = start_day + timedelta(days=day_offset)
+                date_key = event_day.isoformat()
+                calendar_map.setdefault(date_key, []).append(
+                    {
+                        "id": f"FUT-{i + 1}",
+                        "name": template["name"],
+                        "type": template["type"],
+                        "discount": discount_value,
+                    }
+                )
+
     return {
         "events": [
             {"date": d, "promotions": promos}
-            for d, promos in calendar_map.items()
+            for d, promos in sorted(calendar_map.items(), key=lambda x: x[0])
         ]
     }
 
@@ -1685,7 +1764,7 @@ def get_inventory_items(
         SELECT
             toString(urunkodu)                                       AS id,
             toString(urunkodu)                                       AS sku,
-            toString(urunkodu)                                       AS productName,
+            any(urunismi)                                            AS productName,
             toString(sektorkodu)                                     AS category,
             concat(
                 toString(magazakodu), '_',
@@ -1697,10 +1776,10 @@ def get_inventory_items(
             round(avg(roll_mean_7) * 3, 0)                           AS minStockLevel,
             round(avg(roll_mean_7) * 30, 0)                          AS maxStockLevel,
             round(avg(roll_mean_7) * 7, 0)                           AS reorderPoint,
-            round(avg(roll_mean_7), 0)                               AS forecastedDemand,
+            round(avg(satismiktari), 0)                              AS forecastedDemand,
 
             sum(degerlenmisstok)                                     AS stockValue,
-            round(sum(stok) / nullIf(avg(roll_mean_7), 0), 1)        AS daysOfCoverage,
+            round(sum(stok) / nullIf(avg(satismiktari), 0), 1)       AS daysOfCoverage,
 
             multiIf(
                 sum(stok) = 0, 'Out of Stock',
@@ -1947,3 +2026,229 @@ def get_inventory_store_performance(
             for r in rows
         ]
     }
+
+# =============================================================================
+# NEW FUNCTIONS FROM V5
+# =============================================================================
+
+def get_forecast_promotion_history(
+    client,
+    product_ids: List[int],
+    store_ids: List[int] | None = None,
+    table_name: str = "demoVerileri"
+) -> dict:
+
+    if not product_ids:
+        return {"history": []}
+
+    where_clauses = [f"urunkodu IN ({', '.join(map(str, product_ids))})"]
+    if store_ids:
+        where_clauses.append(f"magazakodu IN ({', '.join(map(str, store_ids))})")
+    where_sql = " AND ".join(where_clauses)
+
+    query = f"""
+    WITH base AS (
+        SELECT
+            urunkodu,
+            magazakodu,
+            tarih,
+            aktifPromosyonAdi AS promo_name,
+            promosyonVar,
+            satistutarikdvsiz,
+            satismiktari,
+            degerlenmisstok,
+            stok,
+            lag(promosyonVar, 1, 0) OVER (
+                PARTITION BY urunkodu, magazakodu
+                ORDER BY tarih
+            ) AS prev_promo
+        FROM {table_name}
+        WHERE promosyonVar IN (0,1)
+    ),
+
+    promo_blocks AS (
+        SELECT
+            *,
+            sum(promosyonVar = 1 AND prev_promo = 0) OVER (
+                PARTITION BY urunkodu, magazakodu
+                ORDER BY tarih
+            ) AS promo_block_id
+        FROM base
+        WHERE promosyonVar = 1
+    )
+
+    SELECT
+        urunkodu,
+        magazakodu,
+        anyLast(promo_name) AS promo_name,
+        min(tarih) AS start_date,
+        max(tarih) AS end_date,
+        sum(satistutarikdvsiz) AS promo_revenue,
+        sum(satismiktari) AS promo_units,
+        sum(
+            satismiktari *
+            if(stok > 0, degerlenmisstok / stok, 0)
+        ) AS total_cost,
+        countIf(stok <= 0) AS stockout_days
+    FROM promo_blocks
+    WHERE {where_sql}
+    GROUP BY urunkodu, magazakodu, promo_block_id
+    ORDER BY start_date DESC
+    """
+
+    rows = client.query(query).result_set
+    today = date.today()
+    history = []
+
+    for (
+        urunkodu,
+        magazakodu,
+        promo_name,
+        start_date,
+        end_date,
+        promo_revenue,
+        promo_units,
+        total_cost,
+        stockout_days
+    ) in rows:
+
+        start_d = start_date.date()
+        end_d = end_date.date()
+        promo_days = (end_d - start_d).days + 1
+
+        # Net profit
+        net_profit = promo_revenue - total_cost
+        margin_pct = (net_profit / promo_revenue * 100) if promo_revenue else 0
+
+        # Stock status
+        stock_status = "OOS" if stockout_days > 0 else "OK"
+
+        # Lost sales value (basit tahmini)
+        lost_sales_val = int((promo_revenue / promo_days) * stockout_days)
+
+        # Uplift hesaplama
+        # Basit mantık: promo süresi kadar önceki günlerin toplamı ile karşılaştır
+        pre_start = start_d - timedelta(days=promo_days)
+        pre_end = start_d - timedelta(days=1)
+
+        pre_query = f"""
+        SELECT
+            sum(satistutarikdvsiz) AS pre_revenue
+        FROM {table_name}
+        WHERE urunkodu = {urunkodu}
+          AND magazakodu = {magazakodu}
+          AND tarih BETWEEN '{pre_start}' AND '{pre_end}'
+        """
+        pre_rev_row = client.query(pre_query).first_row
+        pre_revenue = pre_rev_row[0] if pre_rev_row and pre_rev_row[0] else 0
+
+        uplift_val = promo_revenue - pre_revenue
+        uplift_pct = round((uplift_val / pre_revenue * 100) if pre_revenue else 0, 1)
+
+        history.append({
+            "date": f"{start_d:%d-%m-%Y} – {end_d:%d-%m-%Y}",
+            "name": promo_name,
+            "type": "PROMOTION",
+            "revenue": int(promo_revenue),
+            "profit": int(net_profit),
+            "marginPct": round(margin_pct, 1),
+            "promoUnits": int(promo_units),
+            "hadStockout": stockout_days > 0,
+            "stockoutDays": int(stockout_days),
+            "status": "Tamamlandi" if end_d < today else "Aktif",
+            "uplift": uplift_pct,
+            "upliftVal": int(uplift_val),
+            "stock": stock_status,
+            "lostSalesVal": lost_sales_val,
+            "forecast": random.randint(80, 100)  # Tahmini %80-100 arası
+        })
+
+    return {"history": history}
+
+
+def get_inventory_alerts(
+    client,
+    region_ids: List[str] | None = None,
+    store_ids: List[int] | None = None,
+    search: str | None = None,
+    limit: int = 100,
+    table_name: str = "demoVerileri"
+) -> dict:
+
+    where_clauses = ["1=1"]
+
+    if store_ids:
+        where_clauses.append(f"magazakodu IN ({','.join(str(s) for s in store_ids)})")
+
+    if region_ids:
+        region_list = ",".join([f"'{r}'" for r in region_ids])
+        where_clauses.append(f"cografi_bolge IN ({region_list})")
+
+
+    if search:
+        where_clauses.append(f"lower(urunismi) LIKE '%{search.lower()}%'")
+
+    where_sql = " AND ".join(where_clauses)
+
+    # ClickHouse sorgusu: stok seviyelerine göre uyarı tespiti
+    query = f"""
+    WITH base AS (
+        SELECT
+            urunkodu,
+            any(urunismi) AS product_name,
+            magazakodu,
+            any(bulundugusehir) AS city,
+            sum(stok) AS current_stock,
+            avg(roll_mean_21) AS forecasted_demand
+        FROM {table_name}
+        WHERE {where_sql}
+        GROUP BY urunkodu, magazakodu
+    )
+
+    SELECT
+        urunkodu,
+        product_name,
+        magazakodu,
+        city,
+        current_stock,
+        forecasted_demand,
+        -- stok uyarı tipleri
+        if(current_stock <= 0, 'stockout',
+           if(current_stock > forecasted_demand * 1.5, 'overstock',
+              if(current_stock <= forecasted_demand * 0.5, 'reorder',
+                 'ok'))) AS alert_type,
+        -- örnek eşik değerler
+        if(current_stock <= 0, 0, forecasted_demand * 0.5) AS threshold,
+        forecasted_demand AS forecasted_demand_metric,
+        'review' AS action_type
+    FROM base
+    WHERE alert_type != 'ok'
+    ORDER BY alert_type DESC
+    LIMIT {int(limit)}
+    """
+
+    rows = client.query(query).result_set
+
+    alerts = []
+    for urunkodu, product_name, magazakodu, city, current_stock, forecasted_demand, alert_type, threshold, forecast_metric, action_type in rows:
+        alerts.append({
+            "id": f"alert-INV-{urunkodu}-{magazakodu}",
+            "type": alert_type,
+            "sku": str(urunkodu),
+            "productName": product_name,
+            "storeName": f"{city} - {magazakodu}",
+            "message": f"Stok durumu uyarısı: {alert_type}",
+            "date": date.today().strftime("%b %d, %H:%M"),
+            "severity": "high" if alert_type == "stockout" else "medium" if alert_type == "reorder" else "low",
+            "metrics": {
+                "currentStock": current_stock,
+                "threshold": threshold,
+                "forecastedDemand": forecast_metric,
+                "transferSourceStore": None,
+                "transferQuantity": 0
+            },
+            "recommendation": "Stok durumu kontrol edilmeli.",
+            "actionType": action_type
+        })
+
+    return {"alerts": alerts}

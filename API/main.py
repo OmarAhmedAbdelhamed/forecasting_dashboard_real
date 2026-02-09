@@ -33,9 +33,13 @@ from omerApi_combined import (
     get_alerts_summary,
     get_alerts_growth_products,
     get_forecast_errors,
+    get_inventory_items,
+    get_inventory_stock_trends,
+    get_inventory_store_performance,
     get_inventory_alerts,
-    get_export_forecast,
-    get_promotions_export
+    get_forecast_promotion_history,
+    get_similar_campaigns,
+    get_forecast_calendar,
 )
 
 # Load environment variables
@@ -333,45 +337,29 @@ def api_get_alerts_summary(
         raise HTTPException(status_code=500, detail=f"Alerts Summary Error: {str(e)}")
 
 
-@app.get("/api/alerts/growth-products")
-def api_get_alerts_growth_products(
-    storeIds: Optional[List[str]] = Query(None),
-    type: str = "high",
-    search: Optional[str] = Query(None)
-):
-    """Get products with high or low growth for alerts"""
-    try:
-        client = get_client()
-        store_ids_int = [int(s) for s in storeIds] if storeIds else None
-        return get_alerts_growth_products(
-            client,
-            type_=type,
-            store_ids=store_ids_int,
-            search=search,
-            table_name=TABLE_NAME
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Growth Products Error: {str(e)}")
-
-
 @app.get("/api/alerts/inventory")
-def api_get_inventory_alerts_endpoint(
+def api_get_inventory_alerts(
     regionIds: Optional[List[str]] = Query(None),
     storeIds: Optional[List[str]] = Query(None),
-    search: Optional[str] = Query(None)
+    search: Optional[str] = Query(None),
+    limit: int = Query(100, ge=1, le=500),
 ):
-    """Get inventory alerts"""
+    """Get inventory stock alerts"""
     try:
         client = get_client()
-        store_ids_int = [int(s) for s in storeIds] if storeIds else None
+        s_ids = [int(s) for s in storeIds] if storeIds else None
+        
         return get_inventory_alerts(
             client,
             region_ids=regionIds,
-            store_ids=store_ids_int,
+            store_ids=s_ids,
             search=search,
+            limit=limit,
             table_name=TABLE_NAME
         )
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Inventory Alerts Error: {str(e)}")
 
 
@@ -513,6 +501,44 @@ def api_get_promotion_history(
     )
 
 
+@app.get("/api/forecast/similar-campaigns")
+def api_get_similar_campaigns(
+    promotionType: Optional[str] = Query(None),
+    productIds: Optional[List[str]] = Query(None),
+    limit: int = 5
+):
+    """Get similar past campaigns"""
+    client = get_client()
+    return get_similar_campaigns(
+        client,
+        table_name=TABLE_NAME,
+        promotion_type=promotionType,
+        product_ids=productIds,
+        limit=limit
+    )
+
+
+@app.get("/api/forecast/calendar")
+def api_get_forecast_calendar(
+    month: int = Query(..., description="Month (1-12)"),
+    year: int = Query(..., description="Year (e.g. 2024)"),
+    storeIds: Optional[List[str]] = Query(None),
+    includeFuture: bool = Query(False),
+    futureCount: int = Query(10, ge=1, le=60),
+):
+    """Get promotion calendar events"""
+    client = get_client()
+    return get_forecast_calendar(
+        client,
+        table_name=TABLE_NAME,
+        store_ids=storeIds,
+        month=month,
+        year=year,
+        include_future=includeFuture,
+        future_count=futureCount,
+    )
+
+
 # =============================================================================
 # INVENTORY ENDPOINTS
 # =============================================================================
@@ -528,15 +554,10 @@ def api_get_inventory_kpis(
     client = get_client()
     return get_inventory_kpis(
         client,
-        # Check signature: store_ids, category_ids, product_ids (no region_ids in signature?)
-        # omerApi_combined.get_inventory_kpis: (client, store_ids, category_ids, product_ids, table_name)
-        # It seems missing region_ids in the combined file signature?
-        # Let's check lines 1431-1437 of omerApi_combined.py
-        # yes: def get_inventory_kpis(client, store_ids=None, category_ids=None, product_ids=None, table_name="demoVerileri")
-        # So I will omit regionIds here.
-        store_ids=[int(s) for s in storeIds] if storeIds else None,
-        category_ids=[int(c) for c in categoryIds] if categoryIds else None,
-        product_ids=[int(p) for p in productIds] if productIds else None,
+        region_ids=regionIds,
+        store_ids=storeIds,
+        category_ids=categoryIds,
+        product_ids=productIds,
         table_name=TABLE_NAME
     )
 
@@ -547,21 +568,26 @@ def api_get_inventory_items(
     storeIds: Optional[List[str]] = Query(None),
     categoryIds: Optional[List[str]] = Query(None),
     productIds: Optional[List[str]] = Query(None),
+    status: Optional[str] = Query(None),
     page: int = 1,
     limit: int = 50,
+    sortBy: str = "stockValue",
+    sortOrder: str = "desc"
 ):
-    """Get inventory items list (store performance main)"""
+    """Get inventory items with pagination"""
     client = get_client()
-    # Mapped to get_inventory_store_performance_main which seems to be the main items list
-    return get_inventory_store_performance_main(
+    return get_inventory_items(
         client,
+        table_name=TABLE_NAME,
         region_ids=regionIds,
-        store_ids=[int(s) for s in storeIds] if storeIds else None,
-        category_ids=[int(c) for c in categoryIds] if categoryIds else None,
-        product_ids=[int(p) for p in productIds] if productIds else None,
+        store_ids=storeIds,
+        category_ids=categoryIds,
+        product_ids=productIds,
+        status=status,
         page=page,
         limit=limit,
-        table_name=TABLE_NAME
+        sort_by=sortBy,
+        sort_order=sortOrder
     )
 
 
@@ -573,86 +599,35 @@ def api_get_inventory_stock_trends(
     productIds: Optional[List[str]] = Query(None),
     days: int = 30
 ):
-    """Get stock vs forecast trends"""
+    """Get aggregated stock trends"""
     client = get_client()
     return get_inventory_stock_trends(
         client,
+        table_name=TABLE_NAME,
         region_ids=regionIds,
-        store_ids=[int(s) for s in storeIds] if storeIds else None,
-        category_ids=[int(c) for c in categoryIds] if categoryIds else None,
-        product_ids=[int(p) for p in productIds] if productIds else None,
-        days=days,
-        table_name=TABLE_NAME
+        store_ids=storeIds,
+        category_ids=categoryIds,
+        product_ids=productIds,
+        days=days
     )
 
 
 @app.get("/api/inventory/store-performance")
-def api_get_inventory_store_performance_endpoint(
+def api_get_inventory_store_performance(
     regionIds: Optional[List[str]] = Query(None),
     storeIds: Optional[List[str]] = Query(None),
     categoryIds: Optional[List[str]] = Query(None),
     productIds: Optional[List[str]] = Query(None),
 ):
-    """Get store efficiency performance"""
+    """Get store inventory performance"""
     client = get_client()
     return get_inventory_store_performance(
         client,
+        table_name=TABLE_NAME,
         region_ids=regionIds,
-        store_ids=[int(s) for s in storeIds] if storeIds else None,
-        category_ids=[int(c) for c in categoryIds] if categoryIds else None,
-        product_ids=[int(p) for p in productIds] if productIds else None,
-        table_name=TABLE_NAME
-    )
-
-
-# =============================================================================
-# EXPORT ENDPOINTS
-# =============================================================================
-
-@app.get("/api/export/forecast")
-def api_get_export_forecast(
-    regionIds: Optional[List[str]] = Query(None),
-    storeIds: Optional[List[str]] = Query(None),
-    categoryIds: Optional[List[str]] = Query(None),
-    search: Optional[str] = Query(None),
-    period: str = "monthly",
-    page: int = 1,
-    limit: int = 100
-):
-    """Export forecast data"""
-    client = get_client()
-    return get_export_forecast(
-        client,
-        region_ids=regionIds,
-        store_ids=[int(s) for s in storeIds] if storeIds else None,
-        reyon_ids=[int(c) for c in categoryIds] if categoryIds else None,
-        search=search,
-        period=period,
-        page=page,
-        limit=limit,
-        table_name=TABLE_NAME
-    )
-
-@app.get("/api/export/promotions")
-def api_get_export_promotions(
-    regionIds: Optional[List[str]] = Query(None),
-    storeIds: Optional[List[str]] = Query(None),
-    categoryIds: Optional[List[str]] = Query(None),
-    search: Optional[str] = Query(None),
-    page: int = 1,
-    limit: int = 100
-):
-    """Export promotion data"""
-    client = get_client()
-    return get_promotions_export(
-        client,
-        region_ids=regionIds,
-        store_ids=[int(s) for s in storeIds] if storeIds else None,
-        reyon_ids=[int(c) for c in categoryIds] if categoryIds else None,
-        search=search,
-        page=page,
-        limit=limit,
-        table_name=TABLE_NAME
+        store_ids=storeIds,
+        category_ids=categoryIds,
+        product_ids=productIds
     )
 
 

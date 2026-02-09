@@ -115,14 +115,21 @@ import {
   PROMOTIONS,
   REGIONS_FLAT as REGIONS,
   CATEGORIES,
-  SIMILAR_CAMPAIGNS,
   type SimilarCampaign,
-  PROMOTION_HISTORY_DATA,
 } from '@/data/mock-data';
 import { ExportPromotionModal } from '@/components/dashboard/modals/export-promotion-modal';
 import { CampaignCreationModal } from '@/components/dashboard/modals/campaign-creation-modal';
 import { PromotionCalendar } from '@/components/dashboard/visualizations/promotion-calendar';
 import { useToast } from '@/components/ui/shared/use-toast';
+import {
+  usePromotionHistory,
+  usePromotionCalendar,
+  useSimilarCampaigns,
+} from '@/services';
+import type {
+  SimilarCampaign as ApiSimilarCampaign,
+  PromotionHistory as ApiPromotionHistory,
+} from '@/services/types/api';
 
 // Custom X-Axis Tick Component for Weather
 const CustomizedAxisTick = (props: {
@@ -170,6 +177,95 @@ const CustomizedAxisTick = (props: {
       </text>
     </g>
   );
+};
+
+type PromotionHistoryRow = {
+  date: string;
+  name: string;
+  type: string;
+  uplift: string;
+  upliftVal: string;
+  profit: string;
+  roi: number;
+  stock: 'OK' | 'OOS' | 'Over';
+  forecast: string;
+  stockCostIncrease: string;
+  lostSalesVal: string;
+  status: 'draft' | 'pending' | 'approved' | 'completed';
+};
+
+const BACKEND_PROMO_TO_UI: Record<string, string> = {
+  HYBR: 'INTERNET_INDIRIMI',
+  KATALOG: 'ALISVERIS_INDIRIMI_500',
+  'GAZETE ILANI': 'OZEL_GUN_INDIRIMI',
+  LEAFLET: 'COKLU_ALIM',
+};
+
+const formatCurrencyCompact = (value: number) => {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '+';
+  if (abs >= 1000) {
+    return `${sign}₺${(abs / 1000).toFixed(1)}k`;
+  }
+  return `${sign}₺${Math.round(abs)}`;
+};
+
+const mapCampaignFromApi = (campaign: ApiSimilarCampaign): SimilarCampaign => {
+  const roiBase = Math.max(1, Math.abs(campaign.markdownCost));
+  const roi = Math.round(((campaign.actualRevenue - campaign.targetRevenue) / roiBase) * 100);
+
+  return {
+    ...campaign,
+    roi,
+    status: 'completed',
+    type: BACKEND_PROMO_TO_UI[campaign.type] || campaign.type,
+  };
+};
+
+const mapHistoryFromApi = (item: ApiPromotionHistory): PromotionHistoryRow => {
+  const stock = item.stock === 'OOS' ? 'OOS' : 'OK';
+  const status = item.forecast > 0 ? 'completed' : 'approved';
+  const stockCostIncrease = item.stockCostIncrease ?? 0;
+  const lostSalesVal = item.lostSalesVal ?? 0;
+  const upliftVal = item.upliftVal ?? 0;
+  const profit = item.profit ?? 0;
+
+  return {
+    date: item.date,
+    name: item.name,
+    type: BACKEND_PROMO_TO_UI[item.type] || item.type,
+    uplift: `${item.uplift >= 0 ? '+' : ''}${item.uplift.toFixed(1)}%`,
+    upliftVal: `₺${(upliftVal / 1000).toFixed(1)}k`,
+    profit: formatCurrencyCompact(profit),
+    roi: stockCostIncrease !== 0 ? Math.round((profit / Math.abs(stockCostIncrease)) * 100) : 0,
+    stock,
+    forecast: `${item.forecast}%`,
+    stockCostIncrease: `₺${Math.round(stockCostIncrease)}`,
+    lostSalesVal: `₺${Math.round(lostSalesVal)}`,
+    status,
+  };
+};
+
+const mapFutureRowsFromCalendar = (events: { date: string; promotions: { id: string; name: string; type: string; discount: number | null }[] }[]) => {
+  const now = new Date();
+  return events
+    .filter((event) => new Date(event.date) >= now)
+    .flatMap((event) =>
+      event.promotions.map((promotion) => ({
+        date: format(new Date(event.date), 'dd-MM-yyyy'),
+        name: promotion.name,
+        type: BACKEND_PROMO_TO_UI[promotion.type] || promotion.type,
+        uplift: promotion.discount !== null ? `+%${Math.max(0, promotion.discount)}` : '--',
+        upliftVal: '--',
+        profit: '--',
+        roi: 0,
+        stock: 'OK' as const,
+        forecast: '--',
+        stockCostIncrease: '--',
+        lostSalesVal: '--',
+        status: 'pending' as const,
+      })),
+    );
 };
 
 export function ForecastingSection() {
@@ -265,19 +361,215 @@ export function ForecastingSection() {
   const [isPlanningModalOpen, setIsPlanningModalOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] =
     useState<SimilarCampaign | null>(null);
+  const [trackingSearch, setTrackingSearch] = useState('');
+  const [trackingStatusFilter, setTrackingStatusFilter] = useState<
+    'all' | 'draft' | 'pending' | 'approved' | 'completed'
+  >('all');
+  const [trackingTypeFilter, setTrackingTypeFilter] = useState('all');
 
   const { toast } = useToast();
 
-  // Filter similar campaigns based on current promotion type
+  const numericStoreIds = useMemo(
+    () => magazaKodu.filter((value) => /^\d+$/.test(value)),
+    [magazaKodu],
+  );
+
+  const numericProductIds = useMemo(
+    () => urunKodu.filter((value) => /^\d+$/.test(value)),
+    [urunKodu],
+  );
+
+  const effectiveStoreIds =
+    numericStoreIds.length > 0 ? numericStoreIds : ['1054'];
+  const effectiveProductIds =
+    numericProductIds.length > 0 ? numericProductIds : ['30389579'];
+
+  const historyParams = useMemo(
+    () => ({
+      productIds: effectiveProductIds,
+      storeIds: effectiveStoreIds,
+      limit: 40,
+      enabled: true,
+    }),
+    [effectiveProductIds, effectiveStoreIds],
+  );
+
+  const similarCampaignParams = useMemo(
+    () => ({
+      productIds: effectiveProductIds,
+      limit: 20,
+      enabled: true,
+    }),
+    [effectiveProductIds],
+  );
+
+  const calendarParams = useMemo(
+    () => ({
+      month: new Date().getMonth() + 1,
+      year: new Date().getFullYear(),
+      storeIds: effectiveStoreIds,
+      includeFuture: true,
+      futureCount: 18,
+      enabled: true,
+    }),
+    [effectiveStoreIds],
+  );
+
+  const promotionHistoryQuery = usePromotionHistory(historyParams);
+  const similarCampaignsQuery = useSimilarCampaigns(similarCampaignParams);
+  const promotionCalendarQuery = usePromotionCalendar(calendarParams);
+
+  const backendSimilarCampaigns = useMemo(
+    () =>
+      (similarCampaignsQuery.data?.campaigns || []).map((campaign) =>
+        mapCampaignFromApi(campaign),
+      ),
+    [similarCampaignsQuery.data?.campaigns],
+  );
+
   const filteredCampaigns = useMemo(() => {
-    // If user selected generic 'KATALOG', show KATALOG campaigns. etc.
-    // For demo purposes, if no direct match, show top 3 by score.
-    const matches = SIMILAR_CAMPAIGNS.filter((c) => c.type === promosyon);
-    if (matches.length > 0) {
-      return matches;
+    const selectedType = promosyon;
+    const matches = backendSimilarCampaigns.filter(
+      (campaign) => campaign.type === selectedType,
+    );
+    return matches.length > 0 ? matches : backendSimilarCampaigns;
+  }, [backendSimilarCampaigns, promosyon]);
+
+  const historyRows = useMemo(
+    () =>
+      (promotionHistoryQuery.data?.history || []).map((item) =>
+        mapHistoryFromApi(item),
+      ),
+    [promotionHistoryQuery.data?.history],
+  );
+
+  const futureRows = useMemo(
+    () => mapFutureRowsFromCalendar(promotionCalendarQuery.data?.events || []),
+    [promotionCalendarQuery.data?.events],
+  );
+
+  const trackingRows = useMemo(() => {
+    const rows = [...futureRows, ...historyRows];
+    return rows.sort((a, b) => {
+      const statusOrder = {
+        pending: 0,
+        draft: 1,
+        approved: 2,
+        completed: 3,
+      };
+      return statusOrder[a.status] - statusOrder[b.status];
+    });
+  }, [futureRows, historyRows]);
+
+  const trackingTypeOptions = useMemo(() => {
+    return Array.from(new Set(trackingRows.map((row) => row.type))).sort();
+  }, [trackingRows]);
+
+  const filteredTrackingRows = useMemo(() => {
+    const query = trackingSearch.trim().toLowerCase();
+
+    return trackingRows.filter((row) => {
+      if (trackingStatusFilter !== 'all' && row.status !== trackingStatusFilter) {
+        return false;
+      }
+
+      if (trackingTypeFilter !== 'all' && row.type !== trackingTypeFilter) {
+        return false;
+      }
+
+      if (!query) {
+        return true;
+      }
+
+      const haystack = `${row.name} ${row.type} ${row.date}`.toLowerCase();
+      return haystack.includes(query);
+    });
+  }, [trackingRows, trackingSearch, trackingStatusFilter, trackingTypeFilter]);
+
+  const openCampaignDetail = (row: PromotionHistoryRow) => {
+    const upliftMatch = row.uplift.match(/-?\d+(\.\d+)?/);
+    const uplift = upliftMatch ? Number(upliftMatch[0]) : 0;
+    const targetRevenue = 100000;
+    const actualRevenue =
+      row.status === 'completed'
+        ? Math.round(targetRevenue * (1 + uplift / 100))
+        : 0;
+
+    setSelectedCampaign({
+      id: `row-${row.name}-${row.date}`,
+      name: row.name,
+      date: row.date,
+      type: row.type,
+      similarityScore: row.status === 'completed' ? 85 : 70,
+      lift: uplift,
+      roi: row.roi,
+      targetRevenue,
+      actualRevenue,
+      plannedStockDays: 14,
+      actualStockDays: row.stock === 'OOS' ? 10 : 14,
+      stockOutDays: row.stock === 'OOS' ? 2 : 0,
+      sellThrough: row.stock === 'OOS' ? 100 : 85,
+      markdownCost: Number(row.stockCostIncrease.replace(/[^0-9.-]/g, '')) || 0,
+      status: row.status,
+    });
+
+    setIsDetailModalOpen(true);
+  };
+
+  const modalData = useMemo(() => {
+    if (!selectedCampaign) {
+      return null;
     }
-    return SIMILAR_CAMPAIGNS.slice(0, 3); // Fallback
-  }, [promosyon]);
+
+    const targetRevenue = selectedCampaign.targetRevenue || 0;
+    const actualRevenue = selectedCampaign.actualRevenue || 0;
+    const achievementPct =
+      targetRevenue > 0 ? (actualRevenue / targetRevenue) * 100 : 0;
+    const isOOS = selectedCampaign.stockOutDays > 0;
+    const markdownCost = Math.abs(selectedCampaign.markdownCost || 0);
+    const sellThrough = Math.max(0, Math.min(100, selectedCampaign.sellThrough || 0));
+    const plannedDays = Math.max(1, selectedCampaign.plannedStockDays || 1);
+    const actualDays = Math.max(0, selectedCampaign.actualStockDays || 0);
+
+    const completedChartData = Array.from({ length: 7 }, (_, index) => {
+      const day = `Gn ${index + 1}`;
+      const base = targetRevenue / 7;
+      const actual = actualRevenue / 7;
+      const wave = 1 + Math.sin((index / 6) * Math.PI) * 0.18;
+      return {
+        day,
+        baseline: Math.round(base * (0.92 + index * 0.01)),
+        actual: Math.round(actual * wave),
+      };
+    });
+
+    const futureChartData = Array.from({ length: 7 }, (_, index) => {
+      const day = `Gn ${index + 1}`;
+      const base = targetRevenue / 7;
+      const liftRatio = 1 + (selectedCampaign.lift || 0) / 100;
+      const forecast = base * liftRatio * (0.94 + index * 0.012);
+      const stockBase = (targetRevenue / plannedDays) * (1.28 - index * 0.07);
+      return {
+        day,
+        baseline: Math.round(base * (0.95 + index * 0.01)),
+        forecast: Math.round(forecast),
+        stock: Math.max(0, Math.round(stockBase)),
+      };
+    });
+
+    return {
+      achievementPct,
+      isOOS,
+      markdownCost,
+      sellThrough,
+      plannedDays,
+      actualDays,
+      completedChartData,
+      futureChartData,
+      liftValue: Math.max(0, actualRevenue - targetRevenue),
+      stockCoveragePct: plannedDays > 0 ? Math.min(100, (actualDays / plannedDays) * 100) : 0,
+    };
+  }, [selectedCampaign]);
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -946,79 +1238,88 @@ export function ForecastingSection() {
 
                 {['success', 'failure'].map((tab) => (
                   <TabsContent key={tab} value={tab} className='space-y-2 mt-0'>
-                    {filteredCampaigns
-                      .filter((c) => {
-                        // Classification Logic
-                        const isSuccess =
-                          c.actualRevenue / c.targetRevenue >= 0.95 &&
-                          Math.abs(c.plannedStockDays - c.actualStockDays) <= 3;
-                        if (tab === 'success') return isSuccess;
-                        return !isSuccess;
-                      })
-                      .map((camp) => {
-                        const achievement =
-                          (camp.actualRevenue / camp.targetRevenue) * 100;
-                        const isStockIssue =
-                          camp.stockOutDays > camp.plannedStockDays / 2;
+                    {similarCampaignsQuery.isLoading ? (
+                      <div className='text-center text-[10px] text-muted-foreground py-4'>
+                        Geçmiş deneyim verisi yükleniyor...
+                      </div>
+                    ) : (
+                      <>
+                        {filteredCampaigns
+                          .filter((c) => {
+                            const isSuccess =
+                              c.actualRevenue / c.targetRevenue >= 0.95 &&
+                              Math.abs(c.plannedStockDays - c.actualStockDays) <=
+                                3;
+                            if (tab === 'success') return isSuccess;
+                            return !isSuccess;
+                          })
+                          .map((camp) => {
+                            const achievement =
+                              (camp.actualRevenue / camp.targetRevenue) * 100;
+                            const isStockIssue =
+                              camp.stockOutDays > camp.plannedStockDays / 2;
 
-                        return (
-                          <div
-                            key={camp.id}
-                            className={`bg-white border rounded-lg p-2 hover:shadow-sm transition-shadow ${tab === 'success' ? 'border-l-4 border-l-emerald-500' : 'border-l-4 border-l-red-500'}`}
-                          >
-                            <div className='flex justify-between items-start mb-1'>
-                              <div>
-                                <div className='font-semibold text-xs text-indigo-950'>
-                                  {camp.name}
+                            return (
+                              <div
+                                key={camp.id}
+                                className={`bg-white border rounded-lg p-2 hover:shadow-sm transition-shadow ${tab === 'success' ? 'border-l-4 border-l-emerald-500' : 'border-l-4 border-l-red-500'}`}
+                              >
+                                <div className='flex justify-between items-start mb-1'>
+                                  <div>
+                                    <div className='font-semibold text-xs text-indigo-950'>
+                                      {camp.name}
+                                    </div>
+                                    <div className='text-[10px] text-muted-foreground'>
+                                      {camp.date}
+                                    </div>
+                                  </div>
+                                  <Button
+                                    variant='ghost'
+                                    size='icon'
+                                    className='h-5 w-5'
+                                    onClick={() => {
+                                      setSelectedCampaign(camp);
+                                      setIsDetailModalOpen(true);
+                                    }}
+                                  >
+                                    <Eye className='h-3 w-3 text-muted-foreground' />
+                                  </Button>
                                 </div>
-                                <div className='text-[10px] text-muted-foreground'>
-                                  {camp.date}
+
+                                <div className='flex items-center gap-2 mt-2'>
+                                  {tab === 'success' ? (
+                                    <span className='text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full'>
+                                      %{achievement.toFixed(0)} Hedef Tutma
+                                    </span>
+                                  ) : (
+                                    <span
+                                      className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${isStockIssue ? 'text-red-700 bg-red-50' : 'text-orange-700 bg-orange-50'}`}
+                                    >
+                                      {isStockIssue
+                                        ? 'Erken Tükendi (OOS)'
+                                        : `%${achievement.toFixed(0)} Hedef Altı`}
+                                    </span>
+                                  )}
                                 </div>
                               </div>
-                              <Button
-                                variant='ghost'
-                                size='icon'
-                                className='h-5 w-5'
-                                onClick={() => {
-                                  setSelectedCampaign(camp);
-                                  setIsDetailModalOpen(true);
-                                }}
-                              >
-                                <Eye className='h-3 w-3 text-muted-foreground' />
-                              </Button>
-                            </div>
+                            );
+                          })}
 
-                            <div className='flex items-center gap-2 mt-2'>
-                              {tab === 'success' ? (
-                                <span className='text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full'>
-                                  %{achievement.toFixed(0)} Hedef Tutma
-                                </span>
-                              ) : (
-                                <span
-                                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full ${isStockIssue ? 'text-red-700 bg-red-50' : 'text-orange-700 bg-orange-50'}`}
-                                >
-                                  {isStockIssue
-                                    ? 'Erken Tükendi (OOS)'
-                                    : `%${achievement.toFixed(0)} Hedef Altı`}
-                                </span>
-                              )}
-                            </div>
+                        {filteredCampaigns.filter((c) => {
+                          const isSuccess =
+                            c.actualRevenue / c.targetRevenue >= 0.95 &&
+                            Math.abs(c.plannedStockDays - c.actualStockDays) <=
+                              3;
+                          if (tab === 'success') return isSuccess;
+                          return !isSuccess;
+                        }).length === 0 && (
+                          <div className='text-center text-[10px] text-muted-foreground py-4'>
+                            {tab === 'success'
+                              ? 'Kriterlere uygun başarı hikayesi bulunamadı.'
+                              : 'Kayıp fırsat bulunamadı.'}
                           </div>
-                        );
-                      })}
-
-                    {filteredCampaigns.filter((c) => {
-                      const isSuccess =
-                        c.actualRevenue / c.targetRevenue >= 0.95 &&
-                        Math.abs(c.plannedStockDays - c.actualStockDays) <= 3;
-                      if (tab === 'success') return isSuccess;
-                      return !isSuccess;
-                    }).length === 0 && (
-                      <div className='text-center text-[10px] text-muted-foreground py-4'>
-                        {tab === 'success'
-                          ? 'Kriterlere uygun başarı hikayesi bulunamadı.'
-                          : 'Kayıp fırsat bulunamadı.'}
-                      </div>
+                        )}
+                      </>
                     )}
                   </TabsContent>
                 ))}
@@ -1518,7 +1819,10 @@ export function ForecastingSection() {
               </div>
             ) : (
               <div className='h-[380px]'>
-                <PromotionCalendar />
+                <PromotionCalendar
+                  events={promotionCalendarQuery.data?.events || []}
+                  isLoading={promotionCalendarQuery.isLoading}
+                />
               </div>
             )}
           </div>
@@ -1842,6 +2146,61 @@ export function ForecastingSection() {
                   Geçmiş performanslar ve gelecek planlamaları
                 </CardDescription>
               </div>
+              <div className='flex items-center gap-2 flex-wrap justify-end'>
+                <Input
+                  value={trackingSearch}
+                  onChange={(e) => setTrackingSearch(e.target.value)}
+                  placeholder='Ara: kampanya, tip, tarih'
+                  className='h-8 w-[190px] text-xs'
+                />
+                <Select
+                  value={trackingStatusFilter}
+                  onValueChange={(value) =>
+                    setTrackingStatusFilter(
+                      value as 'all' | 'draft' | 'pending' | 'approved' | 'completed',
+                    )
+                  }
+                >
+                  <SelectTrigger className='h-8 w-[130px] text-xs'>
+                    <SelectValue placeholder='Durum' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='all'>Tüm Durumlar</SelectItem>
+                    <SelectItem value='pending'>Onay Bekliyor</SelectItem>
+                    <SelectItem value='draft'>Taslak</SelectItem>
+                    <SelectItem value='approved'>Onaylandı</SelectItem>
+                    <SelectItem value='completed'>Tamamlandı</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={trackingTypeFilter}
+                  onValueChange={setTrackingTypeFilter}
+                >
+                  <SelectTrigger className='h-8 w-[140px] text-xs'>
+                    <SelectValue placeholder='Tip' />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value='all'>Tüm Tipler</SelectItem>
+                    {trackingTypeOptions.map((typeOption) => (
+                      <SelectItem key={typeOption} value={typeOption}>
+                        {typeOption}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='h-8 text-xs'
+                  onClick={() => {
+                    setTrackingSearch('');
+                    setTrackingStatusFilter('all');
+                    setTrackingTypeFilter('all');
+                  }}
+                >
+                  Temizle
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className='p-0 2xl:p-1'>
               <div className='border-t'>
@@ -1867,70 +2226,12 @@ export function ForecastingSection() {
                     </tr>
                   </thead>
                   <tbody className='divide-y'>
-                    {[...PROMOTION_HISTORY_DATA]
-                      .sort((a, b) => {
-                        // Logic: Future (Pending > Draft > Approved) -> Past
-                        // First, simplified date comparison (assuming string dates are chronological or need parsing)
-                        // For Mock purposes, let's prioritize by Status Priority
-                        const statusOrder = {
-                          pending: 0,
-                          draft: 1,
-                          approved: 2,
-                          completed: 3,
-                        };
-                        return (
-                          (statusOrder[a.status as keyof typeof statusOrder] ??
-                            4) -
-                          (statusOrder[b.status as keyof typeof statusOrder] ??
-                            4)
-                        );
-                      })
-                      .map((row, i) => (
+                    {filteredTrackingRows.map((row, i) => (
                         <tr
-                          key={i}
+                          key={`${row.name}-${row.date}-${i}`}
                           className='group hover:bg-muted/30 transition-colors cursor-pointer'
                           onClick={() => {
-                            // Unified handler for all statuses
-                            setIsDetailModalOpen(true);
-
-                            if (row.status === 'completed') {
-                              setSelectedCampaign({
-                                id: 'mock-history-1',
-                                name: row.name,
-                                date: row.date,
-                                type: row.type,
-                                similarityScore: 85,
-                                lift: 15,
-                                roi: 120,
-                                targetRevenue: 110000,
-                                actualRevenue: 124500,
-                                plannedStockDays: 14,
-                                actualStockDays: 12,
-                                stockOutDays: 2,
-                                sellThrough: 98,
-                                markdownCost: 4200,
-                                status: 'completed',
-                              } as SimilarCampaign);
-                            } else {
-                              // For Future (Draft, Pending, Approved)
-                              setSelectedCampaign({
-                                id: 'mock-future-1',
-                                name: row.name,
-                                date: row.date,
-                                type: row.type,
-                                similarityScore: 90,
-                                lift: 22, // Projected Lift
-                                roi: 135, // Projected ROI
-                                targetRevenue: 145000,
-                                actualRevenue: 0, // Not started
-                                plannedStockDays: 14,
-                                actualStockDays: 0,
-                                stockOutDays: 0,
-                                sellThrough: 0,
-                                markdownCost: 4500, // Budget
-                                status: row.status, // key to differentiate view
-                              } as SimilarCampaign);
-                            }
+                            openCampaignDetail(row);
                           }}
                         >
                           <td className='p-2 2xl:p-3 font-medium text-gray-700'>
@@ -2042,24 +2343,7 @@ export function ForecastingSection() {
                                   className='h-6 w-6 p-0 hover:bg-blue-50 hover:text-blue-600'
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    setIsDetailModalOpen(true);
-                                    setSelectedCampaign({
-                                      id: 'mock-future-1',
-                                      name: row.name,
-                                      date: row.date,
-                                      type: row.type,
-                                      similarityScore: 90,
-                                      lift: 22,
-                                      roi: 135,
-                                      targetRevenue: 145000,
-                                      actualRevenue: 0,
-                                      plannedStockDays: 14,
-                                      actualStockDays: 0,
-                                      stockOutDays: 0,
-                                      sellThrough: 0,
-                                      markdownCost: 4500,
-                                      status: row.status,
-                                    } as SimilarCampaign);
+                                    openCampaignDetail(row);
                                   }}
                                 >
                                   <Eye className='w-3 h-3' />
@@ -2085,6 +2369,16 @@ export function ForecastingSection() {
                           </td>
                         </tr>
                       ))}
+                    {filteredTrackingRows.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={8}
+                          className='p-4 text-center text-xs text-muted-foreground'
+                        >
+                          Filtrelere uygun promosyon kaydı bulunamadı.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -2095,7 +2389,7 @@ export function ForecastingSection() {
       <ExportPromotionModal
         open={isExportModalOpen}
         onOpenChange={setIsExportModalOpen}
-        initialData={PROMOTION_HISTORY_DATA}
+        initialData={trackingRows}
       />
 
       <CampaignCreationModal
@@ -2163,13 +2457,13 @@ export function ForecastingSection() {
                     </span>
                     {/* Stamp Logic */}
                     {(() => {
-                      const achievement = 1.12; // Mock: 112%
-                      const isOOS = true; // Mock: Stockout happened
+                      const achievement = (modalData?.achievementPct || 0) / 100;
+                      const isOOS = modalData?.isOOS || false;
 
                       if (achievement >= 0.95 && !isOOS)
                         return (
                           <span className='bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded border border-emerald-200'>
-                            BAŞARILI (%92)
+                            BAŞARILI (%{(achievement * 100).toFixed(0)})
                           </span>
                         );
                       if (isOOS)
@@ -2203,16 +2497,21 @@ export function ForecastingSection() {
                         Gerçekleşen Ciro
                       </div>
                       <div className='text-2xl font-bold text-gray-900'>
-                        ₺124.5k
+                        ₺{((selectedCampaign.actualRevenue || 0) / 1000).toFixed(1)}k
                       </div>
                       <div className='w-full bg-gray-200 rounded-full h-1.5 mt-2 overflow-hidden'>
                         <div
                           className='bg-emerald-500 h-1.5 rounded-full'
-                          style={{ width: '100%' }}
+                          style={{
+                            width: `${Math.max(
+                              8,
+                              Math.min(100, modalData?.achievementPct || 0),
+                            ).toFixed(0)}%`,
+                          }}
                         ></div>
                       </div>
                       <div className='text-[10px] font-medium text-emerald-600 mt-1'>
-                        Hedefin %112&apos;si
+                        Hedefin %{(modalData?.achievementPct || 0).toFixed(0)}&apos;si
                       </div>
                     </div>
                     <div className='bg-muted/30 p-3 rounded-lg border'>
@@ -2220,19 +2519,24 @@ export function ForecastingSection() {
                         Satılan Adet
                       </div>
                       <div className='text-2xl font-bold text-gray-900'>
-                        5.200{' '}
+                        {Math.round((selectedCampaign.actualRevenue || 0) / baseSatisFiyati).toLocaleString('tr-TR')}{' '}
                         <span className='text-sm font-normal text-muted-foreground'>
                           Adet
                         </span>
                       </div>
                       <div className='w-full bg-gray-200 rounded-full h-1.5 mt-2 overflow-hidden'>
                         <div
-                          className='bg-red-500 h-1.5 rounded-full'
-                          style={{ width: '98%' }}
+                          className={`${(modalData?.sellThrough || 0) > 90 ? 'bg-red-500' : 'bg-emerald-500'} h-1.5 rounded-full`}
+                          style={{
+                            width: `${Math.max(
+                              8,
+                              Math.min(100, modalData?.sellThrough || 0),
+                            ).toFixed(0)}%`,
+                          }}
                         ></div>
                       </div>
                       <div className='text-[10px] font-medium text-red-600 mt-1'>
-                        Stokların %98&apos;i tükendi (Sell-Through)
+                        Stokların %{(modalData?.sellThrough || 0).toFixed(0)}&apos;i tükendi (Sell-Through)
                       </div>
                     </div>
                     <div className='bg-muted/30 p-3 rounded-lg border'>
@@ -2240,11 +2544,21 @@ export function ForecastingSection() {
                         İndirim Maliyeti (Markdown)
                       </div>
                       <div className='text-2xl font-bold text-gray-900'>
-                        ₺4.2k
+                        ₺{((modalData?.markdownCost || 0) / 1000).toFixed(1)}k
                       </div>
                       <div className='h-1.5 mt-2'></div>
                       <div className='text-[10px] text-muted-foreground mt-1'>
-                        Birim başı ₺0.8 maliyet
+                        Birim başı ₺
+                        {(
+                          (modalData?.markdownCost || 0) /
+                          Math.max(
+                            1,
+                            Math.round(
+                              (selectedCampaign.actualRevenue || 0) / baseSatisFiyati,
+                            ),
+                          )
+                        ).toFixed(2)}{' '}
+                        maliyet
                       </div>
                     </div>
                   </div>
@@ -2268,15 +2582,7 @@ export function ForecastingSection() {
                     </div>
                     <ResponsiveContainer width='100%' height='100%'>
                       <LineChart
-                        data={[
-                          { day: 'Gn 1', baseline: 4000, actual: 4200 },
-                          { day: 'Gn 2', baseline: 4200, actual: 4800 },
-                          { day: 'Gn 3', baseline: 4100, actual: 6500 },
-                          { day: 'Gn 4', baseline: 3800, actual: 7200 },
-                          { day: 'Gn 5', baseline: 4500, actual: 8900 },
-                          { day: 'Gn 6', baseline: 4600, actual: 12000 },
-                          { day: 'Gn 7', baseline: 5000, actual: 5500 },
-                        ]}
+                        data={modalData?.completedChartData || []}
                       >
                         <CartesianGrid
                           strokeDasharray='3 3'
@@ -2339,18 +2645,27 @@ export function ForecastingSection() {
                         Sonuç Analizi
                       </h4>
                       <p className='text-xs leading-relaxed text-indigo-800'>
-                        Kampanya hedeflenen cironun üzerine çıktı{' '}
-                        <span className='font-bold'>(+%12)</span>. Ancak{' '}
-                        <span className='font-bold border-b border-indigo-300'>
-                          Stok Planlaması yetersiz kaldı
-                        </span>
-                        ; ürünler son 2 gün kala tükendiği için tahmini 15.000
-                        TL ciro kaybı (Lost Sales) oluştu.
+                        Kampanya hedefe göre{' '}
+                        <span className='font-bold'>
+                          %{(modalData?.achievementPct || 0).toFixed(0)}
+                        </span>{' '}
+                        gerçekleşti.{' '}
+                        {modalData?.isOOS ? (
+                          <>
+                            <span className='font-bold border-b border-indigo-300'>
+                              Stok kesintisi gözlendi
+                            </span>{' '}
+                            ve {selectedCampaign.stockOutDays} gün stok-out oluştu.
+                          </>
+                        ) : (
+                          <>Stok planı kampanya boyunca stabil kaldı.</>
+                        )}
                         <br />
                         <br />
-                        <span className='font-bold'>Öneri:</span> Gelecek sene
-                        benzer dönemde stok adedini %20 artırarak planlama
-                        yapılması önerilir.
+                        <span className='font-bold'>Öneri:</span>{' '}
+                        {modalData?.isOOS
+                          ? 'Benzer kampanyada planlanan stok gününü artırın ve mağaza içi transfer tamponu ekleyin.'
+                          : 'Mevcut fiyatlama kurgusu korunarak benzer dönemde tekrar uygulanabilir.'}
                       </p>
                     </div>
                   </div>
@@ -2430,11 +2745,11 @@ export function ForecastingSection() {
                         Beklenen Ciro & Lift
                       </div>
                       <div className='text-2xl font-bold text-indigo-900'>
-                        ₺145.0k
+                        ₺{((selectedCampaign.targetRevenue || 0) / 1000).toFixed(1)}k
                       </div>
                       <div className='text-[10px] font-medium text-emerald-600 mt-1 flex items-center gap-1'>
                         <TrendingUp className='w-3 h-3' />
-                        +₺32k Lift Beklentisi
+                        +₺{((modalData?.liftValue || 0) / 1000).toFixed(1)}k Lift Beklentisi
                       </div>
                     </div>
                     <div className='bg-white p-3 rounded-lg border shadow-sm'>
@@ -2442,10 +2757,10 @@ export function ForecastingSection() {
                         Yatırım Maliyeti
                       </div>
                       <div className='text-2xl font-bold text-gray-900'>
-                        ₺4.5k
+                        ₺{((modalData?.markdownCost || 0) / 1000).toFixed(1)}k
                       </div>
                       <div className='text-[10px] font-medium text-muted-foreground mt-1'>
-                        %9 İndirim Oranı ile
+                        %{Math.max(0, selectedCampaign.lift).toFixed(0)} lift varsayımı ile
                       </div>
                     </div>
                     <div className='bg-white p-3 rounded-lg border shadow-sm'>
@@ -2453,10 +2768,10 @@ export function ForecastingSection() {
                         Stok Yeterliliği
                       </div>
                       <div className='text-2xl font-bold text-emerald-600'>
-                        %100
+                        %{(modalData?.stockCoveragePct || 0).toFixed(0)}
                       </div>
                       <div className='text-[10px] font-medium text-muted-foreground mt-1'>
-                        Gerekli: 5.0k / Mevcut: 5.2k
+                        Gerekli: {modalData?.plannedDays || 0} gün / Mevcut: {modalData?.actualDays || 0} gün
                       </div>
                     </div>
                   </div>
@@ -2484,50 +2799,7 @@ export function ForecastingSection() {
                     </div>
                     <ResponsiveContainer width='100%' height='100%'>
                       <ComposedChart
-                        data={[
-                          {
-                            day: 'Gn 1',
-                            baseline: 4000,
-                            forecast: 4200,
-                            stock: 8000,
-                          },
-                          {
-                            day: 'Gn 2',
-                            baseline: 4200,
-                            forecast: 4800,
-                            stock: 7500,
-                          },
-                          {
-                            day: 'Gn 3',
-                            baseline: 4100,
-                            forecast: 7500,
-                            stock: 7000,
-                          }, // Peak
-                          {
-                            day: 'Gn 4',
-                            baseline: 3800,
-                            forecast: 6200,
-                            stock: 6500,
-                          },
-                          {
-                            day: 'Gn 5',
-                            baseline: 4500,
-                            forecast: 5900,
-                            stock: 6000,
-                          },
-                          {
-                            day: 'Gn 6',
-                            baseline: 4600,
-                            forecast: 6000,
-                            stock: 5500,
-                          },
-                          {
-                            day: 'Gn 7',
-                            baseline: 5000,
-                            forecast: 5500,
-                            stock: 5200,
-                          },
-                        ]}
+                        data={modalData?.futureChartData || []}
                       >
                         <CartesianGrid
                           strokeDasharray='3 3'
@@ -2582,17 +2854,22 @@ export function ForecastingSection() {
                     <div className='space-y-1'>
                       <div className='flex items-center gap-2'>
                         <h4 className='text-sm font-bold text-emerald-900'>
-                          DÜŞÜK RİSK
+                          {selectedCampaign.stockOutDays > 0 ? 'ORTA RİSK' : 'DÜŞÜK RİSK'}
                         </h4>
                         <span className='text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded'>
-                          AI Güven Skoru: 95/100
+                          AI Güven Skoru: {Math.max(55, 100 - selectedCampaign.stockOutDays * 10)}/100
                         </span>
                       </div>
                       <p className='text-xs text-emerald-800 leading-relaxed'>
-                        Bu kampanya planı, mevsimsellik verilerine göre uygun
-                        görünüyor. Stok seviyesi talebi karşılamak için yeterli
-                        (%100 doluluk). Simüle edilen brüt kar marjı hedefin
-                        üzerinde.
+                        Bu kampanya planı benzer kampanya performansına göre
+                        değerlendirildi. Tahmini ciro{' '}
+                        <span className='font-semibold'>
+                          ₺{((selectedCampaign.targetRevenue || 0) / 1000).toFixed(1)}k
+                        </span>{' '}
+                        seviyesinde.{' '}
+                        {selectedCampaign.stockOutDays > 0
+                          ? `Stok kesinti riski ${selectedCampaign.stockOutDays} gün olarak görünüyor.`
+                          : 'Stok yeterliliği planlanan gün sayısını karşılıyor.'}
                       </p>
                     </div>
                   </div>
