@@ -7,15 +7,21 @@ interface UsePromotionCalendarParams {
   month: number;
   year: number;
   storeIds?: string[];
+  includeFuture?: boolean;
+  futureCount?: number;
+  enabled?: boolean;
 }
 
 /**
  * Hook to fetch promotion calendar
  */
 export function usePromotionCalendar(params: UsePromotionCalendarParams) {
+  const { enabled = true, ...queryParams } = params;
+
   return useQuery({
     queryKey: ['promotion-calendar', params],
-    queryFn: () => forecastingApi.getPromotionCalendar(params),
+    queryFn: () => forecastingApi.getPromotionCalendar(queryParams),
     staleTime: 1000 * 60 * 5, // 5 minutes
+    enabled,
   });
 }

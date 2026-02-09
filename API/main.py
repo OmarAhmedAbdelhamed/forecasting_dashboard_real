@@ -479,6 +479,8 @@ def api_get_forecast_calendar(
     month: int = Query(..., description="Month (1-12)"),
     year: int = Query(..., description="Year (e.g. 2024)"),
     storeIds: Optional[List[str]] = Query(None),
+    includeFuture: bool = Query(False),
+    futureCount: int = Query(10, ge=1, le=60),
 ):
     """Get promotion calendar events"""
     client = get_client()
@@ -487,7 +489,9 @@ def api_get_forecast_calendar(
         table_name=TABLE_NAME,
         store_ids=storeIds,
         month=month,
-        year=year
+        year=year,
+        include_future=includeFuture,
+        future_count=futureCount,
     )
 
 

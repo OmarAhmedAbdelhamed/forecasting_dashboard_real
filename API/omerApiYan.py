@@ -1567,6 +1567,8 @@ def get_forecast_calendar(
     store_ids: Optional[List[str]] = None,
     month: int = None,
     year: int = None,
+    include_future: bool = False,
+    future_count: int = 10,
 ) -> dict:
     """
     GET /api/forecast/calendar
@@ -1575,9 +1577,7 @@ def get_forecast_calendar(
     if month is None or year is None:
         raise ValueError("month ve year zorunludur")
 
-    where_clauses = [
-        "aktifPromosyonKodu IS NOT NULL"
-    ]
+    where_clauses = ["aktifPromosyonKodu IS NOT NULL"]
 
     # 🔴 FIX: magazakodu UInt → toString + lower
     if store_ids:
@@ -1628,10 +1628,82 @@ def get_forecast_calendar(
             "discount": int(discount) if discount is not None else None
         })
 
+    if include_future:
+        hist_where_clauses = ["aktifPromosyonKodu IS NOT NULL", "tarih >= today() - 365"]
+
+        if store_ids:
+            store_list = ", ".join(f"'{s.lower()}'" for s in store_ids)
+            hist_where_clauses.append(f"lower(toString(magazakodu)) IN ({store_list})")
+
+        hist_where_sql = " AND ".join(hist_where_clauses)
+
+        history_query = f"""
+            SELECT
+                any(aktifPromosyonAdi) AS promo_name,
+                multiIf(
+                    KATALOG = 1, 'Katalog',
+                    LEAFLET = 1, 'Leaflet',
+                    `GAZETE ILANI` = 1, 'Gazete İlanı',
+                    `Hybris % Kampanya` = 1, 'Hybris % Kampanya',
+                    HYBR = 1, 'Hybrid',
+                    'Diğer'
+                ) AS promo_type,
+                round(avg(indirimYuzdesi), 0) AS avg_discount,
+                count() AS freq
+            FROM {table_name}
+            WHERE {hist_where_sql}
+            GROUP BY promo_type, aktifPromosyonAdi
+            ORDER BY freq DESC
+            LIMIT 12
+        """
+
+        history_rows = client.query(history_query).result_rows
+
+        promo_pool = [
+            {
+                "name": r[0] or "Tayin edilmedi",
+                "type": r[1] or "Diğer",
+                "discount": int(r[2]) if r[2] is not None else 10,
+            }
+            for r in history_rows
+        ]
+
+        if not promo_pool:
+            promo_pool = [
+                {"name": "Mağ.İçi Akt-FMCG", "type": "Diğer", "discount": 12},
+                {"name": "HYBR", "type": "Hybrid", "discount": 9},
+                {"name": "GAZETE ILANI", "type": "Gazete İlanı", "discount": 15},
+                {"name": "LEAFLET", "type": "Leaflet", "discount": 10},
+            ]
+
+        today = date.today()
+        generation_count = max(1, min(int(future_count or 10), 60))
+
+        for i in range(generation_count):
+            template = random.choice(promo_pool)
+            start_offset = random.randint(1, 30)
+            duration = random.randint(2, 8)
+            start_day = today + timedelta(days=start_offset)
+
+            discount_base = template["discount"] if template["discount"] is not None else 10
+            discount_value = int(max(-10, min(70, discount_base + random.randint(-4, 4))))
+
+            for day_offset in range(duration):
+                event_day = start_day + timedelta(days=day_offset)
+                date_key = event_day.isoformat()
+                calendar_map.setdefault(date_key, []).append(
+                    {
+                        "id": f"FUT-{i + 1}",
+                        "name": template["name"],
+                        "type": template["type"],
+                        "discount": discount_value,
+                    }
+                )
+
     return {
         "events": [
             {"date": d, "promotions": promos}
-            for d, promos in calendar_map.items()
+            for d, promos in sorted(calendar_map.items(), key=lambda x: x[0])
         ]
     }
 
