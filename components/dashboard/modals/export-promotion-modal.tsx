@@ -38,6 +38,7 @@ import {
   REYONLAR,
   type PromotionHistoryItem,
 } from '@/data/mock-data';
+import * as XLSX from 'xlsx';
 
 // --- MOCK DATA GENERATOR ---
 const CAMPAIGN_NAMES = [
@@ -184,25 +185,47 @@ export function ExportPromotionModal({
   const transformToModalData = (
     data: PromotionHistoryItem[],
   ): PromotionData[] => {
-    return data.map((item, i) => ({
-      id: `PROMO-HIST-${i}`,
-      date: item.date,
-      name: item.name,
-      type: item.type,
-      region: 'Tüm Bölgeler', // Default as these are not in PromotionHistoryItem but expected in modal
-      store: 'Tüm Mağazalar', // Default
-      category: 'Çeşitli', // Default
-      uplift: parseFloat(item.uplift.replace('%', '').replace('+', '')),
-      upliftVal:
-        parseFloat(item.upliftVal.replace('₺', '').replace('k', '')) * 1000,
-      profit: parseFloat(
-        item.profit.replace('₺', '').replace('k', '').replace('+', ''),
-      ),
-      roi: item.roi,
-      stock: item.stock,
-      forecast: parseFloat(item.forecast.replace('%', '')),
-      status: item.status || 'completed',
-    }));
+    const parseNumber = (value: string) => {
+      const normalized = value.replace(',', '.');
+      const parsed = parseFloat(normalized);
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    const clampPercent = (value: number) =>
+      Math.max(0, Math.min(100, value));
+
+    return data.map((item, i) => {
+      const extended = item as PromotionHistoryItem & {
+        region?: string;
+        storeCode?: number | string | null;
+        storeLabel?: string;
+        store?: string;
+        category?: string;
+      };
+
+      return {
+        id: `PROMO-HIST-${i}`,
+        date: item.date,
+        name: item.name,
+        type: item.type,
+        // Prefer backend/context values from tracking rows.
+        region: extended.region ?? 'Bilinmiyor',
+        store:
+          extended.storeCode !== undefined && extended.storeCode !== null
+            ? String(extended.storeCode)
+            : (extended.storeLabel ?? extended.store ?? 'Bilinmiyor'),
+        category: extended.category ?? 'Bilinmiyor',
+        uplift: parseNumber(item.uplift.replace('%', '').replace('+', '')),
+        upliftVal:
+          parseNumber(item.upliftVal.replace('₺', '').replace('k', '')) * 1000,
+        profit: parseNumber(
+          item.profit.replace('₺', '').replace('k', '').replace('+', ''),
+        ),
+        roi: item.roi,
+        stock: item.stock,
+        forecast: clampPercent(parseNumber(item.forecast.replace('%', ''))),
+        status: item.status || 'completed',
+      };
+    });
   };
 
   // Generate or use provided data
@@ -212,6 +235,49 @@ export function ExportPromotionModal({
     }
     return generateMockPromotionData(100);
   }, [initialData]);
+
+  // Build filter option lists from actual modal data to avoid mock-value mismatches
+  const dynamicRegionOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          MOCK_DATA.map((item) => item.region).filter(
+            (value) => typeof value === 'string' && value.trim() !== '',
+          ),
+        ),
+      )
+        .sort((a, b) => a.localeCompare(b, 'tr'))
+        .map((value) => ({ value, label: value })),
+    [MOCK_DATA],
+  );
+
+  const dynamicStoreOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          MOCK_DATA.map((item) => item.store).filter(
+            (value) => typeof value === 'string' && value.trim() !== '',
+          ),
+        ),
+      )
+        .sort((a, b) => a.localeCompare(b, 'tr'))
+        .map((value) => ({ value, label: value })),
+    [MOCK_DATA],
+  );
+
+  const dynamicCategoryOptions = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          MOCK_DATA.map((item) => item.category).filter(
+            (value) => typeof value === 'string' && value.trim() !== '',
+          ),
+        ),
+      )
+        .sort((a, b) => a.localeCompare(b, 'tr'))
+        .map((value) => ({ value, label: value })),
+    [MOCK_DATA],
+  );
 
   // Filtering Logic
   const filteredData = useMemo(() => {
@@ -223,24 +289,15 @@ export function ExportPromotionModal({
 
       const matchesRegion =
         selectedRegions.length === 0 ||
-        selectedRegions.some((r) => {
-          const label = REGIONS.find((reg) => reg.value === r)?.label;
-          return label && item.region === label;
-        });
+        selectedRegions.includes(item.region);
 
       const matchesStore =
         selectedStores.length === 0 ||
-        selectedStores.some((s) => {
-          const label = STORES.find((store) => store.value === s)?.label;
-          return item.store === label?.split(' - ')[1];
-        });
+        selectedStores.includes(item.store);
 
       const matchesReyon =
         selectedReyonlar.length === 0 ||
-        selectedReyonlar.some((k) => {
-          const label = REYONLAR.find((cat) => cat.value === k)?.label;
-          return label && item.category === label;
-        });
+        selectedReyonlar.includes(item.category);
 
       const matchesStatus =
         selectedStatuses.length === 0 ||
@@ -311,44 +368,36 @@ export function ExportPromotionModal({
     }
   };
 
-  // Export Functionality (Mock CSV)
+  // Export Functionality (.xlsx to avoid CSV delimiter/encoding issues in Excel)
   const handleExport = () => {
     const rowsToExport = filteredData.filter((d) => selectedRows.has(d.id));
     if (rowsToExport.length === 0) {return;}
 
-    // Excel Logic: Add 'VERİ TİPİ' (Data Type)
-    // Header
-    const headers = [
+    const headerRow = [
       'VERİ TİPİ',
-      ...visibleColumns.map((colId) => ALL_COLUMNS.find((c) => c.id === colId)?.label)
-    ].join(',');
+      ...visibleColumns.map(
+        (colId) => ALL_COLUMNS.find((c) => c.id === colId)?.label ?? colId,
+      ),
+    ];
 
-    const csvRows = rowsToExport.map((row) => {
+    const dataRows = rowsToExport.map((row) => {
       // Determine Data Type
       const dataType = row.status === 'completed' ? 'Gerçekleşen' : 'Tahmin';
 
-      const rowData = visibleColumns
-        .map((colId) => {
+      return [
+        dataType,
+        ...visibleColumns.map((colId) => {
           const val = row[colId as keyof PromotionData];
-          return typeof val === 'string' && val.includes(',')
-            ? `"${val}"`
-            : val;
-        })
-        .join(',');
-
-      return `${dataType},${rowData}`;
+          return val ?? '';
+        }),
+      ];
     });
 
-    const csvContent = [headers, ...csvRows].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'promotion_export_bee2ai.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const worksheet = XLSX.utils.aoa_to_sheet([headerRow, ...dataRows]);
+    worksheet['!cols'] = headerRow.map(() => ({ wch: 18 }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Promosyon Export');
+    XLSX.writeFile(workbook, 'promotion_export_bee2ai.xlsx', { compression: true });
 
     onOpenChange(false);
   };
@@ -432,7 +481,7 @@ export function ExportPromotionModal({
                     Bölge
                   </Label>
                   <MultiSelect
-                    options={REGIONS}
+                    options={dynamicRegionOptions}
                     selected={selectedRegions}
                     onChange={setSelectedRegions}
                     placeholder='Tüm Bölgeler'
@@ -443,7 +492,7 @@ export function ExportPromotionModal({
                     Mağaza
                   </Label>
                   <MultiSelect
-                    options={STORES}
+                    options={dynamicStoreOptions}
                     selected={selectedStores}
                     onChange={setSelectedStores}
                     placeholder='Tüm Mağazalar'
@@ -454,7 +503,7 @@ export function ExportPromotionModal({
                     Reyon
                   </Label>
                   <MultiSelect
-                    options={REYONLAR}
+                    options={dynamicCategoryOptions}
                     selected={selectedReyonlar}
                     onChange={setSelectedReyonlar}
                     placeholder='Tüm Reyonlar'

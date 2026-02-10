@@ -234,6 +234,13 @@ export function DemandForecastingSection() {
     return value.toLocaleString('tr-TR');
   };
 
+  const formatTrendAxisTick = (value: number) => {
+    if (value >= 1000) {
+      return `${(value / 1000).toFixed(1)}k`;
+    }
+    return Math.round(value).toLocaleString('tr-TR');
+  };
+
   const periodDays = useMemo(() => {
     const parsed = Number(selectedPeriod);
     return Number.isFinite(parsed) && parsed > 0 ? parsed : 30;
@@ -254,6 +261,13 @@ export function DemandForecastingSection() {
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
+      const errorMessages: string[] = [];
+
+      const getErrorMessage = (error: unknown) => {
+        if (error instanceof Error) return error.message;
+        return 'Bilinmeyen bir hata oluştu.';
+      };
+
       try {
         // Tables are defined as "month over month" style insights; keep them stable at 30 days
         // even when the main period selector is 180/365+.
@@ -269,19 +283,23 @@ export function DemandForecastingSection() {
         };
 
         // Fetch KPIs
-        const kpiRes = await demandApi.getKPIs(filterParams);
-        if (kpiRes) {
-          setKpis(kpiRes);
-          console.log(
-            'DemandForecastingSection: KPIs API Response:',
-            kpiRes,
-            'filters:',
-            filterParams,
-          );
+        try {
+          const kpiRes = await demandApi.getKPIs(filterParams);
+          if (kpiRes) {
+            setKpis(kpiRes);
+            console.log(
+              'DemandForecastingSection: KPIs API Response:',
+              kpiRes,
+              'filters:',
+              filterParams,
+            );
+          }
+        } catch (error) {
+          errorMessages.push(`KPI: ${getErrorMessage(error)}`);
         }
 
         // Fetch tables (parallel for better performance)
-        const [growthRes, errorRes] = await Promise.all([
+        const [growthRes, errorRes] = await Promise.allSettled([
           demandApi.getGrowthProducts({
             storeIds: filterParams.storeIds,
             categoryIds: filterParams.categoryIds,
@@ -298,11 +316,15 @@ export function DemandForecastingSection() {
           }),
         ]);
 
-        if (growthRes?.products) {
-          setGrowthProductsState(growthRes.products);
+        if (growthRes.status === 'fulfilled' && growthRes.value?.products) {
+          setGrowthProductsState(growthRes.value.products);
+        } else if (growthRes.status === 'rejected') {
+          errorMessages.push(`Büyüme Tablosu: ${getErrorMessage(growthRes.reason)}`);
         }
-        if (errorRes?.products) {
-          setErrorProductsState(errorRes.products);
+        if (errorRes.status === 'fulfilled' && errorRes.value?.products) {
+          setErrorProductsState(errorRes.value.products);
+        } else if (errorRes.status === 'rejected') {
+          errorMessages.push(`Hata Tablosu: ${getErrorMessage(errorRes.reason)}`);
         }
 
         // Aggregate charts - fetch always with current filters
@@ -312,26 +334,41 @@ export function DemandForecastingSection() {
           categoryIds: filterParams.categoryIds,
         };
 
-        const [trendRes, biasRes, yearRes] = await Promise.all([
+        const [trendRes, biasRes, yearRes] = await Promise.allSettled([
           demandApi.getTrendForecast({
             ...detailParams,
             period: granularity,
+            daysPast: periodDays,
+            daysFuture: periodDays,
           }),
           demandApi.getMonthlyBias(detailParams),
           demandApi.getYearComparison(detailParams),
         ]);
 
-        if (trendRes?.data) {
-          setTrendDataState(trendRes.data);
+        if (trendRes.status === 'fulfilled' && trendRes.value?.data) {
+          setTrendDataState(trendRes.value.data);
+        } else if (trendRes.status === 'rejected') {
+          errorMessages.push(`Trend Grafiği: ${getErrorMessage(trendRes.reason)}`);
         }
-        if (biasRes?.data) {
-          setBiasDataState(biasRes.data);
+        if (biasRes.status === 'fulfilled' && biasRes.value?.data) {
+          setBiasDataState(biasRes.value.data);
+        } else if (biasRes.status === 'rejected') {
+          errorMessages.push(`Bias Grafiği: ${getErrorMessage(biasRes.reason)}`);
         }
-        if (yearRes?.data) {
-          setYearDataState(yearRes.data);
+        if (yearRes.status === 'fulfilled' && yearRes.value?.data) {
+          setYearDataState(yearRes.value.data);
           setYearCurrentWeek(
-            typeof yearRes.currentWeek === 'number' ? yearRes.currentWeek : null,
+            typeof yearRes.value.currentWeek === 'number'
+              ? yearRes.value.currentWeek
+              : null,
           );
+        } else if (yearRes.status === 'rejected') {
+          errorMessages.push(`Yıllık Karşılaştırma: ${getErrorMessage(yearRes.reason)}`);
+        }
+
+        if (errorMessages.length > 0) {
+          console.warn('Demand Forecasting partial fetch errors:', errorMessages);
+          toast.error('Bazı veriler yüklenemedi. Lütfen tekrar deneyin.');
         }
       } catch (error) {
         console.error('Demand Forecasting fetch error:', error);
@@ -355,12 +392,38 @@ export function DemandForecastingSection() {
   // Reactive data based on filters
   const trendData = useMemo(() => {
     // Map API data keys to chart keys
-    return trendDataState.map((d) => ({
+    const mapped = trendDataState.map((d) => ({
       date: d.date,
       history: d.actual,
       forecast: d.forecast,
       trendline: d.trendline,
     }));
+
+    // Bridge the boundary so past/future look continuous in the chart.
+    const firstForecastIdx = mapped.findIndex(
+      (point) => typeof point.forecast === 'number',
+    );
+    if (firstForecastIdx > 0) {
+      const prevIdx = firstForecastIdx - 1;
+      const lastHistoryVal = mapped[prevIdx].history;
+      const firstForecastVal = mapped[firstForecastIdx].forecast;
+
+      if (
+        typeof lastHistoryVal === 'number' &&
+        (mapped[prevIdx].forecast === null || mapped[prevIdx].forecast === undefined)
+      ) {
+        mapped[prevIdx].forecast = lastHistoryVal;
+      }
+      if (
+        typeof firstForecastVal === 'number' &&
+        (mapped[firstForecastIdx].history === null ||
+          mapped[firstForecastIdx].history === undefined)
+      ) {
+        mapped[firstForecastIdx].history = firstForecastVal;
+      }
+    }
+
+    return mapped;
   }, [trendDataState]);
 
   const biasData = useMemo(() => biasDataState, [biasDataState]);
@@ -630,7 +693,7 @@ export function DemandForecastingSection() {
                       fontSize={chartConfig.axisFontSize}
                       tickLine={false}
                       axisLine={false}
-                      tickFormatter={(v) => `${(v / 1000).toFixed(1)}k`}
+                      tickFormatter={formatTrendAxisTick}
                       width={chartConfig.yAxisWidth}
                     />
                     <Tooltip
@@ -659,6 +722,7 @@ export function DemandForecastingSection() {
                       stroke='#475569'
                       strokeWidth={is2xl ? 2 : 1}
                       name='Geçmiş'
+                      connectNulls
                     />
                     <Area
                       type='monotone'
@@ -668,6 +732,7 @@ export function DemandForecastingSection() {
                       stroke='#3b82f6'
                       strokeWidth={chartConfig.strokeWidth}
                       name='Tahmin'
+                      connectNulls
                     />
                     <Line
                       type='monotone'
@@ -1255,4 +1320,3 @@ function KPICard({
     </div>
   );
 }
-

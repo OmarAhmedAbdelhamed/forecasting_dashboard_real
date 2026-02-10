@@ -28,6 +28,8 @@ export const demandApi = {
     productIds?: string[];
     categoryIds?: string[];
     period?: 'daily' | 'weekly' | 'monthly';
+    daysPast?: number;
+    daysFuture?: number;
   }) =>
     apiClient.get<{ data: DemandTrendData[] }>(
       '/api/demand/trend-forecast',

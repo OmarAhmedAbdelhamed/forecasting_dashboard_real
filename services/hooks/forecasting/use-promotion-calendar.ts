@@ -7,6 +7,8 @@ interface UsePromotionCalendarParams {
   month: number;
   year: number;
   storeIds?: string[];
+  regionIds?: string[];
+  categoryIds?: string[];
   includeFuture?: boolean;
   futureCount?: number;
   enabled?: boolean;

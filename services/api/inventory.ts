@@ -42,6 +42,9 @@ export const inventoryApi = {
   getStockTrends: (
     params?: FilterParams & {
       days?: number;
+      includeFuture?: boolean;
+      futureDays?: number;
+      dailyReplenishment?: number;
     },
   ) =>
     apiClient.get<{ trends: StockTrend[] }>(

@@ -6,6 +6,9 @@ import type { FilterParams } from '../../types/api';
 
 interface UseStockTrendsParams extends FilterParams {
   days?: number;
+  includeFuture?: boolean;
+  futureDays?: number;
+  dailyReplenishment?: number;
 }
 
 /**

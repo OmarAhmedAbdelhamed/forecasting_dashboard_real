@@ -110,11 +110,7 @@ interface ForecastData {
 }
 
 import {
-  STORES,
-  PRODUCTS,
-  PROMOTIONS,
   REGIONS_FLAT as REGIONS,
-  CATEGORIES,
   type SimilarCampaign,
 } from '@/data/mock-data';
 import { ExportPromotionModal } from '@/components/dashboard/modals/export-promotion-modal';
@@ -125,10 +121,18 @@ import {
   usePromotionHistory,
   usePromotionCalendar,
   useSimilarCampaigns,
+  useStores,
+  useProducts,
+  useCategories,
+  useStockTrends,
 } from '@/services';
+import { forecastingApi } from '@/services/api/forecasting';
 import type {
   SimilarCampaign as ApiSimilarCampaign,
   PromotionHistory as ApiPromotionHistory,
+  ProductPromotionOption,
+  PredictDemandRequest,
+  CampaignDetailSeriesResponse,
 } from '@/services/types/api';
 
 // Custom X-Axis Tick Component for Weather
@@ -180,6 +184,16 @@ const CustomizedAxisTick = (props: {
 };
 
 type PromotionHistoryRow = {
+  campaignKey: string;
+  eventDate: string;
+  campaignStartDate: string;
+  campaignEndDate: string;
+  region: string;
+  category: string;
+  storeCode: number | null;
+  storeLabel?: string;
+  productCode: number | null;
+  promoCode: string | null;
   date: string;
   name: string;
   type: string;
@@ -191,7 +205,20 @@ type PromotionHistoryRow = {
   forecast: string;
   stockCostIncrease: string;
   lostSalesVal: string;
+  upliftRaw: number;
+  upliftValRaw: number;
+  profitRaw: number;
+  stockCostIncreaseRaw: number;
+  lostSalesValRaw: number;
   status: 'draft' | 'pending' | 'approved' | 'completed';
+};
+
+type SelectedCampaign = SimilarCampaign & {
+  rowUpliftValue?: number;
+  rowProfitEffect?: number;
+  rowForecastAccuracy?: number;
+  rowStockCostIncrease?: number;
+  rowSoldUnits?: number;
 };
 
 const BACKEND_PROMO_TO_UI: Record<string, string> = {
@@ -231,9 +258,24 @@ const mapHistoryFromApi = (item: ApiPromotionHistory): PromotionHistoryRow => {
   const profit = item.profit ?? 0;
 
   return {
+    campaignKey: item.campaignKey,
+    eventDate: item.eventDate,
+    campaignStartDate: item.campaignStartDate || item.eventDate,
+    campaignEndDate: item.campaignEndDate || item.eventDate,
+    region: item.region || 'Bilinmiyor',
+    category: item.category || 'Çeşitli',
+    storeCode: item.storeCode,
+    storeLabel: item.storeCode !== undefined && item.storeCode !== null
+      ? String(item.storeCode)
+      : undefined,
+    productCode: item.productCode,
+    promoCode: item.promoCode,
     date: item.date,
     name: item.name,
-    type: BACKEND_PROMO_TO_UI[item.type] || item.type,
+    type:
+      item.typeLabel?.trim() ||
+      BACKEND_PROMO_TO_UI[item.type] ||
+      item.type,
     uplift: `${item.uplift >= 0 ? '+' : ''}${item.uplift.toFixed(1)}%`,
     upliftVal: `₺${(upliftVal / 1000).toFixed(1)}k`,
     profit: formatCurrencyCompact(profit),
@@ -242,16 +284,42 @@ const mapHistoryFromApi = (item: ApiPromotionHistory): PromotionHistoryRow => {
     forecast: `${item.forecast}%`,
     stockCostIncrease: `₺${Math.round(stockCostIncrease)}`,
     lostSalesVal: `₺${Math.round(lostSalesVal)}`,
+    upliftRaw: item.uplift,
+    upliftValRaw: upliftVal,
+    profitRaw: profit,
+    stockCostIncreaseRaw: stockCostIncrease,
+    lostSalesValRaw: lostSalesVal,
     status,
   };
 };
 
-const mapFutureRowsFromCalendar = (events: { date: string; promotions: { id: string; name: string; type: string; discount: number | null }[] }[]) => {
+const mapFutureRowsFromCalendar = (
+  events: {
+    date: string;
+    promotions: { id: string; name: string; type: string; discount: number | null }[];
+  }[],
+  context: {
+    region: string;
+    category: string;
+    storeCode: number | null;
+    storeLabel: string;
+  },
+) => {
   const now = new Date();
   return events
     .filter((event) => new Date(event.date) >= now)
     .flatMap((event) =>
       event.promotions.map((promotion) => ({
+        campaignKey: `future_${promotion.id}_${event.date}`,
+        eventDate: format(new Date(event.date), 'yyyy-MM-dd'),
+        campaignStartDate: format(new Date(event.date), 'yyyy-MM-dd'),
+        campaignEndDate: format(new Date(event.date), 'yyyy-MM-dd'),
+        region: context.region,
+        category: context.category,
+        storeCode: context.storeCode,
+        storeLabel: context.storeLabel,
+        productCode: null,
+        promoCode: promotion.id,
         date: format(new Date(event.date), 'dd-MM-yyyy'),
         name: promotion.name,
         type: BACKEND_PROMO_TO_UI[promotion.type] || promotion.type,
@@ -263,9 +331,30 @@ const mapFutureRowsFromCalendar = (events: { date: string; promotions: { id: str
         forecast: '--',
         stockCostIncrease: '--',
         lostSalesVal: '--',
+        upliftRaw: promotion.discount ?? 0,
+        upliftValRaw: 0,
+        profitRaw: 0,
+        stockCostIncreaseRaw: 0,
+        lostSalesValRaw: 0,
         status: 'pending' as const,
       })),
     );
+};
+
+const extractProductCode = (productValue: string): string | null => {
+  const maybeCode = productValue.includes('_')
+    ? (productValue.split('_').pop() ?? '')
+    : productValue;
+  return /^\d+$/.test(maybeCode) ? maybeCode : null;
+};
+
+const extractCategoryCode = (categoryValue: string): string => {
+  if (!categoryValue) {
+    return categoryValue;
+  }
+  return categoryValue.includes('_')
+    ? (categoryValue.split('_').pop() ?? categoryValue)
+    : categoryValue;
 };
 
 export function ForecastingSection() {
@@ -282,32 +371,11 @@ export function ForecastingSection() {
   const { canSeeKpi, canSeeChart, canSeeTable, canSeeAction } =
     useVisibility('pricing-promotion');
 
-  // Filter options based on permissions
-  const filteredRegions = useMemo(() => {
-    if (dataScope.regions.length > 0) {
-      return REGIONS.filter((r) => dataScope.regions.includes(r.value));
-    }
-    return REGIONS;
-  }, [dataScope.regions]);
-
-  const filteredStores = useMemo(() => {
-    if (dataScope.stores.length > 0) {
-      return STORES.filter((s) => dataScope.stores.includes(s.value));
-    }
-    return STORES;
-  }, [dataScope.stores]);
-
-  const filteredCategories = useMemo(() => {
-    if (dataScope.categories.length > 0) {
-      return CATEGORIES.filter((c) => dataScope.categories.includes(c.value));
-    }
-    return CATEGORIES;
-  }, [dataScope.categories]);
-
-  const filteredProducts = useMemo(() => {
-    // Products could potentially be filtered by category if we wanted dependency
-    return PRODUCTS;
-  }, []);
+  // Filter options based on backend + permissions
+  const regionLabelMap = useMemo(
+    () => new Map(REGIONS.map((region) => [region.value, region.label])),
+    [],
+  );
 
   // Inputs
   const [magazaKodu, setMagazaKodu] = useState<string[]>([]);
@@ -329,8 +397,12 @@ export function ForecastingSection() {
     new Date('2026-01-11'),
   );
 
-  const [promosyon, setPromosyon] = useState('INTERNET_INDIRIMI');
+  const [promosyon, setPromosyon] = useState('Promosyonsuz');
+  const [aktifPromosyonKodu, setAktifPromosyonKodu] = useState('17');
+  const [promotionOptions, setPromotionOptions] = useState<ProductPromotionOption[]>([]);
+  const [promotionOptionsLoading, setPromotionOptionsLoading] = useState(false);
   const [promosyonIndirimOrani, setPromosyonIndirimOrani] = useState('9');
+  const [promosyonMarj, setPromosyonMarj] = useState('');
 
   // Base values (Component Scope)
   const baseSatisFiyati = 87.45;
@@ -339,7 +411,7 @@ export function ForecastingSection() {
   const marj = (birimKar / baseSatisFiyati) * 100;
 
   // NEW STATES
-  const [pricingMode, setPricingMode] = useState<'discount' | 'price'>(
+  const [pricingMode, setPricingMode] = useState<'discount' | 'margin' | 'price'>(
     'discount',
   );
   const [targetPrice, setTargetPrice] = useState<string>('');
@@ -360,7 +432,11 @@ export function ForecastingSection() {
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isPlanningModalOpen, setIsPlanningModalOpen] = useState(false);
   const [selectedCampaign, setSelectedCampaign] =
-    useState<SimilarCampaign | null>(null);
+    useState<SelectedCampaign | null>(null);
+  const [campaignDetailSeries, setCampaignDetailSeries] =
+    useState<CampaignDetailSeriesResponse | null>(null);
+  const [campaignDetailLoading, setCampaignDetailLoading] = useState(false);
+  const [campaignDetailError, setCampaignDetailError] = useState<string | null>(null);
   const [trackingSearch, setTrackingSearch] = useState('');
   const [trackingStatusFilter, setTrackingStatusFilter] = useState<
     'all' | 'draft' | 'pending' | 'approved' | 'completed'
@@ -375,49 +451,192 @@ export function ForecastingSection() {
   );
 
   const numericProductIds = useMemo(
-    () => urunKodu.filter((value) => /^\d+$/.test(value)),
+    () =>
+      urunKodu
+        .map((value) => extractProductCode(value))
+        .filter((value): value is string => value !== null),
     [urunKodu],
   );
 
-  const effectiveStoreIds =
+  const storesQuery = useStores({
+    regionIds: bolge.length > 0 ? bolge : undefined,
+  });
+  const categoriesQuery = useCategories({
+    regionIds: bolge.length > 0 ? bolge : undefined,
+    storeIds: numericStoreIds.length > 0 ? numericStoreIds : undefined,
+  });
+  const productsQuery = useProducts({
+    regionIds: bolge.length > 0 ? bolge : undefined,
+    storeIds: numericStoreIds.length > 0 ? numericStoreIds : undefined,
+    categoryIds: reyon.length > 0 ? reyon : undefined,
+  });
+
+  const filteredRegions = useMemo(() => {
+    const stores = storesQuery.data?.stores || [];
+    const uniqueRegionValues = Array.from(
+      new Set(stores.map((store) => store.regionValue)),
+    );
+
+    return uniqueRegionValues
+      .filter((regionValue) =>
+        dataScope.regions.length > 0 ? dataScope.regions.includes(regionValue) : true,
+      )
+      .map((regionValue) => ({
+        value: regionValue,
+        label: regionLabelMap.get(regionValue) || regionValue,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'tr'));
+  }, [storesQuery.data?.stores, dataScope.regions, regionLabelMap]);
+
+  const filteredStores = useMemo(() => {
+    const stores = storesQuery.data?.stores || [];
+    return stores
+      .filter((store) =>
+        dataScope.stores.length > 0 ? dataScope.stores.includes(store.value) : true,
+      )
+      .map((store) => ({
+        value: store.value,
+        label: `${store.label} (${store.value})`,
+      }));
+  }, [storesQuery.data?.stores, dataScope.stores]);
+
+  const filteredCategories = useMemo(() => {
+    const categories = categoriesQuery.data?.categories || [];
+    return categories
+      .filter((category) =>
+        dataScope.categories.length > 0
+          ? dataScope.categories.includes(category.value)
+          : true,
+      )
+      .map((category) => ({
+        value: category.value,
+        label: `${category.label} (${category.value})`,
+      }));
+  }, [categoriesQuery.data?.categories, dataScope.categories]);
+
+  const filteredProducts = useMemo(() => {
+    const products = productsQuery.data?.products || [];
+    return products.map((product) => {
+      const code = extractProductCode(product.value) || product.value;
+      return {
+        value: product.value,
+        label: `${product.label} (${code})`,
+      };
+    });
+  }, [productsQuery.data?.products]);
+
+  const stockScopeStoreIds =
     numericStoreIds.length > 0 ? numericStoreIds : ['1054'];
-  const effectiveProductIds =
+  const stockScopeProductIds =
     numericProductIds.length > 0 ? numericProductIds : ['30389579'];
+  const trackingStoreIds =
+    numericStoreIds.length > 0 ? numericStoreIds : undefined;
+  const trackingProductIds =
+    numericProductIds.length > 0 ? numericProductIds : undefined;
+
+  const stockTrendsQuery = useStockTrends({
+    storeIds: stockScopeStoreIds,
+    productIds: stockScopeProductIds,
+    days:
+      startDate && endDate
+        ? Math.max(30, differenceInDays(endDate, startDate) + 14)
+        : 30,
+    includeFuture: true,
+    futureDays:
+      endDate && endDate > new Date()
+        ? Math.max(0, differenceInDays(endDate, new Date()) + 1)
+        : 0,
+    dailyReplenishment: 0,
+  });
 
   const historyParams = useMemo(
     () => ({
-      productIds: effectiveProductIds,
-      storeIds: effectiveStoreIds,
-      limit: 40,
+      productIds: trackingProductIds,
+      storeIds: trackingStoreIds,
+      regionIds: bolge.length > 0 ? bolge : undefined,
+      categoryIds: reyon.length > 0 ? reyon : undefined,
+      limit: 200,
       enabled: true,
     }),
-    [effectiveProductIds, effectiveStoreIds],
+    [trackingProductIds, trackingStoreIds, bolge, reyon],
   );
 
   const similarCampaignParams = useMemo(
     () => ({
-      productIds: effectiveProductIds,
+      productIds: trackingProductIds,
+      storeIds: trackingStoreIds,
+      regionIds: bolge.length > 0 ? bolge : undefined,
+      categoryIds: reyon.length > 0 ? reyon : undefined,
       limit: 20,
       enabled: true,
     }),
-    [effectiveProductIds],
+    [trackingProductIds, trackingStoreIds, bolge, reyon],
   );
 
   const calendarParams = useMemo(
     () => ({
       month: new Date().getMonth() + 1,
       year: new Date().getFullYear(),
-      storeIds: effectiveStoreIds,
+      storeIds: trackingStoreIds,
+      regionIds: bolge.length > 0 ? bolge : undefined,
+      categoryIds: reyon.length > 0 ? reyon : undefined,
       includeFuture: true,
       futureCount: 18,
       enabled: true,
     }),
-    [effectiveStoreIds],
+    [trackingStoreIds, bolge, reyon],
   );
 
   const promotionHistoryQuery = usePromotionHistory(historyParams);
   const similarCampaignsQuery = useSimilarCampaigns(similarCampaignParams);
   const promotionCalendarQuery = usePromotionCalendar(calendarParams);
+
+  useEffect(() => {
+    const loadPromotions = async () => {
+      const storeCode = numericStoreIds[0];
+      const productCode = numericProductIds[0];
+
+      if (!storeCode || !productCode) {
+        setPromotionOptions([]);
+        setAktifPromosyonKodu('17');
+        setPromosyon('Promosyonsuz');
+        return;
+      }
+
+      setPromotionOptionsLoading(true);
+      try {
+        const response = await forecastingApi.getProductPromotions({
+          storeCode: Number(storeCode),
+          productCode: Number(productCode),
+        });
+        setPromotionOptions(response.promotions || []);
+      } catch (error) {
+        setPromotionOptions([]);
+        toast({
+          title: 'Promosyon listesi alınamadı',
+          description:
+            error instanceof Error ? error.message : 'Ürün için promosyon bilgisi çekilemedi.',
+          variant: 'destructive',
+        });
+      } finally {
+        setPromotionOptionsLoading(false);
+      }
+    };
+
+    loadPromotions();
+  }, [numericStoreIds, numericProductIds, toast]);
+
+  useEffect(() => {
+    if (aktifPromosyonKodu === '17') {
+      return;
+    }
+
+    const exists = promotionOptions.some((option) => option.code === aktifPromosyonKodu);
+    if (!exists) {
+      setAktifPromosyonKodu('17');
+      setPromosyon('Promosyonsuz');
+    }
+  }, [promotionOptions, aktifPromosyonKodu]);
 
   const backendSimilarCampaigns = useMemo(
     () =>
@@ -443,9 +662,59 @@ export function ForecastingSection() {
     [promotionHistoryQuery.data?.history],
   );
 
+  const futureRowContext = useMemo(() => {
+    const storePool = storesQuery.data?.stores || [];
+    const selectedStoreCode =
+      numericStoreIds.length === 1
+        ? numericStoreIds[0]
+        : null;
+
+    const storeCode =
+      selectedStoreCode && /^\d+$/.test(selectedStoreCode)
+        ? Number(selectedStoreCode)
+        : null;
+
+    const storeLabel =
+      numericStoreIds.length === 1
+        ? numericStoreIds[0]
+        : numericStoreIds.length > 1
+        ? 'Çoklu Mağaza'
+        : 'Tüm Mağazalar';
+
+    const regionFromStore =
+      selectedStoreCode
+        ? storePool.find((store) => store.value === selectedStoreCode)?.regionValue
+        : undefined;
+
+    const region =
+      bolge.length === 1
+        ? bolge[0]
+        : bolge.length > 1
+          ? 'Çoklu Bölge'
+          : (regionFromStore ?? 'Tüm Bölgeler');
+
+    const category =
+      reyon.length === 1
+        ? extractCategoryCode(reyon[0])
+        : reyon.length > 1
+          ? 'Çoklu Reyon'
+          : 'Tüm Reyonlar';
+
+    return {
+      region,
+      category,
+      storeCode,
+      storeLabel,
+    };
+  }, [storesQuery.data?.stores, numericStoreIds, bolge, reyon]);
+
   const futureRows = useMemo(
-    () => mapFutureRowsFromCalendar(promotionCalendarQuery.data?.events || []),
-    [promotionCalendarQuery.data?.events],
+    () =>
+      mapFutureRowsFromCalendar(
+        promotionCalendarQuery.data?.events || [],
+        futureRowContext,
+      ),
+    [promotionCalendarQuery.data?.events, futureRowContext],
   );
 
   const trackingRows = useMemo(() => {
@@ -462,7 +731,9 @@ export function ForecastingSection() {
   }, [futureRows, historyRows]);
 
   const trackingTypeOptions = useMemo(() => {
-    return Array.from(new Set(trackingRows.map((row) => row.type))).sort();
+    return Array.from(new Set(trackingRows.map((row) => row.type))).sort((a, b) =>
+      a.localeCompare(b, 'tr'),
+    );
   }, [trackingRows]);
 
   const filteredTrackingRows = useMemo(() => {
@@ -481,39 +752,87 @@ export function ForecastingSection() {
         return true;
       }
 
-      const haystack = `${row.name} ${row.type} ${row.date}`.toLowerCase();
+      const haystack =
+        `${row.name} ${row.type} ${row.date} ${row.campaignStartDate} ${row.campaignEndDate}`.toLowerCase();
       return haystack.includes(query);
     });
   }, [trackingRows, trackingSearch, trackingStatusFilter, trackingTypeFilter]);
 
-  const openCampaignDetail = (row: PromotionHistoryRow) => {
-    const upliftMatch = row.uplift.match(/-?\d+(\.\d+)?/);
-    const uplift = upliftMatch ? Number(upliftMatch[0]) : 0;
-    const targetRevenue = 100000;
-    const actualRevenue =
-      row.status === 'completed'
-        ? Math.round(targetRevenue * (1 + uplift / 100))
-        : 0;
+  const openCampaignDetail = async (row: PromotionHistoryRow) => {
+    const displayDate =
+      row.campaignStartDate !== row.campaignEndDate
+        ? `${row.campaignStartDate} - ${row.campaignEndDate}`
+        : row.date;
+    const rangeStart = new Date(row.campaignStartDate);
+    const rangeEnd = new Date(row.campaignEndDate);
+    const hasValidRange =
+      Number.isFinite(rangeStart.getTime()) && Number.isFinite(rangeEnd.getTime());
+    const uplift = row.upliftRaw;
+    const actualRevenue = Math.max(0, row.profitRaw / 0.08);
+    const targetRevenue = Math.max(0, actualRevenue - row.upliftValRaw);
+    const soldUnits = Math.max(0, Math.round(actualRevenue / baseSatisFiyati));
+    const plannedStockDays = hasValidRange
+      ? Math.max(1, differenceInDays(rangeEnd, rangeStart) + 1)
+      : 1;
+    const stockOutDays = row.stock === 'OOS' ? 1 : 0;
+    const actualStockDays = Math.max(0, plannedStockDays - stockOutDays);
+    const sellThrough = row.stock === 'OOS' ? 100 : 85;
 
     setSelectedCampaign({
-      id: `row-${row.name}-${row.date}`,
+      id: row.campaignKey || `row-${row.name}-${row.date}`,
       name: row.name,
-      date: row.date,
+      date: displayDate,
       type: row.type,
-      similarityScore: row.status === 'completed' ? 85 : 70,
+      similarityScore: 70,
       lift: uplift,
       roi: row.roi,
       targetRevenue,
       actualRevenue,
-      plannedStockDays: 14,
-      actualStockDays: row.stock === 'OOS' ? 10 : 14,
-      stockOutDays: row.stock === 'OOS' ? 2 : 0,
-      sellThrough: row.stock === 'OOS' ? 100 : 85,
-      markdownCost: Number(row.stockCostIncrease.replace(/[^0-9.-]/g, '')) || 0,
+      plannedStockDays,
+      actualStockDays,
+      stockOutDays,
+      sellThrough,
+      markdownCost: Math.abs(row.stockCostIncreaseRaw),
+      rowUpliftValue: row.upliftValRaw,
+      rowProfitEffect: row.profitRaw,
+      rowForecastAccuracy: Number.parseFloat(row.forecast.replace('%', '')) || 0,
+      rowStockCostIncrease: Math.abs(row.stockCostIncreaseRaw),
+      rowSoldUnits: soldUnits,
       status: row.status,
     });
-
+    setCampaignDetailSeries(null);
+    setCampaignDetailError(null);
+    setCampaignDetailLoading(true);
     setIsDetailModalOpen(true);
+
+    if (row.storeCode === null || row.productCode === null || row.promoCode === null) {
+      setCampaignDetailLoading(false);
+      setCampaignDetailError('Bu kayıt için detay seri verisi bulunmuyor.');
+      return;
+    }
+
+    try {
+      const detail = await forecastingApi.getCampaignDetailSeries({
+        storeCode: row.storeCode,
+        productCode: row.productCode,
+        promoCode: row.promoCode,
+        eventDate: row.eventDate,
+        campaignStartDate: row.campaignStartDate,
+        campaignEndDate: row.campaignEndDate,
+      });
+      setCampaignDetailSeries(detail);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Detay seri verisi alınamadı.';
+      setCampaignDetailError(message);
+      toast({
+        title: 'Kampanya detay verisi alınamadı',
+        description: message,
+        variant: 'destructive',
+      });
+    } finally {
+      setCampaignDetailLoading(false);
+    }
   };
 
   const modalData = useMemo(() => {
@@ -521,41 +840,86 @@ export function ForecastingSection() {
       return null;
     }
 
-    const targetRevenue = selectedCampaign.targetRevenue || 0;
-    const actualRevenue = selectedCampaign.actualRevenue || 0;
+    const summary = campaignDetailSeries?.summary;
+    const targetRevenue = summary?.targetRevenue ?? (selectedCampaign.targetRevenue || 0);
+    const actualRevenue = summary?.actualRevenue ?? (selectedCampaign.actualRevenue || 0);
+    const upliftValue =
+      summary?.upliftValue ??
+      selectedCampaign.rowUpliftValue ??
+      (actualRevenue - targetRevenue);
+    const profitEffect = summary?.profitEffect ?? selectedCampaign.rowProfitEffect ?? 0;
+    const forecastAccuracy = Math.max(
+      0,
+      Math.min(
+        100,
+        summary?.forecastAccuracy ?? selectedCampaign.rowForecastAccuracy ?? 0,
+      ),
+    );
+    const soldUnits =
+      summary?.soldUnits ??
+      selectedCampaign.rowSoldUnits ??
+      Math.round(actualRevenue / baseSatisFiyati);
     const achievementPct =
       targetRevenue > 0 ? (actualRevenue / targetRevenue) * 100 : 0;
-    const isOOS = selectedCampaign.stockOutDays > 0;
-    const markdownCost = Math.abs(selectedCampaign.markdownCost || 0);
-    const sellThrough = Math.max(0, Math.min(100, selectedCampaign.sellThrough || 0));
-    const plannedDays = Math.max(1, selectedCampaign.plannedStockDays || 1);
-    const actualDays = Math.max(0, selectedCampaign.actualStockDays || 0);
+    const stockOutDays = summary?.stockOutDays ?? (selectedCampaign.stockOutDays || 0);
+    const isOOS = stockOutDays > 0;
+    const markdownCost = Math.max(
+      0,
+      summary?.markdownCost ??
+        selectedCampaign.rowStockCostIncrease ??
+        (selectedCampaign.markdownCost || 0),
+    );
+    const sellThrough = Math.max(
+      0,
+      Math.min(100, summary?.sellThrough ?? (selectedCampaign.sellThrough || 0)),
+    );
+    const netContribution = upliftValue - markdownCost;
+    const plannedDays = Math.max(
+      1,
+      (campaignDetailSeries?.series.length ?? selectedCampaign.plannedStockDays ?? 1),
+    );
+    const actualDays = Math.max(0, plannedDays - stockOutDays);
 
-    const completedChartData = Array.from({ length: 7 }, (_, index) => {
-      const day = `Gn ${index + 1}`;
-      const base = targetRevenue / 7;
-      const actual = actualRevenue / 7;
-      const wave = 1 + Math.sin((index / 6) * Math.PI) * 0.18;
-      return {
-        day,
-        baseline: Math.round(base * (0.92 + index * 0.01)),
-        actual: Math.round(actual * wave),
-      };
-    });
+    const completedChartData =
+      campaignDetailSeries && campaignDetailSeries.series.length > 0
+        ? campaignDetailSeries.series.map((point, index) => ({
+            day: `Gn ${index + 1}`,
+            baseline: Math.round(point.baselineUnits * baseSatisFiyati),
+            actual: Math.round(point.actualUnits * baseSatisFiyati),
+          }))
+        : Array.from({ length: 7 }, (_, index) => {
+            const day = `Gn ${index + 1}`;
+            const base = targetRevenue / 7;
+            const actual = actualRevenue / 7;
+            const wave = 1 + Math.sin((index / 6) * Math.PI) * 0.18;
+            return {
+              day,
+              baseline: Math.round(base * (0.92 + index * 0.01)),
+              actual: Math.round(actual * wave),
+            };
+          });
 
-    const futureChartData = Array.from({ length: 7 }, (_, index) => {
-      const day = `Gn ${index + 1}`;
-      const base = targetRevenue / 7;
-      const liftRatio = 1 + (selectedCampaign.lift || 0) / 100;
-      const forecast = base * liftRatio * (0.94 + index * 0.012);
-      const stockBase = (targetRevenue / plannedDays) * (1.28 - index * 0.07);
-      return {
-        day,
-        baseline: Math.round(base * (0.95 + index * 0.01)),
-        forecast: Math.round(forecast),
-        stock: Math.max(0, Math.round(stockBase)),
-      };
-    });
+    const futureChartData =
+      campaignDetailSeries && campaignDetailSeries.series.length > 0
+        ? campaignDetailSeries.series.map((point, index) => ({
+            day: `Gn ${index + 1}`,
+            baseline: Math.round(point.baselineUnits * baseSatisFiyati),
+            forecast: Math.round(point.actualUnits * baseSatisFiyati),
+            stock: Math.max(0, Math.round(point.stockUnits)),
+          }))
+        : Array.from({ length: 7 }, (_, index) => {
+            const day = `Gn ${index + 1}`;
+            const base = targetRevenue / 7;
+            const liftRatio = 1 + (selectedCampaign.lift || 0) / 100;
+            const forecast = base * liftRatio * (0.94 + index * 0.012);
+            const stockBase = (targetRevenue / plannedDays) * (1.28 - index * 0.07);
+            return {
+              day,
+              baseline: Math.round(base * (0.95 + index * 0.01)),
+              forecast: Math.round(forecast),
+              stock: Math.max(0, Math.round(stockBase)),
+            };
+          });
 
     return {
       achievementPct,
@@ -564,12 +928,19 @@ export function ForecastingSection() {
       sellThrough,
       plannedDays,
       actualDays,
+      soldUnits,
+      targetRevenue,
+      actualRevenue,
+      upliftValue,
+      profitEffect,
+      forecastAccuracy,
+      netContribution,
       completedChartData,
       futureChartData,
-      liftValue: Math.max(0, actualRevenue - targetRevenue),
+      liftValue: upliftValue,
       stockCoveragePct: plannedDays > 0 ? Math.min(100, (actualDays / plannedDays) * 100) : 0,
     };
-  }, [selectedCampaign]);
+  }, [selectedCampaign, campaignDetailSeries]);
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -627,25 +998,98 @@ export function ForecastingSection() {
 
   const handleAnalyze = async () => {
     if (!startDate || !endDate) {
+      toast({
+        title: 'Tarih aralığı zorunlu',
+        description: 'Lütfen başlangıç ve bitiş tarihini seçin.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const selectedStoreCode = numericStoreIds[0];
+    const selectedProductCode = numericProductIds[0];
+
+    if (!selectedStoreCode || !selectedProductCode) {
+      toast({
+        title: 'Mağaza ve ürün seçimi zorunlu',
+        description: 'Tahmin göndermek için en az 1 mağaza ve 1 ürün seçin.',
+        variant: 'destructive',
+      });
       return;
     }
 
     setIsLoading(true);
 
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 1500));
+    try {
+      let selectedIndirim: number | null = null;
+      let selectedMarj: number | null = null;
+      let selectedFiyat: number | null = null;
 
-    // Simulation Logic
+      if (aktifPromosyonKodu !== '17') {
+        if (pricingMode === 'discount') {
+          selectedIndirim = Number(promosyonIndirimOrani || 0);
+        } else if (pricingMode === 'margin') {
+          selectedMarj = Number(promosyonMarj || 0);
+        } else if (pricingMode === 'price') {
+          selectedFiyat = Number(targetPrice || 0);
+        }
+
+        const selectedCount = [selectedIndirim, selectedMarj, selectedFiyat].filter(
+          (value) => value !== null && !Number.isNaN(value),
+        ).length;
+
+        if (selectedCount !== 1) {
+          toast({
+            title: 'Promosyon girişi eksik',
+            description:
+              'Promosyonlu tahminde indirim, marj veya fiyat alanlarından sadece birini doldurun.',
+            variant: 'destructive',
+          });
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      const payload: PredictDemandRequest = {
+        magazaKodu: Number(selectedStoreCode),
+        urunKodu: Number(selectedProductCode),
+        tarihBaslangic: format(startDate, 'yyyy-MM-dd'),
+        tarihBitis: format(endDate, 'yyyy-MM-dd'),
+        ozelgunsayisi: null,
+        aktifPromosyonKodu,
+        istenenIndirim: aktifPromosyonKodu === '17' ? null : selectedIndirim,
+        istenenMarj: aktifPromosyonKodu === '17' ? null : selectedMarj,
+        istenenFiyat: aktifPromosyonKodu === '17' ? null : selectedFiyat,
+      };
+
+      await forecastingApi.predictDemand(payload);
+    } catch (error) {
+      toast({
+        title: 'Tahmin servisi hatası',
+        description:
+          error instanceof Error ? error.message : 'Tahmin modeline istek gönderilemedi.',
+        variant: 'destructive',
+      });
+      setIsLoading(false);
+      return;
+    }
+
+    // Response visualization formatı net olmadığı için tahmin serisini simülasyonla üretiyoruz.
+    // Stok serisi ise seçili mağaza+ürün için backend stock-trends verisinden beslenir.
     const data: ForecastData[] = [];
     const days = differenceInDays(endDate, startDate) + 1;
-
-    // Base values
-    // Base values - Moved out for shared access if needed, or kept here but consistent
-    // Base values - Moved to component scope
+    const stockByDate = new Map(
+      (stockTrendsQuery.data?.trends || []).map((trend) => [
+        trend.date,
+        trend.actualStock,
+      ]),
+    );
 
     // Determine discount based on mode
     let discount = 0;
-    if (pricingMode === 'price' && targetPrice) {
+    if (aktifPromosyonKodu === '17') {
+      discount = 0;
+    } else if (pricingMode === 'price' && targetPrice) {
       discount =
         ((baseSatisFiyati - parseFloat(targetPrice)) / baseSatisFiyati) * 100;
       // Safety check
@@ -666,10 +1110,11 @@ export function ForecastingSection() {
       }
 
       const currentDate = addDays(startDate, i);
+      const dateKey = format(currentDate, 'yyyy-MM-dd');
 
       // Check if current date is within promo range
       let isPromoActive = false;
-      if (startPromosyon && endPromosyon) {
+      if (aktifPromosyonKodu !== '17' && startPromosyon && endPromosyon) {
         if (currentDate >= startPromosyon && currentDate <= endPromosyon) {
           isPromoActive = true;
         }
@@ -720,7 +1165,7 @@ export function ForecastingSection() {
         benim_promom: isPromoActive ? [promosyon] : [],
         benim_promom_yuzde: isPromoActive ? discount : 0,
         ciro: parseFloat(ciro.toFixed(2)),
-        stok: currentStock, // Yellow line (Actual Stock)
+        stok: stockByDate.get(dateKey) ?? currentStock, // Backend stock (fallback: simulated)
         satisFiyati: baseSatisFiyati,
         ham_fiyat: baseHamFiyat,
         birim_kar: parseFloat(birimKar.toFixed(2)),
@@ -731,6 +1176,13 @@ export function ForecastingSection() {
     }
 
     setForecastData(data);
+    toast({
+      title: 'Tahminleme isteği gönderildi',
+      description:
+        aktifPromosyonKodu === '17'
+          ? 'Promosyonsuz senaryo (aktifPromosyonKodu=17) başarıyla işlendi.'
+          : 'Promosyonlu senaryo tahmin servisine başarıyla gönderildi.',
+    });
     setIsLoading(false);
   };
 
@@ -774,9 +1226,8 @@ export function ForecastingSection() {
   const estimatedRevenueLoss = totalLostSalesUnits * baseSatisFiyati;
 
   // Calculate Baseline Revenue (since baseline in chart is now Units)
-  // We need to re-calculate it or derive it
-  const totalBaselineUnits = forecastData
-    ? forecastData.reduce((acc, curr) => acc + (curr.baseline || 0), 0)
+  const totalBaselineUnits = promoPeriodData
+    ? promoPeriodData.reduce((acc, curr) => acc + (curr.baseline || 0), 0)
     : 0;
   const totalBaselineRevenue = totalBaselineUnits * baseSatisFiyati;
 
@@ -784,6 +1235,33 @@ export function ForecastingSection() {
   const liftAmount = totalRevenue - totalBaselineRevenue;
   const liftPercentage =
     totalBaselineRevenue > 0 ? (liftAmount / totalBaselineRevenue) * 100 : 0;
+  const hasStockOutRisk = totalLostSalesUnits > 0;
+  const stockOutDayCount = promoPeriodData.filter((day) => (day.lost_sales || 0) > 0).length;
+  const stockCostEstimate = Math.round(totalLostSalesUnits * baseHamFiyat * 0.12);
+  const requiredDailyMinStock = promoPeriodData.reduce((max, day) => {
+    const dailyNeed = day.unconstrained_demand ?? day.tahmin ?? 0;
+    return Math.max(max, dailyNeed);
+  }, 0);
+  const selectedPromoLabel = promosyon || 'Promosyonsuz';
+  const selectedPeriodLabel =
+    startPromosyon && endPromosyon
+      ? `${format(startPromosyon, 'dd MMM yyyy')} - ${format(endPromosyon, 'dd MMM yyyy')}`
+      : 'Seçili Dönem';
+
+  const historicalAverageLift = useMemo(() => {
+    const values = historyRows
+      .map((row) => {
+        const matched = row.uplift.match(/-?\d+(\.\d+)?/);
+        return matched ? Number(matched[0]) : null;
+      })
+      .filter((value): value is number => value !== null && Number.isFinite(value));
+
+    if (values.length === 0) return null;
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+  }, [historyRows]);
+
+  const categoryDelta =
+    historicalAverageLift !== null ? liftPercentage - historicalAverageLift : null;
 
   return (
     <div className='space-y-2 2xl:space-y-4'>
@@ -1001,45 +1479,68 @@ export function ForecastingSection() {
                   </span>
                 </div>
 
+                <div className='space-y-0.5'>
+                  <Label className='text-[10px] 2xl:text-xs text-muted-foreground'>
+                    Aktif Promosyon Kodu
+                  </Label>
+                  <Select
+                    value={aktifPromosyonKodu}
+                    onValueChange={(code) => {
+                      setAktifPromosyonKodu(code);
+                      if (code === '17') {
+                        setPromosyon('Promosyonsuz');
+                      } else {
+                        const selected = promotionOptions.find((option) => option.code === code);
+                        setPromosyon(selected?.name || 'Promosyonlu');
+                      }
+                    }}
+                  >
+                    <SelectTrigger className='h-7 2xl:h-8 text-[10px]'>
+                      <SelectValue placeholder='Promosyon seçiniz' />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value='17' className='text-[10px]'>
+                        Promosyonsuz (Kod: 17)
+                      </SelectItem>
+                      {promotionOptions.map((option) => (
+                        <SelectItem
+                          key={option.code}
+                          value={option.code}
+                          className='text-[10px]'
+                        >
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {promotionOptionsLoading && (
+                    <p className='text-[10px] text-muted-foreground'>
+                      Ürünün geçmiş promosyonları yükleniyor...
+                    </p>
+                  )}
+                </div>
+
                 <Tabs
                   value={pricingMode}
                   onValueChange={(v) => {
-                    setPricingMode(v as 'discount' | 'price');
+                    setPricingMode(v as 'discount' | 'margin' | 'price');
                   }}
                   className='w-full'
                 >
-                  <TabsList className='grid w-full grid-cols-2 h-7'>
+                  <TabsList className='grid w-full grid-cols-3 h-7'>
                     <TabsTrigger value='discount' className='text-[10px] h-5'>
                       İndirim Oranı
+                    </TabsTrigger>
+                    <TabsTrigger value='margin' className='text-[10px] h-5'>
+                      Marj
                     </TabsTrigger>
                     <TabsTrigger value='price' className='text-[10px] h-5'>
                       Hedef Fiyat
                     </TabsTrigger>
                   </TabsList>
 
-                  <div className='mt-2 grid grid-cols-2 gap-2'>
-                    <div className='space-y-0.5'>
-                      <Label className='text-[10px] 2xl:text-xs text-muted-foreground'>
-                        Promosyon Tipi
-                      </Label>
-                      <Select value={promosyon} onValueChange={setPromosyon}>
-                        <SelectTrigger className='h-7 2xl:h-8 text-[10px]'>
-                          <SelectValue placeholder='Promo Seç' />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {PROMOTIONS.map((promo) => (
-                            <SelectItem
-                              key={promo.value}
-                              value={promo.value}
-                              className='text-[10px]'
-                            >
-                              {promo.label}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
+                  {aktifPromosyonKodu !== '17' && (
+                    <div className='mt-2'>
                     <TabsContent value='discount' className='mt-0 space-y-0.5'>
                       <Label className='text-[10px] 2xl:text-xs text-muted-foreground'>
                         İndirim (%)
@@ -1065,6 +1566,18 @@ export function ForecastingSection() {
                       </div>
                     </TabsContent>
 
+                    <TabsContent value='margin' className='mt-0 space-y-0.5'>
+                      <Label className='text-[10px] 2xl:text-xs text-muted-foreground'>
+                        İstenen Marj (%)
+                      </Label>
+                      <Input
+                        type='number'
+                        className='h-7 2xl:h-8 text-xs'
+                        value={promosyonMarj}
+                        onChange={(e) => setPromosyonMarj(e.target.value)}
+                      />
+                    </TabsContent>
+
                     <TabsContent value='price' className='mt-0 space-y-0.5'>
                       <Label className='text-[10px] 2xl:text-xs text-muted-foreground'>
                         Hedef Fiyat (TL)
@@ -1084,16 +1597,29 @@ export function ForecastingSection() {
                         }}
                       />
                     </TabsContent>
-                  </div>
+                    </div>
+                  )}
                 </Tabs>
 
                 {/* Info Display for the other value */}
                 <div className='text-[10px] text-muted-foreground text-center bg-background/50 py-0.5 rounded border'>
-                  {pricingMode === 'discount' ? (
+                  {aktifPromosyonKodu === '17' ? (
+                    <>
+                      Promosyonsuz senaryo: aktifPromosyonKodu=17, indirim/marj/fiyat
+                      alanları otomatik null gönderilir.
+                    </>
+                  ) : pricingMode === 'discount' ? (
                     <>
                       Satış Fiyatı:{' '}
                       <span className='font-medium text-foreground'>
                         {targetPrice || '...'} TL
+                      </span>
+                    </>
+                  ) : pricingMode === 'margin' ? (
+                    <>
+                      İstenen Marj:{' '}
+                      <span className='font-medium text-foreground'>
+                        % {promosyonMarj || '...'}
                       </span>
                     </>
                   ) : (
@@ -1278,6 +1804,9 @@ export function ForecastingSection() {
                                     size='icon'
                                     className='h-5 w-5'
                                     onClick={() => {
+                                      setCampaignDetailSeries(null);
+                                      setCampaignDetailLoading(false);
+                                      setCampaignDetailError(null);
                                       setSelectedCampaign(camp);
                                       setIsDetailModalOpen(true);
                                     }}
@@ -1769,9 +2298,9 @@ export function ForecastingSection() {
                               return [value, name];
                             }}
                             label={
-                              PRODUCTS.find((p) =>
+                              filteredProducts.find((p) =>
                                 urunKodu.includes(p.value),
-                              )?.label.split(' - ')[1] || 'Seçili Ürün'
+                              )?.label || 'Seçili Ürün'
                             }
                           />
 
@@ -1859,7 +2388,7 @@ export function ForecastingSection() {
                   </div>
                   <div className='space-y-0.5'>
                     <div className='text-sm 2xl:text-base font-bold text-gray-900'>
-                      İnternet İndirimi (Mayıs)
+                      {selectedPromoLabel} ({selectedPeriodLabel})
                     </div>
                     <div className='flex items-baseline gap-2'>
                       <span className='text-xl 2xl:text-2xl font-black text-emerald-600 tracking-tighter'>
@@ -1915,11 +2444,11 @@ export function ForecastingSection() {
                   </div>
                   <div className='space-y-0.5'>
                     <div className='text-sm 2xl:text-base font-bold text-gray-900'>
-                      500 TL+ (Haziran)
+                      {selectedPromoLabel} ({selectedPeriodLabel})
                     </div>
                     <div className='flex items-baseline gap-2'>
                       <span className='text-xl 2xl:text-2xl font-black text-red-600 tracking-tighter'>
-                        {totalLostSalesUnits > 0
+                        {hasStockOutRisk
                           ? `${totalLostSalesUnits.toLocaleString()} Adet`
                           : '0 Adet'}
                       </span>
@@ -1928,14 +2457,14 @@ export function ForecastingSection() {
                       </span>
                     </div>
                     <p className='text-red-700 text-[10px] 2xl:text-xs mt-0.5 leading-tight'>
-                      {totalLostSalesUnits > 0
-                        ? `Tahmini ₺${(estimatedRevenueLoss / 1000).toFixed(1)}k ciro kaybı.`
+                      {hasStockOutRisk
+                        ? `${stockOutDayCount} günde stok-out görüldü. Tahmini ₺${(estimatedRevenueLoss / 1000).toFixed(1)}k ciro kaybı.`
                         : 'Stok riski bulunmuyor.'}
                     </p>
                     {/* Financial Warning */}
                     <div className='mt-1 text-[10px] bg-red-100/50 p-1 rounded text-red-800 font-medium'>
                       Stok Maliyeti: ₺
-                      {(totalLostSalesUnits * 15).toLocaleString()}
+                      {stockCostEstimate.toLocaleString()}
                       <span className='block font-normal opacity-80'>
                         (Acil sipariş farkı)
                       </span>
@@ -1944,7 +2473,10 @@ export function ForecastingSection() {
                     <div className='mt-2 pt-2 border-t border-red-200'>
                       <div className='text-[10px] text-red-700 font-medium mb-1.5'>
                         Uyarı: Promosyonun en optimal şekilde gerçekleşmesi için
-                        günlük stoğun min <span className='font-bold'>750</span>{' '}
+                        günlük stoğun min{' '}
+                        <span className='font-bold'>
+                          {Math.max(1, requiredDailyMinStock).toLocaleString()}
+                        </span>{' '}
                         olması gerekiyor.
                       </div>
                       <Button
@@ -1989,21 +2521,28 @@ export function ForecastingSection() {
                   </div>
                   <div className='space-y-0.5'>
                     <div className='text-sm 2xl:text-base font-bold text-green-600 mt-0.5'>
-                      {urunKodu.length > 0 && parseInt(urunKodu[0]) % 2 === 0
-                        ? '%14.2'
-                        : '%21.5'}
+                      {historicalAverageLift !== null
+                        ? `%${historicalAverageLift.toFixed(1)}`
+                        : '--'}
                     </div>
                     <div className='flex items-baseline gap-2'>
                       <span className='text-xl 2xl:text-2xl font-black text-blue-600 tracking-tighter'>
-                        +15%
+                        {categoryDelta !== null
+                          ? `${categoryDelta >= 0 ? '+' : ''}${categoryDelta.toFixed(1)}%`
+                          : '--'}
                       </span>
                       <span className='text-[10px] 2xl:text-xs text-muted-foreground font-medium'>
-                        Daha İyi
+                        {categoryDelta === null
+                          ? 'Kıyas Yok'
+                          : categoryDelta >= 0
+                            ? 'Daha İyi'
+                            : 'Geride'}
                       </span>
                     </div>
                     <p className='text-blue-700 text-[10px] 2xl:text-xs mt-0.5 leading-tight'>
-                      Benzer ürünlerin ortalama promosyon lifti %22 iken sizinki
-                      %37.
+                      {historicalAverageLift === null
+                        ? 'Kıyas için yeterli geçmiş promosyon verisi bulunmuyor.'
+                        : `Geçmiş ortalama lift %${historicalAverageLift.toFixed(1)}; bu analizde lift %${liftPercentage.toFixed(1)}.`}
                     </p>
                   </div>
                 </CardContent>
@@ -2228,14 +2767,16 @@ export function ForecastingSection() {
                   <tbody className='divide-y'>
                     {filteredTrackingRows.map((row, i) => (
                         <tr
-                          key={`${row.name}-${row.date}-${i}`}
+                          key={`${row.campaignKey}-${i}`}
                           className='group hover:bg-muted/30 transition-colors cursor-pointer'
                           onClick={() => {
-                            openCampaignDetail(row);
+                            void openCampaignDetail(row);
                           }}
                         >
                           <td className='p-2 2xl:p-3 font-medium text-gray-700'>
-                            {row.date}
+                            {row.campaignStartDate === row.campaignEndDate
+                              ? row.date
+                              : `${row.campaignStartDate} - ${row.campaignEndDate}`}
                           </td>
                           <td className='p-2 2xl:p-3'>
                             <div className='font-semibold text-gray-900'>
@@ -2343,7 +2884,7 @@ export function ForecastingSection() {
                                   className='h-6 w-6 p-0 hover:bg-blue-50 hover:text-blue-600'
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    openCampaignDetail(row);
+                                    void openCampaignDetail(row);
                                   }}
                                 >
                                   <Eye className='w-3 h-3' />
@@ -2389,7 +2930,7 @@ export function ForecastingSection() {
       <ExportPromotionModal
         open={isExportModalOpen}
         onOpenChange={setIsExportModalOpen}
-        initialData={trackingRows}
+        initialData={filteredTrackingRows}
       />
 
       <CampaignCreationModal
@@ -2417,7 +2958,7 @@ export function ForecastingSection() {
               ).toFixed(0) +
               '%'
             : '-',
-          stockStatus: 'Optimal', // Mocked for now
+          stockStatus: totalLostSalesUnits > 0 ? 'Riskli' : 'Güvenli',
         }}
         campaignContext={{
           regions: bolge,
@@ -2448,9 +2989,9 @@ export function ForecastingSection() {
                   VIEW A: COMPLETED CAMPAIGNS (SCORECARD)
                   =============================================================================
                 */}
-            {(selectedCampaign as SimilarCampaign).status === 'completed' ? (
-              <>
-                <DialogHeader>
+	            {(selectedCampaign as SimilarCampaign).status === 'completed' ? (
+	              <>
+	                <DialogHeader>
                   <div className='flex items-center gap-3 mb-2'>
                     <span className='text-xs font-semibold text-muted-foreground uppercase tracking-wider border-r pr-3 mr-1'>
                       {selectedCampaign.date}
@@ -2484,20 +3025,32 @@ export function ForecastingSection() {
                       {selectedCampaign.name}
                     </DialogTitle>
                   </div>
-                  <DialogDescription>
-                    Kampanya Performans Karnesi ve Sonuç Analizi
-                  </DialogDescription>
-                </DialogHeader>
+	                  <DialogDescription>
+	                    Kampanya Performans Karnesi ve Sonuç Analizi
+	                  </DialogDescription>
+	                </DialogHeader>
+	                {campaignDetailLoading && (
+	                  <div className='mx-1 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-700'>
+	                    Detay seri verisi yükleniyor...
+	                  </div>
+	                )}
+	                {!campaignDetailLoading && campaignDetailError && (
+	                  <div className='mx-1 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700'>
+	                    {campaignDetailError}
+	                  </div>
+	                )}
 
-                <div className='space-y-4 mt-2'>
+	                <div className='space-y-4 mt-2'>
                   {/* KPI Cards */}
                   <div className='grid grid-cols-3 gap-3'>
                     <div className='bg-muted/30 p-3 rounded-lg border'>
                       <div className='text-[10px] text-muted-foreground uppercase font-semibold mb-1'>
-                        Gerçekleşen Ciro
+                        Ciro Etkisi (Lift)
                       </div>
-                      <div className='text-2xl font-bold text-gray-900'>
-                        ₺{((selectedCampaign.actualRevenue || 0) / 1000).toFixed(1)}k
+                      <div
+                        className={`text-2xl font-bold ${(modalData?.upliftValue || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}
+                      >
+                        {formatCurrencyCompact(modalData?.upliftValue || 0)}
                       </div>
                       <div className='w-full bg-gray-200 rounded-full h-1.5 mt-2 overflow-hidden'>
                         <div
@@ -2510,19 +3063,18 @@ export function ForecastingSection() {
                           }}
                         ></div>
                       </div>
-                      <div className='text-[10px] font-medium text-emerald-600 mt-1'>
-                        Hedefin %{(modalData?.achievementPct || 0).toFixed(0)}&apos;si
+                      <div className='text-[10px] font-medium text-slate-600 mt-1'>
+                        Tahmin doğruluğu %{(modalData?.forecastAccuracy || 0).toFixed(1)}
                       </div>
                     </div>
                     <div className='bg-muted/30 p-3 rounded-lg border'>
                       <div className='text-[10px] text-muted-foreground uppercase font-semibold mb-1'>
-                        Satılan Adet
+                        Brüt Kar Etkisi
                       </div>
-                      <div className='text-2xl font-bold text-gray-900'>
-                        {Math.round((selectedCampaign.actualRevenue || 0) / baseSatisFiyati).toLocaleString('tr-TR')}{' '}
-                        <span className='text-sm font-normal text-muted-foreground'>
-                          Adet
-                        </span>
+	                      <div
+	                        className={`text-2xl font-bold ${(modalData?.profitEffect || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}
+	                      >
+	                        {formatCurrencyCompact(modalData?.profitEffect || 0)}
                       </div>
                       <div className='w-full bg-gray-200 rounded-full h-1.5 mt-2 overflow-hidden'>
                         <div
@@ -2535,8 +3087,8 @@ export function ForecastingSection() {
                           }}
                         ></div>
                       </div>
-                      <div className='text-[10px] font-medium text-red-600 mt-1'>
-                        Stokların %{(modalData?.sellThrough || 0).toFixed(0)}&apos;i tükendi (Sell-Through)
+                      <div className='text-[10px] font-medium text-slate-600 mt-1'>
+                        Satılan adet: {Math.round(modalData?.soldUnits || 0).toLocaleString('tr-TR')}
                       </div>
                     </div>
                     <div className='bg-muted/30 p-3 rounded-lg border'>
@@ -2547,18 +3099,10 @@ export function ForecastingSection() {
                         ₺{((modalData?.markdownCost || 0) / 1000).toFixed(1)}k
                       </div>
                       <div className='h-1.5 mt-2'></div>
-                      <div className='text-[10px] text-muted-foreground mt-1'>
-                        Birim başı ₺
-                        {(
-                          (modalData?.markdownCost || 0) /
-                          Math.max(
-                            1,
-                            Math.round(
-                              (selectedCampaign.actualRevenue || 0) / baseSatisFiyati,
-                            ),
-                          )
-                        ).toFixed(2)}{' '}
-                        maliyet
+                      <div
+                        className={`text-[10px] mt-1 ${(modalData?.netContribution || 0) >= 0 ? 'text-emerald-700' : 'text-red-700'}`}
+                      >
+                        Net katkı: {formatCurrencyCompact(modalData?.netContribution || 0)}
                       </div>
                     </div>
                   </div>
@@ -2650,22 +3194,31 @@ export function ForecastingSection() {
                           %{(modalData?.achievementPct || 0).toFixed(0)}
                         </span>{' '}
                         gerçekleşti.{' '}
-                        {modalData?.isOOS ? (
-                          <>
-                            <span className='font-bold border-b border-indigo-300'>
-                              Stok kesintisi gözlendi
-                            </span>{' '}
-                            ve {selectedCampaign.stockOutDays} gün stok-out oluştu.
-                          </>
-                        ) : (
-                          <>Stok planı kampanya boyunca stabil kaldı.</>
+	                        {modalData?.isOOS ? (
+	                          <>
+	                            <span className='font-bold border-b border-indigo-300'>
+	                              Stok kesintisi gözlendi
+	                            </span>{' '}
+	                            ve {Math.max(0, (modalData?.plannedDays || 0) - (modalData?.actualDays || 0))} gün stok-out oluştu.
+	                          </>
+	                        ) : (
+	                          <>Stok planı kampanya boyunca stabil kaldı.</>
                         )}
                         <br />
                         <br />
                         <span className='font-bold'>Öneri:</span>{' '}
-                        {modalData?.isOOS
-                          ? 'Benzer kampanyada planlanan stok gününü artırın ve mağaza içi transfer tamponu ekleyin.'
-                          : 'Mevcut fiyatlama kurgusu korunarak benzer dönemde tekrar uygulanabilir.'}
+                        {(() => {
+                          if (modalData?.isOOS) {
+                            return 'Benzer kampanyada planlanan stok gününü artırın ve mağaza içi transfer tamponu ekleyin.';
+                          }
+                          if ((modalData?.netContribution || 0) < 0) {
+                            return 'Kampanya net katkıda eksiye düştü; aynı kurguyu tekrar kullanmadan önce indirim oranını veya süresini revize edin.';
+                          }
+                          if ((modalData?.achievementPct || 0) < 80) {
+                            return 'Hedef gerçekleşme düşük kaldı; kampanya koşullarını güncellemeden tekrarlamayın.';
+                          }
+                          return 'Mevcut fiyatlama kurgusu uygun görünüyor, benzer dönemde tekrar uygulanabilir.';
+                        })()}
                       </p>
                     </div>
                   </div>
@@ -2732,12 +3285,22 @@ export function ForecastingSection() {
                       {selectedCampaign.name}
                     </DialogTitle>
                   </div>
-                  <DialogDescription>
-                    Fizibilite Raporu ve Onay Formu
-                  </DialogDescription>
-                </DialogHeader>
+	                  <DialogDescription>
+	                    Fizibilite Raporu ve Onay Formu
+	                  </DialogDescription>
+	                </DialogHeader>
+	                {campaignDetailLoading && (
+	                  <div className='mx-1 rounded-md border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-700'>
+	                    Detay seri verisi yükleniyor...
+	                  </div>
+	                )}
+	                {!campaignDetailLoading && campaignDetailError && (
+	                  <div className='mx-1 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700'>
+	                    {campaignDetailError}
+	                  </div>
+	                )}
 
-                <div className='space-y-4 mt-2'>
+	                <div className='space-y-4 mt-2'>
                   {/* KPI Cards (Expectations) */}
                   <div className='grid grid-cols-3 gap-3'>
                     <div className='bg-white p-3 rounded-lg border shadow-sm'>

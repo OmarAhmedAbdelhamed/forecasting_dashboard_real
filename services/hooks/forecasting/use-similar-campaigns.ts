@@ -6,6 +6,9 @@ import { forecastingApi } from '../../api/forecasting';
 interface UseSimilarCampaignsParams {
   promotionType?: string;
   productIds?: string[];
+  storeIds?: string[];
+  regionIds?: string[];
+  categoryIds?: string[];
   limit?: number;
   enabled?: boolean;
 }

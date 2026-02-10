@@ -6,6 +6,8 @@ import { forecastingApi } from '../../api/forecasting';
 interface UsePromotionHistoryParams {
   productIds?: string[];
   storeIds?: string[];
+  regionIds?: string[];
+  categoryIds?: string[];
   limit?: number;
   enabled?: boolean;
 }

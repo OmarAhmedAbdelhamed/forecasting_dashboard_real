@@ -108,6 +108,7 @@ export interface StockTrend {
   actualStock: number;
   forecastDemand: number;
   safetyStock: number;
+  isProjected?: boolean;
 }
 
 export interface StorePerformance {
@@ -199,9 +200,19 @@ export interface AlertsSummary {
 
 // Promotion types
 export interface PromotionHistory {
+  campaignKey: string;
+  eventDate: string;
+  campaignStartDate: string;
+  campaignEndDate: string;
+  storeCode: number;
+  productCode: number;
+  region?: string;
+  category?: string;
+  promoCode: string;
   date: string;
   name: string;
   type: string;
+  typeLabel?: string;
   uplift: number;
   upliftVal: number;
   profit: number;
@@ -209,6 +220,32 @@ export interface PromotionHistory {
   forecast: number;
   stockCostIncrease: number;
   lostSalesVal: number;
+}
+
+export interface CampaignDetailSeriesPoint {
+  date: string;
+  baselineUnits: number;
+  actualUnits: number;
+  stockUnits: number;
+  lostSalesUnits: number;
+  revenue: number;
+}
+
+export interface CampaignDetailSeriesSummary {
+  targetRevenue: number;
+  actualRevenue: number;
+  soldUnits: number;
+  markdownCost: number;
+  sellThrough: number;
+  stockOutDays: number;
+  upliftValue: number;
+  profitEffect: number;
+  forecastAccuracy: number;
+}
+
+export interface CampaignDetailSeriesResponse {
+  series: CampaignDetailSeriesPoint[];
+  summary: CampaignDetailSeriesSummary;
 }
 
 export interface SimilarCampaign {
@@ -235,6 +272,28 @@ export interface PromotionCalendarEvent {
     type: string;
     discount: number | null;
   }[];
+}
+
+export interface ProductPromotionOption {
+  code: string;
+  name: string;
+  label: string;
+  occurrenceDays: number;
+  avgDiscount: number | null;
+  firstDate: string;
+  lastDate: string;
+}
+
+export interface PredictDemandRequest {
+  magazaKodu: number;
+  urunKodu: number;
+  tarihBaslangic: string;
+  tarihBitis: string;
+  ozelgunsayisi: number | null;
+  aktifPromosyonKodu: string;
+  istenenIndirim: number | null;
+  istenenMarj: number | null;
+  istenenFiyat: number | null;
 }
 
 // Demand Forecasting types

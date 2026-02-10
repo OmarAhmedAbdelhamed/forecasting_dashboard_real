@@ -33,6 +33,7 @@ import {
 } from '@/components/ui/shared/tooltip';
 import { STORES, REGIONS_FLAT as REGIONS, REYONLAR } from '@/data/mock-data';
 import { cn } from '@/lib/utils';
+import * as XLSX from 'xlsx';
 
 // --- PRODUCT LIST FOR MOCK DATA ---
 const PRODUCT_NAMES = [
@@ -322,12 +323,12 @@ export function ExportForecastModal({
     }
   };
 
-  // Export Functionality (Mock CSV)
+  // Export Functionality (.xlsx to avoid CSV delimiter/encoding issues in Excel)
   const handleExport = () => {
     const rowsToExport = filteredData.filter((d) => selectedRows.has(d.id));
     if (rowsToExport.length === 0) {return;}
 
-    const headers = visibleColumns
+    const headerRow = visibleColumns
       .map((colId) => {
         let label = ALL_COLUMNS.find((c) => c.id === colId)?.label;
         if (colId === 'forecastQty') {
@@ -345,11 +346,10 @@ export function ExportForecastModal({
           label =
             period === 'monthly' ? 'Ciro Tahmini (30g)' : 'Ciro Tahmini (7g)';
         }
-        return label;
-      })
-      .join(',');
+        return label ?? colId;
+      });
 
-    const csvRows = rowsToExport.map((row) => {
+    const dataRows = rowsToExport.map((row) => {
       return visibleColumns
         .map((colId) => {
           let val = row[colId as keyof ProductData];
@@ -361,23 +361,16 @@ export function ExportForecastModal({
             else if (val === 'none') {val = 'Yok';}
           }
 
-          return typeof val === 'string' && val.includes(',')
-            ? `"${val}"`
-            : val;
+          return val ?? '';
         })
-        .join(',');
+        ;
     });
 
-    const csvContent = [headers, ...csvRows].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', 'forecast_export_bee2ai.csv');
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const worksheet = XLSX.utils.aoa_to_sheet([headerRow, ...dataRows]);
+    worksheet['!cols'] = headerRow.map(() => ({ wch: 18 }));
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Tahmin Export');
+    XLSX.writeFile(workbook, 'forecast_export_bee2ai.xlsx', { compression: true });
 
     onOpenChange(false);
   };
