@@ -35,6 +35,7 @@ import {
   useInventoryAlerts,
 } from '@/services';
 import { useFilterOptions } from '@/services/hooks/filters/use-filter-options';
+import { useProximityAlerts } from '@/hooks/use-proximity-alerts';
 
 function parseStoreCodeFromAlert(storeName?: string) {
   if (!storeName) {
@@ -246,6 +247,13 @@ export function InventoryPlanningSection() {
     storeIds: effectiveSelectedStores,
     limit: 40,
   });
+
+  // Enhance alerts with proximity recommendations
+  const { enhancedAlerts } = useProximityAlerts(
+    inventoryAlerts,
+    periodItems
+  );
+
   const inventoryAlertCount = inventoryAlerts.length;
 
   const hasChartSelection =
@@ -424,7 +432,7 @@ export function InventoryPlanningSection() {
 
       <div className='grid grid-cols-1 md:grid-cols-2 gap-6 items-start'>
         <PlanningAlerts
-          data={inventoryAlerts}
+          data={enhancedAlerts}
           onActionClick={handleAlertActionClick}
           period={periodDays}
         />
