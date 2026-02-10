@@ -206,8 +206,54 @@ function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
         </div>
       )}
 
-      {/* AI Recommendation */}
-      {alert.recommendation && (
+      {/* Proximity Transfer Recommendations */}
+      {alert.proximityOptions && alert.proximityOptions.length > 0 && (
+        <div className='relative overflow-hidden rounded-lg bg-emerald-50/50 border border-emerald-100 p-3'>
+          <div className='flex items-start gap-3'>
+            <div className='mt-0.5 p-1.5 bg-emerald-100 rounded-full'>
+              <Lightbulb className='h-3.5 w-3.5 text-emerald-600' />
+            </div>
+            <div className='flex-1 space-y-1'>
+              <p className='text-[11px] font-bold text-emerald-700 uppercase tracking-wide'>
+                En Yakın Stok Kaynakları
+              </p>
+              <div className='space-y-1'>
+                {alert.proximityOptions.slice(0, 3).map((option, index) => (
+                  <div key={`${alert.id}-${option.storeName}-${index}`} className='flex items-center gap-2 text-xs text-emerald-900'>
+                    <span className='font-medium'>{option.storeName || 'Bilinmeyen Mağaza'}</span>
+                    <span className='text-muted-foreground'>•</span>
+                    <span className='text-emerald-700 font-semibold'>
+                      {option.distanceDisplay || '-'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* No Transfer Options Available */}
+      {alert.noTransferOptions && (
+        <div className='relative overflow-hidden rounded-lg bg-amber-50/50 border border-amber-100 p-3'>
+          <div className='flex items-start gap-3'>
+            <div className='mt-0.5 p-1.5 bg-amber-100 rounded-full'>
+              <AlertTriangle className='h-3.5 w-3.5 text-amber-600' />
+            </div>
+            <div className='flex-1 space-y-1'>
+              <p className='text-[11px] font-bold text-amber-700 uppercase tracking-wide'>
+                Stok Transferi Yok
+              </p>
+              <p className='text-xs text-amber-900 leading-relaxed'>
+                Tüm mağazalarda stok yetersiz. Tedarikçi ile iletişime geçin.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Original AI Recommendation (only show when no proximity options) */}
+      {alert.recommendation && !alert.proximityOptions && (
         <div className='relative overflow-hidden rounded-lg bg-indigo-50/50 border border-indigo-100 p-3'>
           <div className='flex items-start gap-3'>
             <div className='mt-0.5 p-1.5 bg-indigo-100 rounded-full'>

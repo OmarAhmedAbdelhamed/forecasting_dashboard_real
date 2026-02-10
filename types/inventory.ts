@@ -58,6 +58,14 @@ export interface StoreInventoryPerformance {
   stockEfficiency: number; // 0-100 score
 }
 
+export interface ProximityRecommendation {
+  storeName: string;
+  distance: number;
+  distanceDisplay: string;
+  availableStock: number;
+  isSurplus: boolean;
+}
+
 export interface InventoryAlert {
   id: string;
   type:
@@ -82,6 +90,8 @@ export interface InventoryAlert {
   };
   recommendation?: string;
   actionType?: 'reorder' | 'transfer' | 'promotion' | 'review';
+  proximityOptions?: ProximityRecommendation[];
+  noTransferOptions?: boolean;
 }
 
 export interface CustomProductList {

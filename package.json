@@ -9,7 +9,12 @@
     "lint:fix": "eslint . --fix",
     "start": "next start",
     "type-check": "tsc --noEmit",
-    "create-admin": "tsx scripts/create-admin-user.ts"
+    "create-admin": "tsx scripts/create-admin-user.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:debug": "playwright test --debug"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",
@@ -71,7 +76,11 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.3",
+    "@jest/globals": "^30.2.0",
     "@tailwindcss/postcss": "^4.1.9",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/jest": "^30.0.0",
     "@types/node": "^22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -79,8 +88,11 @@
     "@typescript-eslint/parser": "^8.54.0",
     "eslint": "^9.39.2",
     "eslint-config-next": "^16.1.6",
+    "jest": "^30.2.0",
+    "jest-environment-jsdom": "^30.2.0",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
+    "ts-jest": "^29.4.6",
     "tsx": "^4.19.2",
     "tw-animate-css": "1.3.3",
     "typescript": "^5.9.3"
