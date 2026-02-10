@@ -219,11 +219,11 @@ function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
               </p>
               <div className='space-y-1'>
                 {alert.proximityOptions.slice(0, 3).map((option, index) => (
-                  <div key={index} className='flex items-center gap-2 text-xs text-emerald-900'>
-                    <span className='font-medium'>{option.storeName}</span>
+                  <div key={`${alert.id}-${option.storeName}-${index}`} className='flex items-center gap-2 text-xs text-emerald-900'>
+                    <span className='font-medium'>{option.storeName || 'Bilinmeyen Mağaza'}</span>
                     <span className='text-muted-foreground'>•</span>
                     <span className='text-emerald-700 font-semibold'>
-                      {option.distance}
+                      {option.distanceDisplay || '-'}
                     </span>
                   </div>
                 ))}
