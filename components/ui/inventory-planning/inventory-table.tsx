@@ -704,6 +704,7 @@ export function InventoryTable({
         item={selectedItem}
         open={isSheetOpen}
         onOpenChange={setIsSheetOpen}
+        period={period}
       />
     </div>
   );

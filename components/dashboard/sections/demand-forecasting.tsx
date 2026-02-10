@@ -64,6 +64,7 @@ import type {
   ForecastErrorProduct,
 } from '@/services/types/api';
 import { toast } from 'sonner';
+import { PageLoading } from '@/components/ui/shared/page-loading';
 
 // Responsive chart config for different screen sizes
 const getChartConfig = (is2xl: boolean) => ({
@@ -137,6 +138,12 @@ export function DemandForecastingSection() {
     ForecastErrorProduct[]
   >([]);
   const [isLoading, setIsLoading] = useState(false);
+  const hasAnyData =
+    trendDataState.length > 0 ||
+    biasDataState.length > 0 ||
+    yearDataState.length > 0 ||
+    growthProductsState.length > 0 ||
+    errorProductsState.length > 0;
 
   useEffect(() => {
     const checkScreenSize = () => {
@@ -150,6 +157,18 @@ export function DemandForecastingSection() {
     };
   }, []);
 
+  const showLoading =
+    (permissionsLoading || isFilterLoading || isLoading) && !hasAnyData;
+/*
+    return (
+      <PageLoading
+        title='Talep Tahminleme yükleniyor…'
+        description='KPI, tablolar ve grafikler getiriliyor.'
+      />
+    );
+  }
+
+*/
   const chartConfig = getChartConfig(is2xl);
 
   const xAxisInterval = useMemo(() => {
@@ -236,6 +255,10 @@ export function DemandForecastingSection() {
     const fetchData = async () => {
       setIsLoading(true);
       try {
+        // Tables are defined as "month over month" style insights; keep them stable at 30 days
+        // even when the main period selector is 180/365+.
+        const tableWindowDays = 30;
+
         const filterParams = {
           storeIds: selectedStores.length > 0 ? selectedStores : undefined,
           productIds: selectedProducts.length > 0 ? selectedProducts : undefined,
@@ -263,16 +286,15 @@ export function DemandForecastingSection() {
             storeIds: filterParams.storeIds,
             categoryIds: filterParams.categoryIds,
             productIds: filterParams.productIds,
-            type:
-              growthFilter === 'all'
-                ? 'high'
-                : (growthFilter as 'high' | 'low'),
+            days: tableWindowDays,
+            type: growthFilter as 'all' | 'high' | 'low',
           }),
           demandApi.getForecastErrors({
             storeIds: filterParams.storeIds,
             categoryIds: filterParams.categoryIds,
             productIds: filterParams.productIds,
             severityFilter: errorFilter,
+            days: tableWindowDays,
           }),
         ]);
 
@@ -396,7 +418,12 @@ export function DemandForecastingSection() {
     });
   }, [errorSearch, errorProductsState]);
 
-  return (
+  return showLoading ? (
+    <PageLoading
+      title='Talep Tahminleme yükleniyor…'
+      description='KPI, tablolar ve grafikler getiriliyor.'
+    />
+  ) : (
     <div className='space-y-4 2xl:space-y-6'>
       {/* Universal Filter Bar */}
       <FilterBar
@@ -521,7 +548,7 @@ export function DemandForecastingSection() {
 
           {canSeeKpi('demand-low-growth') && (
             <KPICard
-              title='Low Growth'
+              title='Düşük Büyüme'
               value={String(kpiValues.lowGrowth)}
               subValue='Ürün'
               trend=''
@@ -534,7 +561,7 @@ export function DemandForecastingSection() {
 
           {canSeeKpi('demand-high-growth') && (
             <KPICard
-              title='High Growth'
+              title='Yüksek Büyüme'
               value={String(kpiValues.highGrowth)}
               subValue='Ürün'
               trend=''
@@ -938,7 +965,25 @@ export function DemandForecastingSection() {
                         Ürün
                       </th>
                       <th className='text-right p-2 font-medium text-muted-foreground'>
-                        Büyüme
+                        <span className='inline-flex items-center justify-end gap-1 w-full'>
+                          Büyüme
+                          <UITooltip>
+                            <TooltipTrigger asChild>
+                              <Info className='h-3.5 w-3.5 text-muted-foreground cursor-help' />
+                            </TooltipTrigger>
+                            <TooltipContent className='max-w-[360px] text-xs 2xl:text-base'>
+                              <p>
+                                Formül:{' '}
+                                <strong>(Satış - Önceki dönem satış)</strong> /
+                                Önceki dönem satış × 100
+                              </p>
+                              <p className='mt-1'>
+                                Satış: son <strong>30</strong> gün, önceki dönem:
+                                bir önceki <strong>30</strong> gün.
+                              </p>
+                            </TooltipContent>
+                          </UITooltip>
+                        </span>
                       </th>
                       <th className='text-right p-2 font-medium text-muted-foreground'>
                         Tahmin
@@ -1046,7 +1091,22 @@ export function DemandForecastingSection() {
                         Ürün
                       </th>
                       <th className='text-right p-2 font-medium text-muted-foreground'>
-                        Hata
+                        <span className='inline-flex items-center justify-end gap-1 w-full'>
+                          Hata
+                          <UITooltip>
+                            <TooltipTrigger asChild>
+                              <Info className='h-3.5 w-3.5 text-muted-foreground cursor-help' />
+                            </TooltipTrigger>
+                            <TooltipContent className='max-w-[360px] text-xs 2xl:text-base'>
+                              <p>
+                                Formül: <strong>|Tahmin - Satış| / Satış × 100</strong>
+                              </p>
+                              <p className='mt-1'>
+                                Hesaplama son <strong>30</strong> gün üzerinden yapılır.
+                              </p>
+                            </TooltipContent>
+                          </UITooltip>
+                        </span>
                       </th>
                       <th className='text-left p-2 font-medium text-muted-foreground'>
                         Aksiyon

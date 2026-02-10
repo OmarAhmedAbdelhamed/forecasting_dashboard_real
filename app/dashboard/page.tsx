@@ -14,6 +14,7 @@ import { CategoryManagementSection } from '@/components/dashboard/sections/categ
 import type { Section } from '@/types/types';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useAuth } from '@/hooks/use-auth';
+import { DashboardProvider } from '@/contexts/dashboard-context';
 
 // Mapping between Section (internal state) and DashboardSection (permissions)
 const SECTION_TO_PERMISSION_MAP: Record<Section, DashboardSection> = {
@@ -187,24 +188,26 @@ export default function Dashboard() {
   };
 
   return (
-    <div className='flex min-h-screen bg-background'>
-      <Sidebar
-        activeSection={activeSection}
-        onSectionChange={handleSectionChange}
-        collapsed={sidebarCollapsed}
-        onCollapsedChange={setSidebarCollapsed}
-      />
-      <div className='flex-1 flex flex-col transition-all duration-300 ease-out ml-[55px]'>
-        <Header activeSection={activeSection} />
-        <main className='flex-1 p-6 overflow-auto'>
-          <div
-            key={activeSection}
-            className='animate-in fade-in slide-in-from-bottom-4 duration-500'
-          >
-            {renderSection()}
-          </div>
-        </main>
+    <DashboardProvider>
+      <div className='flex min-h-screen bg-background'>
+        <Sidebar
+          activeSection={activeSection}
+          onSectionChange={handleSectionChange}
+          collapsed={sidebarCollapsed}
+          onCollapsedChange={setSidebarCollapsed}
+        />
+        <div className='flex-1 flex flex-col transition-all duration-300 ease-out ml-[55px]'>
+          <Header activeSection={activeSection} />
+          <main className='flex-1 p-6 overflow-auto'>
+            <div
+              key={activeSection}
+              className='animate-in fade-in slide-in-from-bottom-4 duration-500'
+            >
+              {renderSection()}
+            </div>
+          </main>
+        </div>
       </div>
-    </div>
+    </DashboardProvider>
   );
 }

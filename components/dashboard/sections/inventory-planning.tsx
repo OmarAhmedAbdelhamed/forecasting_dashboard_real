@@ -35,6 +35,7 @@ import {
   useInventoryAlerts,
 } from '@/services';
 import { useFilterOptions } from '@/services/hooks/filters/use-filter-options';
+import { PageLoading } from '@/components/ui/shared/page-loading';
 
 function parseStoreCodeFromAlert(storeName?: string) {
   if (!storeName) {
@@ -85,6 +86,7 @@ export function InventoryPlanningSection() {
     dataScope,
     userRole,
     isLoading: permissionsLoading,
+    canUseFilter,
   } = usePermissions();
 
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
@@ -96,7 +98,8 @@ export function InventoryPlanningSection() {
 
   // Period Selection State
   const [selectedPeriod, setSelectedPeriod] = useState<string>('30');
-  const periodDays = parseInt(selectedPeriod, 10);
+  const parsedPeriodDays = parseInt(selectedPeriod, 10);
+  const periodDays = Number.isNaN(parsedPeriodDays) ? 30 : parsedPeriodDays;
 
   const tableRef = useRef<HTMLDivElement>(null);
 
@@ -108,19 +111,24 @@ export function InventoryPlanningSection() {
     sku: string;
     storeCode?: string;
   } | null>(null);
-  const { replaceLists } = useCustomLists();
+  const { replaceAutoLists } = useCustomLists();
 
   // Get filter options from API
-  const { regionOptions, storeOptions, categoryOptions, productOptions } =
-    useFilterOptions({
-      selectedRegions,
-      selectedStores,
-      selectedCategories,
-    });
+  const {
+    regionOptions,
+    storeOptions,
+    categoryOptions,
+    productOptions,
+    isLoading: filterOptionsLoading,
+  } = useFilterOptions({
+    selectedRegions,
+    selectedStores,
+    selectedCategories,
+  });
 
   useEffect(() => {
-    replaceLists(buildRandomProductLists(productOptions));
-  }, [productOptions, replaceLists]);
+    replaceAutoLists(buildRandomProductLists(productOptions));
+  }, [productOptions, replaceAutoLists]);
 
   // Filter region options based on user permissions
   const filteredRegionOptions = useMemo(() => {
@@ -183,6 +191,7 @@ export function InventoryPlanningSection() {
     storeIds: effectiveSelectedStores,
     categoryIds: effectiveSelectedCategories,
     productIds: effectiveSelectedProducts,
+    days: periodDays,
   });
 
   // Fallback to mock data if API is not available
@@ -193,12 +202,14 @@ export function InventoryPlanningSection() {
         effectiveSelectedStores,
         effectiveSelectedCategories,
         effectiveSelectedProducts,
+        periodDays,
       ),
     [
       selectedRegions,
       effectiveSelectedStores,
       effectiveSelectedCategories,
       effectiveSelectedProducts,
+      periodDays,
     ],
   );
 
@@ -206,15 +217,17 @@ export function InventoryPlanningSection() {
 
   // 2. Period-Aware Data (Lists & Charts)
   // Fetch real data from API
-  const { data: inventoryItemsData } = useInventoryItems({
+  const { data: inventoryItemsData, isLoading: itemsLoading } =
+    useInventoryItems({
     regionIds: selectedRegions,
     storeIds: effectiveSelectedStores,
     categoryIds: effectiveSelectedCategories,
     productIds: effectiveSelectedProducts,
     limit: 100,
+    days: periodDays,
   });
 
-  const { data: stockTrendsData } = useStockTrends({
+  const { data: stockTrendsData, isLoading: trendsLoading } = useStockTrends({
     regionIds: selectedRegions,
     storeIds: effectiveSelectedStores,
     categoryIds: effectiveSelectedCategories,
@@ -224,11 +237,13 @@ export function InventoryPlanningSection() {
     days: periodDays,
   });
 
-  const { data: storePerformanceData } = useStorePerformance({
+  const { data: storePerformanceData, isLoading: storePerformanceLoading } =
+    useStorePerformance({
     regionIds: selectedRegions,
     storeIds: effectiveSelectedStores,
     categoryIds: effectiveSelectedCategories,
     productIds: effectiveSelectedProducts,
+    days: periodDays,
   });
 
   // Use API data or fallback to empty arrays
@@ -241,10 +256,14 @@ export function InventoryPlanningSection() {
     }),
   );
 
-  const { data: inventoryAlerts = [] } = useInventoryAlerts({
+  const { data: inventoryAlerts = [], isLoading: alertsLoading } =
+    useInventoryAlerts({
     regionIds: selectedRegions,
     storeIds: effectiveSelectedStores,
+    categoryIds: effectiveSelectedCategories,
+    productIds: effectiveSelectedProducts,
     limit: 40,
+    days: periodDays,
   });
   const inventoryAlertCount = inventoryAlerts.length;
 
@@ -348,6 +367,30 @@ export function InventoryPlanningSection() {
     setMetrics,
   ]);
 
+  const isInitialLoading =
+    permissionsLoading ||
+    filterOptionsLoading ||
+    kpisLoading ||
+    itemsLoading ||
+    trendsLoading ||
+    storePerformanceLoading ||
+    alertsLoading;
+
+  const hasInitialData =
+    inventoryItemsData !== undefined ||
+    stockTrendsData !== undefined ||
+    storePerformanceData !== undefined ||
+    kpis !== undefined;
+
+  if (isInitialLoading && !hasInitialData) {
+    return (
+      <PageLoading
+        title='Envanter Planlama yükleniyor…'
+        description='Stok KPI, ürün listeleri ve uyarılar getiriliyor.'
+      />
+    );
+  }
+
   return (
     <div className='flex flex-col space-y-6 pb-6'>
       <FilterBar
@@ -378,7 +421,8 @@ export function InventoryPlanningSection() {
         selectedProducts={effectiveSelectedProducts}
         onProductChange={setSelectedProducts}
       >
-        <div className='w-full md:w-auto min-w-32'>
+        {canUseFilter('filter-period') && (
+          <div className='w-full md:w-auto min-w-32'>
           <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
             <SelectTrigger>
               <SelectValue placeholder='Periyot' />
@@ -389,10 +433,11 @@ export function InventoryPlanningSection() {
               <SelectItem value='180'>180 Gün</SelectItem>
             </SelectContent>
           </Select>
-        </div>
+          </div>
+        )}
       </FilterBar>
 
-      <InventoryKpiSection data={displayKpis} />
+      <InventoryKpiSection data={displayKpis} period={periodDays} />
 
       <div className='grid grid-cols-1 lg:grid-cols-3 gap-6'>
         <div className='lg:col-span-1'>
@@ -443,7 +488,11 @@ export function InventoryPlanningSection() {
           />
         </div>
         <div className='lg:col-span-2'>
-          <CustomProductLists onListSelect={setSelectedProducts} />
+          <CustomProductLists
+            onListSelect={setSelectedProducts}
+            productOptions={productOptions}
+            activeSkus={effectiveSelectedProducts}
+          />
         </div>
       </div>
 
@@ -461,6 +510,7 @@ export function InventoryPlanningSection() {
         item={alertSelectedItem}
         open={alertSheetOpen}
         onOpenChange={setAlertSheetOpen}
+        period={periodDays}
       />
     </div>
   );

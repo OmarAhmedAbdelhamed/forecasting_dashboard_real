@@ -1,5 +1,3 @@
-'use client';
-
 import {
   Table,
   TableBody,
@@ -41,32 +39,45 @@ export function UpcomingPromotions({ promotions }: UpcomingPromotionsProps) {
               <TableHead>Kampanya Adı</TableHead>
               <TableHead>Süre (Gün)</TableHead>
               <TableHead>Başlangıç</TableHead>
+              <TableHead>Bitiş</TableHead>
               <TableHead>İndirim</TableHead>
               <TableHead>Durum</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {promotions.map((promo) => (
-              <TableRow key={`${promo.name}-${promo.startDate}`}>
-                <TableCell className='font-medium'>{promo.name}</TableCell>
-                <TableCell>{promo.durationDays}</TableCell>
-                <TableCell>{promo.startDate}</TableCell>
-                <TableCell>{promo.discount}</TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      promo.status === 'Aktif'
-                        ? 'default'
-                        : promo.status === 'Beklemede'
-                          ? 'secondary'
-                          : 'outline'
-                    }
-                  >
-                    {promo.status}
-                  </Badge>
+            {promotions.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={6}
+                  className='text-center text-sm text-muted-foreground'
+                >
+                  Gösterilecek promosyon bulunamadı.
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              promotions.map((promo) => (
+                <TableRow key={`${promo.name}-${promo.startDate}`}>
+                  <TableCell className='font-medium'>{promo.name}</TableCell>
+                  <TableCell>{promo.durationDays}</TableCell>
+                  <TableCell>{promo.startDate}</TableCell>
+                  <TableCell>{promo.endDate}</TableCell>
+                  <TableCell>{promo.discount}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        promo.status === 'Aktif'
+                          ? 'default'
+                          : promo.status === 'Beklemede'
+                            ? 'secondary'
+                            : 'outline'
+                      }
+                    >
+                      {promo.status}
+                    </Badge>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </CardContent>

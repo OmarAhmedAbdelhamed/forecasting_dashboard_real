@@ -6,6 +6,7 @@ import type { FilterParams, PaginationParams } from '../../types/api';
 
 interface UseInventoryItemsParams extends FilterParams, PaginationParams {
   status?: 'In Stock' | 'Low Stock' | 'Out of Stock' | 'Overstock';
+  days?: number;
 }
 
 /**

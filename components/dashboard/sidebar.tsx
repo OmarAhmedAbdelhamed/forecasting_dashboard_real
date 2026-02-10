@@ -31,7 +31,6 @@ const navigation: { name: string; href: Section; icon: React.ElementType }[] = [
   { name: 'Talep Tahminleme', href: 'demand_forecasting', icon: TrendingUp },
   { name: 'Envanter Planlama', href: 'inventory_planning', icon: Package },
   { name: 'Fiyatlandırma & Promosyon', href: 'pricing_promotion', icon: Tag },
-  { name: 'Sezonluk Planlama', href: 'seasonal_planning', icon: CalendarRange },
   { name: 'Uyarı Merkezi', href: 'alert_center', icon: AlertTriangle },
 ];
 

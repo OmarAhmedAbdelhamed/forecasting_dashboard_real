@@ -955,9 +955,10 @@ export function getInventoryKPIs(
   stores: string[],
   categories: string[],
   products: string[] = [],
+  days = 30,
 ): InventoryKPIs {
   // 1. Generate the actual items for this context
-  const items = generateInventoryItems(regions, stores, categories, products);
+  const items = generateInventoryItems(regions, stores, categories, products, days);
 
   // 2. Calculate aggregates
   const totalStockValue = items.reduce((sum, item) => sum + item.stockValue, 0);

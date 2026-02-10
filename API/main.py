@@ -4,11 +4,14 @@ Exposes ClickHouse query functions from omerApi_combined.py as REST endpoints
 """
 
 from fastapi import FastAPI, Query, HTTPException
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from typing import List, Optional
 import clickhouse_connect
 import os
 from dotenv import load_dotenv
+import traceback
 
 # Import all functions from omerApi_combined
 from omerApiYan import (
@@ -29,6 +32,7 @@ from omerApiYan import (
     get_inventory_kpis,
     get_inventory_stock_trends,
     get_inventory_store_performance,
+    get_inventory_alerts,
     get_alerts_summary,
     get_forecast_errors,
     get_inventory_items,
@@ -46,10 +50,24 @@ app = FastAPI(
     version="1.0.0",
 )
 
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+  # Ensure the frontend always receives a JSON error payload (useful in dev).
+  traceback.print_exc()
+  return JSONResponse(
+    status_code=500,
+    content={
+      "detail": str(exc),
+      "path": str(request.url),
+    },
+  )
+
 # CORS middleware for Next.js frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    # Dev convenience: allow any localhost/127.0.0.1 port.
+    allow_origin_regex=r"^https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -322,20 +340,30 @@ def api_get_alerts_summary(
 def api_get_inventory_alerts(
     regionIds: Optional[List[str]] = Query(None),
     storeIds: Optional[List[str]] = Query(None),
+    categoryIds: Optional[List[str]] = Query(None),
+    productIds: Optional[List[str]] = Query(None),
     search: Optional[str] = Query(None),
     limit: int = Query(100, ge=1, le=500),
+    days: int = Query(30, ge=1, le=3650),
 ):
     """Get inventory stock alerts"""
     try:
         client = get_client()
-        s_ids = [int(s) for s in storeIds] if storeIds else None
+        s_ids = (
+            [int(s) for s in storeIds if s is not None and str(s).isdigit()]
+            if storeIds
+            else None
+        )
         
         return get_inventory_alerts(
             client,
             region_ids=regionIds,
             store_ids=s_ids,
+            category_ids=categoryIds,
+            product_ids=productIds,
             search=search,
             limit=limit,
+            days=days,
             table_name=TABLE_NAME
         )
     except Exception as e:
@@ -425,6 +453,7 @@ def api_get_demand_growth_products(
     storeIds: List[str] = Query([]),
     categoryIds: Optional[List[str]] = Query(None),
     productIds: Optional[List[str]] = Query(None),
+    days: int = Query(30, ge=1, le=3650),
     type: str = "high"
 ):
     """Get high or low growth products"""
@@ -435,6 +464,7 @@ def api_get_demand_growth_products(
         category_ids=[int(c) for c in categoryIds] if categoryIds else None,
         product_ids=[int(p) for p in productIds] if productIds else None,
         type_=type,
+        days=days,
         table_name=TABLE_NAME
     )
 
@@ -443,7 +473,8 @@ def api_get_demand_forecast_errors(
     storeIds: Optional[List[str]] = Query(None),
     categoryIds: Optional[List[str]] = Query(None),
     productIds: Optional[List[str]] = Query(None),
-    severityFilter: Optional[str] = Query(None)
+    severityFilter: Optional[str] = Query(None),
+    days: int = Query(30, ge=1, le=3650),
 ):
     """Get products with significant forecast errors"""
     client = get_client()
@@ -454,6 +485,7 @@ def api_get_demand_forecast_errors(
         category_ids=[int(c) for c in categoryIds] if categoryIds else None,
         product_ids=[int(p) for p in productIds] if productIds else None,
         severity_filter=severityFilter,
+        days=days,
         table_name=TABLE_NAME
     )
 
@@ -525,6 +557,7 @@ def api_get_inventory_kpis(
     storeIds: Optional[List[str]] = Query(None),
     categoryIds: Optional[List[str]] = Query(None),
     productIds: Optional[List[str]] = Query(None),
+    days: int = Query(30, ge=1, le=3650),
 ):
     """Get inventory KPIs (stock value, coverage, excess, etc.)"""
     client = get_client()
@@ -534,6 +567,7 @@ def api_get_inventory_kpis(
         store_ids=storeIds,
         category_ids=categoryIds,
         product_ids=productIds,
+        days=days,
         table_name=TABLE_NAME
     )
 
@@ -545,26 +579,33 @@ def api_get_inventory_items(
     categoryIds: Optional[List[str]] = Query(None),
     productIds: Optional[List[str]] = Query(None),
     status: Optional[str] = Query(None),
+    days: int = Query(30, ge=1, le=3650),
     page: int = 1,
     limit: int = 50,
     sortBy: str = "stockValue",
     sortOrder: str = "desc"
 ):
     """Get inventory items with pagination"""
-    client = get_client()
-    return get_inventory_items(
-        client,
-        table_name=TABLE_NAME,
-        region_ids=regionIds,
-        store_ids=storeIds,
-        category_ids=categoryIds,
-        product_ids=productIds,
-        status=status,
-        page=page,
-        limit=limit,
-        sort_by=sortBy,
-        sort_order=sortOrder
-    )
+    try:
+        client = get_client()
+        return get_inventory_items(
+            client,
+            table_name=TABLE_NAME,
+            region_ids=regionIds,
+            store_ids=storeIds,
+            category_ids=categoryIds,
+            product_ids=productIds,
+            status=status,
+            days=days,
+            page=page,
+            limit=limit,
+            sort_by=sortBy,
+            sort_order=sortOrder,
+        )
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Inventory Items Error: {str(e)}")
 
 
 @app.get("/api/inventory/stock-trends")
@@ -594,6 +635,7 @@ def api_get_inventory_store_performance(
     storeIds: Optional[List[str]] = Query(None),
     categoryIds: Optional[List[str]] = Query(None),
     productIds: Optional[List[str]] = Query(None),
+    days: int = Query(30, ge=1, le=3650),
 ):
     """Get store inventory performance"""
     client = get_client()
@@ -603,7 +645,8 @@ def api_get_inventory_store_performance(
         region_ids=regionIds,
         store_ids=storeIds,
         category_ids=categoryIds,
-        product_ids=productIds
+        product_ids=productIds,
+        days=days,
     )
 
 

@@ -7,7 +7,7 @@ import type { FilterParams } from '../../types/api';
 /**
  * Hook to fetch inventory KPIs
  */
-export function useInventoryKPIs(params?: FilterParams) {
+export function useInventoryKPIs(params?: FilterParams & { days?: number }) {
   return useQuery({
     queryKey: ['inventory-kpis', params],
     queryFn: () => inventoryApi.getKPIs(params),

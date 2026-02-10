@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Tabs,
   TabsContent,
@@ -9,15 +9,10 @@ import {
 } from '@/components/ui/shared/tabs';
 import { AlertList } from './alert-list';
 import { FilterBar } from '@/components/ui/shared/filter-bar';
-import {
-  REGIONS_FLAT,
-  getStoresByRegions,
-  getCategoriesByStores,
-} from '@/data/mock-data';
-import { GrowthProduct, ForecastErrorProduct } from '@/data/mock-alerts';
-import { InventoryAlert } from '@/types/inventory';
+import type { GrowthProduct, ForecastErrorProduct } from '@/services/types/api';
 import type { DataScope } from '@/types/permissions';
 import type { UserRole } from '@/types/auth';
+import { useFilterOptions } from '@/services/hooks/filters/use-filter-options';
 
 interface ResolvedAlert {
   id: string;
@@ -26,7 +21,7 @@ interface ResolvedAlert {
   action: string;
   comment: string;
   date: Date;
-  data: GrowthProduct | ForecastErrorProduct | InventoryAlert;
+  data: GrowthProduct | ForecastErrorProduct;
 }
 
 interface AlertCenterLayoutProps {
@@ -40,22 +35,35 @@ export function AlertCenterLayout({
   canResolveAlerts,
   userRole,
 }: AlertCenterLayoutProps) {
-  // Resolved alerts state
   const [resolvedAlerts, setResolvedAlerts] = useState<ResolvedAlert[]>([]);
 
   const handleResolve = (alert: ResolvedAlert) => {
     setResolvedAlerts((prev) => [alert, ...prev]);
   };
 
-  // Filter States
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
 
-  // Derived Options
-  const regionOptions = REGIONS_FLAT;
-  const storeOptions = getStoresByRegions(selectedRegions);
-  const categoryOptions = getCategoriesByStores(selectedStores);
+  const { regionOptions, storeOptions, categoryOptions } = useFilterOptions({
+    selectedRegions,
+    selectedStores,
+    selectedCategories,
+  });
+
+  const filteredRegionOptions = useMemo(() => {
+    if (dataScope.regions.length > 0) {
+      return regionOptions.filter((r) => dataScope.regions.includes(r.value));
+    }
+    return regionOptions;
+  }, [dataScope.regions, regionOptions]);
+
+  // If no store explicitly selected, send all storeIds currently available in the filter list.
+  const effectiveStoreIds = useMemo(() => {
+    return selectedStores.length > 0
+      ? selectedStores
+      : storeOptions.map((store) => store.value);
+  }, [selectedStores, storeOptions]);
 
   const handleRegionChange = (regions: string[]) => {
     setSelectedRegions(regions);
@@ -71,12 +79,11 @@ export function AlertCenterLayout({
   return (
     <div className='flex flex-col h-full space-y-6'>
       <div className='flex flex-col space-y-4'>
-        {/* Title is now part of FilterBar as requested */}
         <FilterBar
           title='Uyarı Merkezi'
           selectedRegions={selectedRegions}
           onRegionChange={handleRegionChange}
-          regionOptions={regionOptions}
+          regionOptions={filteredRegionOptions}
           selectedStores={selectedStores}
           onStoreChange={handleStoreChange}
           storeOptions={storeOptions}
@@ -98,7 +105,11 @@ export function AlertCenterLayout({
         <TabsContent value='low-growth' className='flex-1 mt-4'>
           <AlertList
             type='low-growth'
-            filters={{ selectedRegions, selectedStores, selectedCategories }}
+            filters={{
+              selectedRegions,
+              selectedStores: effectiveStoreIds,
+              selectedCategories,
+            }}
             resolvedAlerts={resolvedAlerts}
             onResolve={handleResolve}
             canResolveAlerts={canResolveAlerts}
@@ -109,7 +120,11 @@ export function AlertCenterLayout({
         <TabsContent value='high-growth' className='flex-1 mt-4'>
           <AlertList
             type='high-growth'
-            filters={{ selectedRegions, selectedStores, selectedCategories }}
+            filters={{
+              selectedRegions,
+              selectedStores: effectiveStoreIds,
+              selectedCategories,
+            }}
             resolvedAlerts={resolvedAlerts}
             onResolve={handleResolve}
             canResolveAlerts={canResolveAlerts}
@@ -120,7 +135,11 @@ export function AlertCenterLayout({
         <TabsContent value='forecast-error' className='flex-1 mt-4'>
           <AlertList
             type='forecast-error'
-            filters={{ selectedRegions, selectedStores, selectedCategories }}
+            filters={{
+              selectedRegions,
+              selectedStores: effectiveStoreIds,
+              selectedCategories,
+            }}
             resolvedAlerts={resolvedAlerts}
             onResolve={handleResolve}
             canResolveAlerts={canResolveAlerts}
@@ -132,3 +151,4 @@ export function AlertCenterLayout({
     </div>
   );
 }
+

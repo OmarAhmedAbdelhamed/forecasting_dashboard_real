@@ -4,6 +4,35 @@ import numpy as np
 from datetime import date, timedelta
 
 
+def _normalize_filter_ids(values: list[str] | None) -> list[str]:
+    """
+    Normalize filter IDs to numeric tokens for SQL IN clauses.
+    Supports composite values such as:
+      - store_category => "1054_101" -> "101"
+      - store_category_product => "1054_101_30389579" -> "30389579"
+    """
+    if not values:
+        return []
+
+    normalized: list[str] = []
+    for raw_value in values:
+        if raw_value is None:
+            continue
+
+        token = str(raw_value).strip()
+        if not token:
+            continue
+
+        if "_" in token:
+            token = token.split("_")[-1]
+
+        if token.isdigit():
+            normalized.append(token)
+
+    # Keep order, drop duplicates
+    return list(dict.fromkeys(normalized))
+
+
 
 category_map = {
         100: "LIKITLER",
@@ -201,7 +230,7 @@ def get_categories(
     """
 
 
-    where_clauses = []
+    where_clauses = ["1=1"]
 
     if store_ids:
         store_list = ", ".join(f"'{s}'" for s in store_ids)
@@ -270,7 +299,7 @@ def get_products(
       - categoryIds (store_sektorkodu)
     """
 
-    where_clauses = []
+    where_clauses = ["1=1"]
 
     if region_ids:
         region_list = ", ".join(f"'{r.lower()}'" for r in region_ids)
@@ -689,58 +718,98 @@ def get_product_promotions(
     where_sql = " AND ".join(where_clauses)
 
     query = f"""
-    WITH base AS (
+    WITH daily AS (
+        -- Reduce to one row per promo+store+day (the source table has many rows per day).
         SELECT
-            tarih,
+            toDate(tarih) AS tarih,
+            magazakodu,
             aktifPromosyonAdi,
-            indirimYuzdesi,
-            lag(tarih) OVER (
-                PARTITION BY aktifPromosyonAdi
-                ORDER BY tarih
-            ) AS prev_tarih
+            avg(abs(indirimYuzdesi)) AS discount_day
         FROM {table_name}
         WHERE {where_sql}
+        GROUP BY
+            tarih,
+            magazakodu,
+            aktifPromosyonAdi
     ),
-
     marked AS (
         SELECT
             *,
+            lag(tarih) OVER (
+                PARTITION BY aktifPromosyonAdi, magazakodu
+                ORDER BY tarih
+            ) AS prev_tarih,
             if(
                 prev_tarih IS NULL
                 OR dateDiff('day', prev_tarih, tarih) > 1,
                 1,
                 0
             ) AS new_promo_flag
-        FROM base
+        FROM daily
     ),
-
     grouped AS (
         SELECT
             *,
             sum(new_promo_flag) OVER (
-                PARTITION BY aktifPromosyonAdi
+                PARTITION BY aktifPromosyonAdi, magazakodu
                 ORDER BY tarih
             ) AS promo_group_id
         FROM marked
+    ),
+    agg AS (
+        SELECT
+            aktifPromosyonAdi AS promo_name,
+            promo_group_id,
+            magazakodu,
+            min(tarih) AS start_date,
+            max(tarih) AS end_date,
+            count() AS promo_days,
+            round(avg(discount_day), 1) AS discount
+        FROM grouped
+        GROUP BY
+            promo_name,
+            promo_group_id,
+            magazakodu
+    ),
+    windowed AS (
+        SELECT
+            promo_name,
+            start_date,
+            end_date,
+            promo_days,
+            discount
+        FROM agg
+        WHERE
+            end_date >= (today() - 7)
+            AND start_date <= (today() + 7)
+    ),
+    deduped AS (
+        -- Collapse across stores so Overview doesn't show duplicates per store.
+        SELECT
+            promo_name,
+            start_date,
+            end_date,
+            max(promo_days) AS promo_days,
+            round(avg(discount), 1) AS discount
+        FROM windowed
+        GROUP BY
+            promo_name,
+            start_date,
+            end_date
     )
-
     SELECT
-        aktifPromosyonAdi                 AS promo_name,
-        promo_group_id,
-        min(tarih)                        AS start_date,
-        max(tarih)                        AS end_date,
-        count()                           AS promo_days,
-        round(avg(indirimYuzdesi), 1)     AS discount,
+        promo_name,
+        start_date,
+        end_date,
+        promo_days,
+        discount,
         multiIf(
-            max(tarih) < today(), 'Tamamlandi',
-            min(tarih) > today(), 'Beklemede',
+            end_date < today(), 'Tamamlandi',
+            start_date > today(), 'Beklemede',
             'Aktif'
-        )                                 AS status
-    FROM grouped
-    GROUP BY
-        aktifPromosyonAdi,
-        promo_group_id
-    ORDER BY start_date DESC
+        ) AS status
+    FROM deduped
+    ORDER BY start_date ASC
     """
 
     rows = client.query(query).result_set
@@ -752,18 +821,10 @@ def get_product_promotions(
                 "startDate": str(start_date),
                 "endDate": str(end_date),
                 "durationDays": int(promo_days),
-                "discount": f"%{int(discount)}" if discount else "%0",
+                "discount": f"%{max(0, int(round(discount or 0)))}",
                 "status": status
             }
-            for (
-                promo_name,
-                promo_group_id,
-                start_date,
-                end_date,
-                promo_days,
-                discount,
-                status
-            ) in rows
+            for (promo_name, start_date, end_date, promo_days, discount, status) in rows
         ]
     }
 
@@ -777,7 +838,7 @@ def get_alerts_summary(
     category_ids: list[str] | None = None
 ) -> dict:
 
-    where_clauses = []
+    where_clauses = ["1=1"]
     if region_ids:
         region_list = ", ".join(f"'{r.lower()}'" for r in region_ids)
         where_clauses.append(f"lower(cografi_bolge) IN ({region_list})")
@@ -788,27 +849,71 @@ def get_alerts_summary(
         category_list = ", ".join(str(c) for c in category_ids)
         where_clauses.append(f"reyonkodu IN ({category_list})")
 
-    where_sql = "WHERE " + " AND ".join(where_clauses) if where_clauses else ""
+    where_sql = " AND ".join(where_clauses)
 
-    query = f"""
-    WITH base AS (
-        SELECT satismiktari, roll_mean_7, roll_mean_21, stok
+    safe_days = 30
+
+    growth_query = f"""
+    WITH growth_base AS (
+        SELECT
+            toString(urunkodu) AS sku,
+            sumIf(satismiktari, tarih >= today() - {safe_days} AND tarih < today()) AS current_sales,
+            sumIf(
+                satismiktari,
+                tarih >= today() - ({safe_days} * 2)
+                AND tarih < today() - {safe_days}
+            ) AS last_sales,
+            (current_sales - last_sales) / nullIf(last_sales, 0) * 100 AS growth_pct
         FROM {table_name}
-        {where_sql}
+        WHERE {where_sql}
+          AND tarih >= today() - ({safe_days} * 2)
+          AND tarih < today()
+        GROUP BY sku
     )
     SELECT
-        countIf(roll_mean_7 < roll_mean_21 * 0.7)        AS sharp_decline,
-        countIf(roll_mean_7 > roll_mean_21 * 1.5)        AS explosive_growth,
-        countIf(abs(satismiktari - roll_mean_7) > roll_mean_7 * 0.5) AS major_errors,
-        countIf(abs(satismiktari - roll_mean_7) > roll_mean_7 * 1.0) AS anomaly_errors,
-        countIf(stok <= 0)                               AS stockout,
-        countIf(stok > roll_mean_21 * 4)                 AS extreme_overstock,
-        countIf(stok < (roll_mean_7 * 0.5))              AS urgent_reorder
-    FROM base
+        countIf(last_sales > 0 AND growth_pct <= -10) AS low_growth,
+        countIf(last_sales > 0 AND growth_pct >= 10) AS high_growth
+    FROM growth_base
     """
 
-    row = client.query(query).first_row
-    s_decline, e_growth, m_errors, a_errors, s_out, e_overstock, u_reorder = row
+    errors_query = f"""
+    WITH errors_base AS (
+        SELECT
+            toString(urunkodu) AS sku,
+            sumIf(roll_mean_14, tarih >= today() - {safe_days} AND tarih < today()) AS forecast,
+            sumIf(satismiktari, tarih >= today() - {safe_days} AND tarih < today()) AS actual,
+            abs(forecast - actual) / nullIf(actual, 0) * 100 AS error_pct
+        FROM {table_name}
+        WHERE {where_sql}
+          AND tarih >= today() - {safe_days}
+          AND tarih < today()
+        GROUP BY sku
+    )
+    SELECT
+        countIf(actual > 0 AND error_pct >= 5) AS major_errors,
+        countIf(actual > 0 AND error_pct >= 10) AS critical_errors
+    FROM errors_base
+    """
+
+    s_decline, e_growth = client.query(growth_query).first_row
+    m_errors, a_errors = client.query(errors_query).first_row
+    inventory_alerts = get_inventory_alerts(
+        client,
+        region_ids=region_ids,
+        store_ids=store_ids,
+        category_ids=category_ids,
+        product_ids=None,
+        search=None,
+        limit=5000,
+        days=safe_days,
+        table_name=table_name,
+    )
+
+    inventory_list = inventory_alerts.get("alerts", [])
+    inventory_total = int(inventory_alerts.get("totalCount", len(inventory_list)))
+    s_out = sum(1 for alert in inventory_list if alert.get("type") == "stockout")
+    e_overstock = sum(1 for alert in inventory_list if alert.get("type") == "overstock")
+    u_reorder = sum(1 for alert in inventory_list if alert.get("type") == "reorder")
 
     # Yardımcı fonksiyon: Sayıya göre severity belirle
     def get_sev(count, high_thresh=1, crit_thresh=10):
@@ -845,8 +950,194 @@ def get_alerts_summary(
             "count": int(u_reorder),
             "severity": "high" if u_reorder > 0 else "low"
         },
-        "total_alerts": int(sum(row))
+        "total_alerts": int(
+            (s_decline or 0)
+            + (e_growth or 0)
+            + (m_errors or 0)
+            + (a_errors or 0)
+            + inventory_total
+        )
     }
+
+#--------------------------------------inventory alerts
+
+def get_inventory_alerts(
+    client,
+    region_ids: list[str] | None = None,
+    store_ids: list[int] | None = None,
+    category_ids: list[str] | None = None,
+    product_ids: list[str] | None = None,
+    search: str | None = None,
+    limit: int = 100,
+    days: int = 30,
+    table_name: str = "demoVerileri",
+) -> dict:
+    """
+    Inventory stock alerts (stockout/overstock/reorder) based on current stock vs forecasted demand.
+    Returns: { "alerts": [...] }
+    """
+    from datetime import date
+
+    where_clauses = ["1=1"]
+
+    if store_ids:
+        where_clauses.append(
+            f"magazakodu IN ({','.join(str(s) for s in store_ids)})"
+        )
+
+    if region_ids:
+        def _escape_ch_str(value: object) -> str:
+            return str(value).lower().replace("'", "''")
+
+        region_list = ", ".join(f"'{_escape_ch_str(r)}'" for r in region_ids)
+        where_clauses.append(f"lower(cografi_bolge) IN ({region_list})")
+
+    normalized_category_ids = _normalize_filter_ids(category_ids)
+    if normalized_category_ids:
+        cats = ", ".join(f"'{c}'" for c in normalized_category_ids)
+        where_clauses.append(f"toString(reyonkodu) IN ({cats})")
+
+    normalized_product_ids = _normalize_filter_ids(product_ids)
+    if normalized_product_ids:
+        prods = ", ".join(f"'{p}'" for p in normalized_product_ids)
+        where_clauses.append(f"toString(urunkodu) IN ({prods})")
+
+    if search:
+        safe_search = str(search).lower().replace("'", "''")
+        where_clauses.append(f"lower(urunismi) LIKE '%{safe_search}%'")
+
+    where_sql = " AND ".join(where_clauses)
+
+    safe_days = int(days) if int(days) > 0 else 30
+
+    count_query = f"""
+    WITH base AS (
+        SELECT
+            toString(urunkodu) AS sku,
+            magazakodu,
+            toFloat64(argMax(stok, tarih)) AS current_stock,
+            greatest(toFloat64(argMax(roll_mean_7, tarih)), 0) AS forecast_daily
+        FROM {table_name}
+        WHERE {where_sql}
+        GROUP BY urunkodu, magazakodu
+    )
+    SELECT
+        countIf(
+            current_stock <= 0
+            OR current_stock > (forecast_daily * {safe_days})
+            OR current_stock <= (forecast_daily * 7)
+        ) AS total_alerts
+    FROM base
+    """
+
+    query = f"""
+    WITH base AS (
+        SELECT
+            toString(urunkodu) AS sku,
+            any(urunismi) AS product_name,
+            magazakodu,
+            argMax(bulundugusehir, tarih) AS city,
+            argMax(ilce, tarih) AS district,
+            toFloat64(argMax(stok, tarih)) AS current_stock,
+            greatest(toFloat64(argMax(roll_mean_7, tarih)), 0) AS forecast_daily
+        FROM {table_name}
+        WHERE {where_sql}
+        GROUP BY urunkodu, magazakodu
+    )
+
+    SELECT
+        sku,
+        product_name,
+        magazakodu,
+        if(
+            lengthUTF8(trim(BOTH ' ' FROM coalesce(district, ''))) = 0,
+            coalesce(city, toString(magazakodu)),
+            concat(coalesce(city, toString(magazakodu)), ' - ', district)
+        ) AS store_name,
+        current_stock,
+        forecast_daily,
+        (forecast_daily * {safe_days}) AS forecast_period,
+        (forecast_daily * 3) AS min_stock,
+        (forecast_daily * 7) AS reorder_point,
+        (forecast_daily * {safe_days}) AS max_stock,
+        multiIf(
+            current_stock <= 0, 'stockout',
+            current_stock > (forecast_daily * {safe_days}), 'overstock',
+            current_stock <= (forecast_daily * 7), 'reorder',
+            'ok'
+        ) AS alert_type,
+        multiIf(
+            alert_type = 'overstock', (forecast_daily * {safe_days}),
+            (forecast_daily * 7)
+        ) AS threshold,
+        (forecast_daily * {safe_days}) AS forecasted_demand_metric,
+        multiIf(
+            alert_type = 'stockout', 'Acil siparis / transfer planlayin.',
+            alert_type = 'reorder', 'Stok kritik seviyede: yeniden siparis planlayin.',
+            alert_type = 'overstock', 'Fazla stok: promosyon veya magazalar arasi transfer dusunun.',
+            'Durum normal.'
+        ) AS recommendation,
+        'review' AS action_type
+    FROM base
+    WHERE alert_type != 'ok'
+    ORDER BY alert_type DESC
+    LIMIT {int(limit)}
+    """
+
+    total_alerts_row = client.query(count_query).first_row
+    total_alerts = int((total_alerts_row[0] or 0) if total_alerts_row else 0)
+
+    rows = client.query(query).result_set
+
+    alerts: list[dict] = []
+    for (
+        sku,
+        product_name,
+        magazakodu,
+        store_name,
+        current_stock,
+        forecast_daily,
+        _forecast_period,
+        _min_stock,
+        _reorder_point,
+        _max_stock,
+        alert_type,
+        threshold,
+        forecast_metric,
+        recommendation,
+        action_type,
+    ) in rows:
+        current_stock_int = int(current_stock or 0)
+        forecast_metric_int = int(round(forecast_metric or 0))
+        threshold_int = int(round(threshold or 0))
+
+        alerts.append(
+            {
+                "id": f"alert-INV-{sku}-{magazakodu}",
+                "type": alert_type,
+                "sku": str(sku),
+                "productName": product_name,
+                "storeName": f"{store_name} - {magazakodu}",
+                "message": f"Stok durumu uyarisi: {alert_type}",
+                "date": date.today().strftime("%b %d, %H:%M"),
+                "severity": "high"
+                if alert_type == "stockout"
+                else "medium"
+                if alert_type == "reorder"
+                else "low",
+                "metrics": {
+                    "currentStock": max(0, current_stock_int),
+                    "threshold": max(0, threshold_int),
+                    "forecastedDemand": max(0, forecast_metric_int),
+                    "transferSourceStore": None,
+                    "transferQuantity": 0,
+                },
+                "recommendation": recommendation,
+                "actionType": action_type,
+            }
+        )
+
+    return {"alerts": alerts, "totalCount": total_alerts}
 
 #--------------------------------------demand forecasting page
 
@@ -964,23 +1255,16 @@ def get_demand_kpis(
         sumIf(satismiktari, tarih >= start_date AND tarih < end_date) AS units_curr,
         sumIf(satistutarikdvsiz, tarih >= prev_year_start_date AND tarih < prev_year_end_date) AS revenue_prev_year,
 
-        avgIf(
-            abs(roll_mean_14 - satismiktari) / nullIf(satismiktari, 0) * 100,
-            tarih >= start_date AND tarih < end_date AND satismiktari > 0
-        ) AS mape_curr,
-        avgIf(
-            abs(roll_mean_14 - satismiktari) / nullIf(satismiktari, 0) * 100,
-            tarih >= prev_start_date AND tarih < prev_end_date AND satismiktari > 0
-        ) AS mape_prev,
+        -- Weighted metrics across all rows/products (more stable than averaging per-row percentages)
+        100 * sumIf(abs(roll_mean_14 - satismiktari), tarih >= start_date AND tarih < end_date AND satismiktari > 0)
+          / nullIf(sumIf(satismiktari, tarih >= start_date AND tarih < end_date AND satismiktari > 0), 0) AS mape_curr,
+        100 * sumIf(abs(roll_mean_14 - satismiktari), tarih >= prev_start_date AND tarih < prev_end_date AND satismiktari > 0)
+          / nullIf(sumIf(satismiktari, tarih >= prev_start_date AND tarih < prev_end_date AND satismiktari > 0), 0) AS mape_prev,
 
-        avgIf(
-            (roll_mean_14 - satismiktari) / nullIf(satismiktari, 0) * 100,
-            tarih >= start_date AND tarih < end_date AND satismiktari > 0
-        ) AS bias_curr,
-        avgIf(
-            (roll_mean_14 - satismiktari) / nullIf(satismiktari, 0) * 100,
-            tarih >= prev_start_date AND tarih < prev_end_date AND satismiktari > 0
-        ) AS bias_prev,
+        100 * sumIf(roll_mean_14 - satismiktari, tarih >= start_date AND tarih < end_date AND satismiktari > 0)
+          / nullIf(sumIf(satismiktari, tarih >= start_date AND tarih < end_date AND satismiktari > 0), 0) AS bias_curr,
+        100 * sumIf(roll_mean_14 - satismiktari, tarih >= prev_start_date AND tarih < prev_end_date AND satismiktari > 0)
+          / nullIf(sumIf(satismiktari, tarih >= prev_start_date AND tarih < prev_end_date AND satismiktari > 0), 0) AS bias_prev,
 
         (SELECT low_growth FROM growth) AS low_growth,
         (SELECT high_growth FROM growth) AS high_growth
@@ -1202,9 +1486,10 @@ from datetime import date, timedelta
 def get_growth_products(
     client,
     store_ids,
-    type_,              # "high" | "low"
+    type_,              # "all" | "high" | "low"
     category_ids=None,
     product_ids=None,
+    days: int = 30,
     table_name="demoVerileri",
     growth_threshold=10
 ):
@@ -1324,6 +1609,7 @@ def get_forecast_errors(
     category_ids: list[str] | None = None,
     product_ids: list[str] | None = None,
     severity_filter: str | None = None,
+    days: int = 30,
     table_name: str = "demoVerileri"
 ) -> dict:
     """
@@ -1346,56 +1632,66 @@ def get_forecast_errors(
 
     where_sql = " AND ".join(where_clauses)
     
-    # Error calculated over last 30 days
+    safe_days = int(days) if int(days) > 0 else 30
+
+    # Weighted period metrics (more stable than averaging per-row percentages).
+    # Error% is WMAPE: sum(abs(err)) / sum(actual) * 100.
     query = f"""
     WITH base AS (
-        SELECT 
-            urunkodu,
+        SELECT
+            toString(urunkodu) AS sku,
             any(urunismi) AS product_name,
-            sum(satismiktari) AS total_actual,
-            sum(roll_mean_14) AS total_forecast,
-            avg(abs(roll_mean_14 - satismiktari) / nullIf(satismiktari, 0)) * 100 AS mape
+            sumIf(satismiktari, satismiktari > 0) AS total_actual,
+            sumIf(roll_mean_14, satismiktari > 0) AS total_forecast
         FROM {table_name}
         WHERE {where_sql}
-          AND tarih >= today() - 30
+          AND tarih >= today() - {safe_days}
           AND tarih < today()
-        GROUP BY urunkodu
+        GROUP BY sku
     )
-    SELECT 
-        urunkodu,
+    SELECT
+        sku,
         product_name,
-        mape,
         total_forecast,
         total_actual,
-        (total_forecast - total_actual) / nullIf(total_actual, 0) * 100 AS bias
+        100 * abs(total_forecast - total_actual) / nullIf(total_actual, 0) AS error_pct,
+        100 * (total_forecast - total_actual) / nullIf(total_actual, 0) AS bias
     FROM base
-    WHERE mape > 10
-    ORDER BY mape DESC
+    WHERE total_actual > 0
+    ORDER BY error_pct DESC
+    LIMIT 200
     """
     
     rows = client.query(query).result_rows
     
     products = []
-    for urunkodu, name, mape, forecast, actual, bias in rows:
-        mape = mape or 0
-        accuracy = max(0, 100 - mape)
+    for sku, name, forecast, actual, error_pct, bias in rows:
+        error_pct_value = float(error_pct or 0)
+        accuracy = max(0.0, 100.0 - error_pct_value)
         
         severity = "normal"
-        if mape > 50: severity = "critical"
-        elif mape > 30: severity = "high"
-        elif mape > 20: severity = "medium"
+        if error_pct_value > 50: severity = "critical"
+        elif error_pct_value > 30: severity = "high"
+        elif error_pct_value > 20: severity = "medium"
         
-        if severity_filter and severity_filter != "all" and severity != severity_filter:
-            continue
+        # UI filter buckets:
+        # high: >10%, medium: 5-10%, low: <5%.
+        if severity_filter and severity_filter != "all":
+            if severity_filter == "high" and error_pct_value <= 10:
+                continue
+            if severity_filter == "medium" and not (5 < error_pct_value <= 10):
+                continue
+            if severity_filter == "low" and error_pct_value > 5:
+                continue
             
         products.append({
-            "id": str(urunkodu),
+            "id": str(sku),
             "name": name,
-            "error": round(mape, 1),
+            "error": round(error_pct_value, 1),
             "accuracy": round(accuracy, 1),
             "forecast": int(forecast or 0),
             "actual": int(actual or 0),
-            "bias": round(bias or 0, 1),
+            "bias": round(float(bias or 0), 1),
             "severity": severity,
             "action": "İnceleme Bekliyor"
         })
@@ -1405,9 +1701,10 @@ def get_forecast_errors(
 def get_growth_products(
     client,
     store_ids,
-    type_,              # "high" | "low"
+    type_,              # "all" | "high" | "low"
     category_ids=None,
     product_ids=None,
+    days: int = 30,
     table_name="demoVerileri",
     growth_threshold=10
 ):
@@ -1426,44 +1723,63 @@ def get_growth_products(
     
     where_sql = " AND ".join(where_clauses)
     
+    safe_days = int(days) if int(days) > 0 else 30
+
+    where_growth_sql = "last_sales > 0"
+    if type_ == "high":
+        where_growth_sql = f"last_sales > 0 AND growth_pct >= {float(growth_threshold)}"
+        order_sql = "growth_pct DESC"
+    elif type_ == "low":
+        where_growth_sql = f"last_sales > 0 AND growth_pct <= {-float(growth_threshold)}"
+        order_sql = "growth_pct ASC"
+    else:
+        # "all": show both up/down movers
+        order_sql = "abs(growth_pct) DESC"
+
     query = f"""
     WITH base AS (
-        SELECT 
-            urunkodu,
+        SELECT
+            toString(urunkodu) AS sku,
             any(urunismi) AS product_name,
             any(reyonkodu) AS reyonkodu,
-            sumIf(satismiktari, tarih >= today() - 30) AS current_sales,
-            sumIf(satismiktari, tarih < today() - 30 AND tarih >= today() - 60) AS last_month_sales,
-            sum(roll_mean_14) AS total_forecast
+            sumIf(satismiktari, tarih >= today() - {safe_days} AND tarih < today()) AS current_sales,
+            sumIf(
+                satismiktari,
+                tarih >= today() - ({safe_days} * 2)
+                AND tarih < today() - {safe_days}
+            ) AS last_sales,
+            sumIf(roll_mean_14, tarih >= today() - {safe_days} AND tarih < today()) AS forecast_period,
+            (current_sales - last_sales) / nullIf(last_sales, 0) * 100 AS growth_pct
         FROM {table_name}
         WHERE {where_sql}
-          AND tarih >= today() - 60
-        GROUP BY urunkodu
+          AND tarih >= today() - ({safe_days} * 2)
+          AND tarih < today()
+        GROUP BY sku
     )
-    SELECT 
-        urunkodu,
+    SELECT
+        sku,
         product_name,
         reyonkodu,
         current_sales,
-        last_month_sales,
-        (current_sales - last_month_sales) / nullIf(last_month_sales, 0) * 100 AS growth_pct,
-        total_forecast / 60 AS forecast
+        last_sales,
+        growth_pct,
+        forecast_period AS forecast
     FROM base
-    WHERE last_month_sales > 0
-    ORDER BY growth_pct {"DESC" if type_ == "high" else "ASC"}
+    WHERE {where_growth_sql}
+    ORDER BY {order_sql}
     LIMIT 100
     """
     
     rows = client.query(query).result_rows
     
     products = []
-    for urunkodu, name, reyon, current, last, growth, forecast in rows:
+    for sku, name, reyon, current, last, growth, forecast in rows:
         products.append({
-            "id": str(urunkodu),
+            "id": str(sku),
             "name": name,
             "growth": round(growth or 0, 1),
             "type": type_,
-            "category": CATEGORY_MAP.get(reyon, "DİĞER"),
+            "category": CATEGORY_MAP.get(int(reyon or 0), "DİĞER"),
             "forecast": int(forecast or 0),
             "actualSales": int(current or 0),
             "lastMonthSales": int(last or 0)
@@ -1477,6 +1793,7 @@ def get_inventory_kpis(
     store_ids=None,
     category_ids=None,
     product_ids=None,
+    days: int = 30,
     table_name="demoVerileri"
 ):
     """
@@ -1489,60 +1806,89 @@ def get_inventory_kpis(
         region_list = ", ".join(f"'{str(r).lower()}'" for r in region_ids)
         where.append(f"lower(cografi_bolge) IN ({region_list})")
 
-    if store_ids:
-        where.append(f"magazakodu IN ({','.join(map(str, store_ids))})")
+    normalized_store_ids = _normalize_filter_ids(store_ids)
+    if normalized_store_ids:
+        store_sql = ", ".join(f"'{store_id}'" for store_id in normalized_store_ids)
+        where.append(f"toString(magazakodu) IN ({store_sql})")
 
-    if category_ids:
-        where.append(f"reyonkodu IN ({','.join(map(str, category_ids))})")
+    normalized_category_ids = _normalize_filter_ids(category_ids)
+    if normalized_category_ids:
+        category_sql = ", ".join(f"'{category_id}'" for category_id in normalized_category_ids)
+        where.append(f"toString(reyonkodu) IN ({category_sql})")
 
-    if product_ids:
-        where.append(f"urunkodu IN ({','.join(map(str, product_ids))})")
+    normalized_product_ids = _normalize_filter_ids(product_ids)
+    if normalized_product_ids:
+        product_sql = ", ".join(f"'{product_id}'" for product_id in normalized_product_ids)
+        where.append(f"toString(urunkodu) IN ({product_sql})")
 
     where_sql = " AND ".join(where)
 
-    today = date.today()
-    last_30 = today - timedelta(days=30)
-
     query = f"""
-    WITH base AS (
+    WITH latest_store_product AS (
+        -- Match `/api/inventory/items` snapshot logic exactly (ORDER BY tarih DESC LIMIT 1 BY ...).
         SELECT
-            urunkodu,
-            magazakodu,
-            sum(degerlenmisstok)                         AS stock_value,
-            avg(stok)                                    AS avg_stock,
-            sumIf(satismiktari, tarih >= toDate('{last_30}')) / 30
-                                                         AS daily_sales
+            toString(urunkodu)                           AS sku,
+            toString(reyonkodu)                          AS category,
+            toString(magazakodu)                         AS store,
+            greatest(toFloat64(stok), 0)                 AS stock_level,
+            greatest(toFloat64(degerlenmisstok), 0)      AS stock_value,
+            greatest(toFloat64(roll_mean_7), 0)          AS forecast_daily
         FROM {table_name}
         WHERE {where_sql}
-        GROUP BY urunkodu, magazakodu
+        ORDER BY tarih DESC
+        LIMIT 1 BY urunkodu, reyonkodu, magazakodu
+    ),
+    sales_period AS (
+        SELECT
+            toString(urunkodu)                           AS sku,
+            toString(reyonkodu)                          AS category,
+            toString(magazakodu)                         AS store,
+            sumIf(satismiktari, tarih >= today() - {int(days)} AND tarih < today()) AS sales_period
+        FROM {table_name}
+        WHERE {where_sql}
+        GROUP BY sku, category, store
+    ),
+    product_base AS (
+        SELECT
+            l.sku                                         AS sku,
+            sum(l.stock_level)                            AS stock_level,
+            sum(l.stock_value)                            AS stock_value,
+            sum(greatest(l.forecast_daily, 0))            AS forecast_daily,
+            sum(coalesce(s.sales_period, 0))              AS sales_period
+        FROM latest_store_product l
+        LEFT JOIN sales_period s
+            ON l.sku = s.sku AND l.category = s.category AND l.store = s.store
+        GROUP BY l.sku
     )
     SELECT
         sum(stock_value)                                                       AS totalStockValue,
-        countDistinct(urunkodu)                                                AS totalInventoryItems,
+        count()                                                                AS totalInventoryItems,
 
         if(
-            sum(daily_sales) > 0,
-            toInt32(sum(avg_stock) / sum(daily_sales)),
+            sum(forecast_daily) > 0,
+            toInt32(sum(stock_level) / sum(forecast_daily)),
             0
         )                                                                       AS stockCoverageDays,
 
-        countIf(avg_stock > daily_sales * 45)                                  AS excessInventoryItems,
-        sumIf(stock_value, avg_stock > daily_sales * 45)                       AS excessInventoryValue,
+        countIf(stock_level > forecast_daily * {int(days)} AND forecast_daily > 0)      AS excessInventoryItems,
+        sumIf(stock_value, stock_level > forecast_daily * {int(days)} AND forecast_daily > 0)
+                                                                                AS excessInventoryValue,
 
-        countIf(avg_stock <= daily_sales * 7 AND daily_sales > 0)              AS stockOutRiskItems,
-        sumIf(stock_value, avg_stock <= daily_sales * 7 AND daily_sales > 0)   AS stockOutRiskValue,
+        countIf(stock_level <= forecast_daily * {int(days)} AND forecast_daily > 0)      AS stockOutRiskItems,
+        sumIf(stock_value, stock_level <= forecast_daily * {int(days)} AND forecast_daily > 0)
+                                                                                AS stockOutRiskValue,
 
-        countIf(daily_sales = 0)                                               AS neverSoldItems,
-        sumIf(stock_value, daily_sales = 0)                                    AS neverSoldValue,
+        countIf(sales_period = 0)                                              AS neverSoldItems,
+        sumIf(stock_value, sales_period = 0)                                   AS neverSoldValue,
 
         round(
-            countIf(avg_stock > daily_sales * 45) 
-            / nullIf(countDistinct(urunkodu), 0) * 100,
+            countIf(stock_level > forecast_daily * {int(days)} AND forecast_daily > 0)
+            / nullIf(count(), 0) * 100,
             1
         )                                                                       AS overstockPercentage,
 
-        countIf(avg_stock <= daily_sales * 14 AND daily_sales > 0)             AS reorderNeededItems
-    FROM base
+        countIf(stock_level <= forecast_daily * 14 AND forecast_daily > 0)     AS reorderNeededItems
+    FROM product_base
     """
 
     (
@@ -1781,6 +2127,7 @@ def get_inventory_items(
     category_ids: Optional[List[str]] = None,
     product_ids: Optional[List[str]] = None,
     status: Optional[str] = None,   # In Stock | Low Stock | Out of Stock | Overstock
+    days: int = 30,
     page: int = 1,
     limit: int = 50,
     sort_by: str = "stockValue",
@@ -1792,6 +2139,16 @@ def get_inventory_items(
 
     offset = (page - 1) * limit
     sort_order = "ASC" if sort_order.lower() == "asc" else "DESC"
+    allowed_sort_fields = {
+        "stockValue",
+        "stockLevel",
+        "forecastedDemand",
+        "daysOfCoverage",
+        "price",
+        "todaysSales",
+    }
+    if sort_by not in allowed_sort_fields:
+        sort_by = "stockValue"
 
     where_clauses = ["1 = 1"]
 
@@ -1799,81 +2156,174 @@ def get_inventory_items(
         regions = ", ".join(f"'{str(r).lower()}'" for r in region_ids)
         where_clauses.append(f"lower(cografi_bolge) IN ({regions})")
 
-    if store_ids:
-        stores = ", ".join(f"'{s}'" for s in store_ids)
+    normalized_store_ids = _normalize_filter_ids(store_ids)
+    if normalized_store_ids:
+        stores = ", ".join(f"'{s}'" for s in normalized_store_ids)
         where_clauses.append(f"toString(magazakodu) IN ({stores})")
 
-    if category_ids:
-        cats = ", ".join(f"'{c}'" for c in category_ids)
+    normalized_category_ids = _normalize_filter_ids(category_ids)
+    if normalized_category_ids:
+        cats = ", ".join(f"'{c}'" for c in normalized_category_ids)
         where_clauses.append(f"toString(reyonkodu) IN ({cats})")
 
-    if product_ids:
-        prods = ", ".join(f"'{p}'" for p in product_ids)
+    normalized_product_ids = _normalize_filter_ids(product_ids)
+    if normalized_product_ids:
+        prods = ", ".join(f"'{p}'" for p in normalized_product_ids)
         where_clauses.append(f"toString(urunkodu) IN ({prods})")
 
-    # STATUS FILTER
-    if status == "Out of Stock":
-        where_clauses.append("stok = 0")
-    elif status == "Low Stock":
-        where_clauses.append("stok < roll_mean_7 * 3 AND stok > 0")
-    elif status == "Overstock":
-        where_clauses.append("stok > roll_mean_7 * 30")
-    elif status == "In Stock":
-        where_clauses.append("stok BETWEEN roll_mean_7 * 3 AND roll_mean_7 * 30")
-
     where_sql = " AND ".join(where_clauses)
+    status_filter_sql = ""
+    if status in {"Out of Stock", "Low Stock", "Overstock", "In Stock"}:
+        status_filter_sql = f"HAVING status = '{status}'"
 
-    query = f"""
+    aggregate_by_store = bool(normalized_product_ids) and normalized_store_ids and len(normalized_store_ids) == 1
+
+    base_snapshot = f"""
         SELECT
-            toString(urunkodu)                                       AS id,
-            toString(urunkodu)                                       AS sku,
-            toString(urunkodu)                                       AS productName,
-            toString(reyonkodu)                                      AS category,
-            concat(
-                toString(magazakodu), '_',
-                toString(reyonkodu), '_',
-                toString(urunkodu)
-            )                                                        AS productKey,
-
-            sum(stok)                                                AS stockLevel,
-            round(avg(roll_mean_7) * 3, 0)                           AS minStockLevel,
-            round(avg(roll_mean_7) * 30, 0)                          AS maxStockLevel,
-            round(avg(roll_mean_7) * 7, 0)                           AS reorderPoint,
-            round(avg(roll_mean_7), 0)                               AS forecastedDemand,
-
-            sum(degerlenmisstok)                                     AS stockValue,
-            round(sum(stok) / nullIf(avg(roll_mean_7), 0), 1)        AS daysOfCoverage,
-
-            multiIf(
-                sum(stok) = 0, 'Out of Stock',
-                sum(stok) < avg(roll_mean_7) * 3, 'Low Stock',
-                sum(stok) > avg(roll_mean_7) * 30, 'Overstock',
-                'In Stock'
-            )                                                        AS status,
-
-            round(
-                sum(satismiktari) / nullIf(avg(stok), 0),
-                2
-            )                                                        AS turnoverRate,
-
-            maxIf(tarih, stok > 0)                                   AS lastRestockDate,
-            5                                                        AS leadTimeDays,
-            0                                                        AS quantityOnOrder,
-            sumIf(satismiktari, tarih = today())                     AS todaysSales,
-            round(avg(satisFiyati), 2)                               AS price
-        FROM {table_name}
-        WHERE {where_sql}
-        GROUP BY urunkodu, reyonkodu, magazakodu
-        ORDER BY {sort_by} {sort_order}
-        LIMIT {limit} OFFSET {offset}
+            l.sku                     AS sku,
+            l.category                AS category,
+            l.store                   AS store,
+            l.stockLevel              AS stockLevel,
+            l.forecastDaily           AS forecastDaily,
+            l.stockValue              AS stockValue,
+            l.price                   AS price,
+            l.productName             AS productName,
+            a.todaysSales             AS todaysSales,
+            a.lastRestockDate         AS lastRestockDate
+        FROM (
+            SELECT
+                toString(urunkodu)     AS sku,
+                toString(reyonkodu)    AS category,
+                toString(magazakodu)   AS store,
+                greatest(toFloat64(stok), 0)            AS stockLevel,
+                greatest(toFloat64(roll_mean_7), 0)     AS forecastDaily,
+                greatest(toFloat64(degerlenmisstok), 0) AS stockValue,
+                greatest(toFloat64(satisFiyati), 0)     AS price,
+                urunismi               AS productName
+            FROM {table_name}
+            WHERE {where_sql}
+            ORDER BY tarih DESC
+            LIMIT 1 BY urunkodu, reyonkodu, magazakodu
+        ) AS l
+        LEFT JOIN (
+            SELECT
+                toString(urunkodu)     AS sku,
+                toString(reyonkodu)    AS category,
+                toString(magazakodu)   AS store,
+                greatest(sumIf(satismiktari, tarih = today()), 0) AS todaysSales,
+                maxIf(tarih, stok > 0) AS lastRestockDate
+            FROM {table_name}
+            WHERE {where_sql}
+            GROUP BY urunkodu, reyonkodu, magazakodu
+        ) AS a
+        ON l.sku = a.sku AND l.category = a.category AND l.store = a.store
     """
+
+    if aggregate_by_store:
+        query = f"""
+            SELECT
+                sku                                                   AS id,
+                sku                                                   AS sku,
+                productName                                           AS productName,
+                category                                              AS category,
+                concat(store, '_', category, '_', sku)                AS productKey,
+
+                stockLevel                                            AS stockLevel,
+                round(forecastDaily * 3, 0)                           AS minStockLevel,
+                round(forecastDaily * {int(days)}, 0)                 AS maxStockLevel,
+                round(forecastDaily * 7, 0)                           AS reorderPoint,
+                round(forecastDaily * {int(days)}, 0)                 AS forecastedDemand,
+
+                stockValue                                            AS stockValue,
+                round(stockLevel / nullIf(forecastDaily, 0), 1)       AS daysOfCoverage,
+
+                multiIf(
+                    stockLevel = 0, 'Out of Stock',
+                    stockLevel < forecastDaily * 3, 'Low Stock',
+                    stockLevel > forecastDaily * {int(days)}, 'Overstock',
+                    'In Stock'
+                )                                                     AS status,
+
+                round(
+                    todaysSales / nullIf(stockLevel, 0),
+                    2
+                )                                                     AS turnoverRate,
+
+                lastRestockDate                                       AS lastRestockDate,
+                5                                                     AS leadTimeDays,
+                0                                                     AS quantityOnOrder,
+                todaysSales                                           AS todaysSales,
+                round(price, 2)                                       AS price
+            FROM (
+                {base_snapshot}
+            )
+            {status_filter_sql}
+            ORDER BY {sort_by} {sort_order}
+            LIMIT {limit} OFFSET {offset}
+        """
+    else:
+        query = f"""
+            SELECT
+                sku                                                   AS id,
+                sku                                                   AS sku,
+                productName                                           AS productName,
+                category                                              AS category,
+                sku                                                   AS productKey,
+
+                stockLevelSum                                         AS stockLevel,
+                round(fdDailySum * 3, 0)                              AS minStockLevel,
+                round(fdDailySum * {int(days)}, 0)                    AS maxStockLevel,
+                round(fdDailySum * 7, 0)                              AS reorderPoint,
+                round(fdDailySum * {int(days)}, 0)                    AS forecastedDemand,
+
+                stockValueSum                                         AS stockValue,
+                round(stockLevelSum / nullIf(fdDailySum, 0), 1)       AS daysOfCoverage,
+
+                multiIf(
+                    stockLevelSum = 0, 'Out of Stock',
+                    stockLevelSum < fdDailySum * 3, 'Low Stock',
+                    stockLevelSum > fdDailySum * {int(days)}, 'Overstock',
+                    'In Stock'
+                )                                                     AS status,
+
+                round(
+                    todaysSalesSum / nullIf(stockLevelSum, 0),
+                    2
+                )                                                     AS turnoverRate,
+
+                lastRestockDateMax                                    AS lastRestockDate,
+                5                                                     AS leadTimeDays,
+                0                                                     AS quantityOnOrder,
+                todaysSalesSum                                        AS todaysSales,
+                round(priceAvg, 2)                                    AS price
+            FROM (
+                SELECT
+                    sku,
+                    any(productName)                                  AS productName,
+                    any(category)                                     AS category,
+                    sum(stockLevel)                                   AS stockLevelSum,
+                    sum(stockValue)                                   AS stockValueSum,
+                    sum(todaysSales)                                  AS todaysSalesSum,
+                    max(lastRestockDate)                              AS lastRestockDateMax,
+                    avg(price)                                        AS priceAvg,
+                    sum(toFloat64(forecastDaily))                     AS fdDailySum
+                FROM (
+                    {base_snapshot}
+                )
+                GROUP BY sku
+            )
+            {status_filter_sql}
+            ORDER BY {sort_by} {sort_order}
+            LIMIT {limit} OFFSET {offset}
+        """
 
     items = client.query(query).result_rows
 
     count_query = f"""
-        SELECT count(DISTINCT urunkodu)
-        FROM {table_name}
-        WHERE {where_sql}
+        SELECT countDistinct(sku)
+        FROM (
+            {base_snapshot}
+        )
     """
     total = client.query(count_query).result_rows[0][0]
     total_pages = (total + limit - 1) // limit
@@ -1886,20 +2336,20 @@ def get_inventory_items(
                 "productName": r[2],
                 "category": r[3],
                 "productKey": r[4],
-                "stockLevel": int(r[5] or 0),
-                "minStockLevel": int(r[6] or 0),
-                "maxStockLevel": int(r[7] or 0),
-                "reorderPoint": int(r[8] or 0),
-                "forecastedDemand": int(r[9] or 0),
-                "stockValue": int(r[10] or 0),
-                "daysOfCoverage": float(r[11] or 0),
+                "stockLevel": max(0, int(r[5] or 0)),
+                "minStockLevel": max(0, int(r[6] or 0)),
+                "maxStockLevel": max(0, int(r[7] or 0)),
+                "reorderPoint": max(0, int(r[8] or 0)),
+                "forecastedDemand": max(0, int(r[9] or 0)),
+                "stockValue": max(0, int(r[10] or 0)),
+                "daysOfCoverage": max(0.0, float(r[11] or 0)),
                 "status": r[12],
-                "turnoverRate": float(r[13] or 0),
+                "turnoverRate": max(0.0, float(r[13] or 0)),
                 "lastRestockDate": r[14].isoformat() if r[14] else None,
                 "leadTimeDays": r[15],
                 "quantityOnOrder": r[16],
-                "todaysSales": int(r[17] or 0),
-                "price": float(r[18] or 0),
+                "todaysSales": max(0, int(r[17] or 0)),
+                "price": max(0.0, float(r[18] or 0)),
             }
             for r in items
         ],
@@ -1936,16 +2386,19 @@ def get_inventory_stock_trends(
         regions = ", ".join(f"'{str(r).lower()}'" for r in region_ids)
         where_clauses.append(f"lower(cografi_bolge) IN ({regions})")
 
-    if store_ids:
-        stores = ", ".join(f"'{s}'" for s in store_ids)
+    normalized_store_ids = _normalize_filter_ids(store_ids)
+    if normalized_store_ids:
+        stores = ", ".join(f"'{s}'" for s in normalized_store_ids)
         where_clauses.append(f"toString(magazakodu) IN ({stores})")
 
-    if category_ids:
-        cats = ", ".join(f"'{c}'" for c in category_ids)
+    normalized_category_ids = _normalize_filter_ids(category_ids)
+    if normalized_category_ids:
+        cats = ", ".join(f"'{c}'" for c in normalized_category_ids)
         where_clauses.append(f"toString(reyonkodu) IN ({cats})")
 
-    if product_ids:
-        prods = ", ".join(f"'{p}'" for p in product_ids)
+    normalized_product_ids = _normalize_filter_ids(product_ids)
+    if normalized_product_ids:
+        prods = ", ".join(f"'{p}'" for p in normalized_product_ids)
         where_clauses.append(f"toString(urunkodu) IN ({prods})")
 
     where_sql = " AND ".join(where_clauses)
@@ -1953,9 +2406,9 @@ def get_inventory_stock_trends(
     query = f"""
         SELECT
             toDate(tarih)                              AS date,
-            sum(stok)                                  AS actualStock,
-            round(sum(roll_mean_7), 0)                 AS forecastDemand,
-            round(sum(roll_mean_7) * 3, 0)             AS safetyStock
+            sum(greatest(toFloat64(stok), 0))          AS actualStock,
+            round(sum(greatest(toFloat64(roll_mean_7), 0)), 0)                 AS forecastDemand,
+            round(sum(greatest(toFloat64(roll_mean_7), 0)) * 3, 0)             AS safetyStock
         FROM {table_name}
         WHERE {where_sql}
         GROUP BY date
@@ -1968,9 +2421,9 @@ def get_inventory_stock_trends(
         "trends": [
             {
                 "date": r[0].isoformat(),
-                "actualStock": int(r[1] or 0),
-                "forecastDemand": int(r[2] or 0),
-                "safetyStock": int(r[3] or 0),
+                "actualStock": max(0, int(r[1] or 0)),
+                "forecastDemand": max(0, int(r[2] or 0)),
+                "safetyStock": max(0, int(r[3] or 0)),
             }
             for r in rows
         ]
@@ -1987,6 +2440,7 @@ def get_inventory_store_performance(
     store_ids: Optional[List[str]] = None,
     category_ids: Optional[List[str]] = None,
     product_ids: Optional[List[str]] = None,
+    days: int = 30,
 ) -> dict:
     """
     GET /api/inventory/store-performance
@@ -1998,78 +2452,110 @@ def get_inventory_store_performance(
         regions = ", ".join(f"'{str(r).lower()}'" for r in region_ids)
         where_clauses.append(f"lower(cografi_bolge) IN ({regions})")
 
-    if store_ids:
-        stores = ", ".join(f"'{s}'" for s in store_ids)
+    normalized_store_ids = _normalize_filter_ids(store_ids)
+    if normalized_store_ids:
+        stores = ", ".join(f"'{s}'" for s in normalized_store_ids)
         where_clauses.append(f"toString(magazakodu) IN ({stores})")
 
-    if category_ids:
-        cats = ", ".join(f"'{c}'" for c in category_ids)
+    normalized_category_ids = _normalize_filter_ids(category_ids)
+    if normalized_category_ids:
+        cats = ", ".join(f"'{c}'" for c in normalized_category_ids)
         where_clauses.append(f"toString(reyonkodu) IN ({cats})")
 
-    if product_ids:
-        prods = ", ".join(f"'{p}'" for p in product_ids)
+    normalized_product_ids = _normalize_filter_ids(product_ids)
+    if normalized_product_ids:
+        prods = ", ".join(f"'{p}'" for p in normalized_product_ids)
         where_clauses.append(f"toString(urunkodu) IN ({prods})")
 
     where_sql = " AND ".join(where_clauses)
 
     query = f"""
+        WITH filtered AS (
+            SELECT *
+            FROM {table_name}
+            WHERE {where_sql}
+        ),
+        store_meta AS (
+            SELECT
+                magazakodu,
+                argMax(bulundugusehir, tarih) AS city_name,
+                argMax(ilce, tarih) AS district
+            FROM filtered
+            GROUP BY magazakodu
+        ),
+        store_stock AS (
+            SELECT
+                magazakodu,
+                sum(stock_latest) AS stockLevel
+            FROM (
+                SELECT
+                    magazakodu,
+                    urunkodu,
+                    greatest(toFloat64(argMax(stok, tarih)), 0) AS stock_latest
+                FROM filtered
+                GROUP BY magazakodu, urunkodu
+            )
+            GROUP BY magazakodu
+        ),
+        store_sales AS (
+            SELECT
+                magazakodu,
+                greatest(
+                    sumIf(satismiktari, tarih >= today() - {int(days)} AND tarih < today()),
+                    0
+                ) AS sales_period,
+                countDistinctIf(toDate(tarih), tarih >= today() - {int(days)} AND tarih < today()) AS days_period
+            FROM filtered
+            GROUP BY magazakodu
+        )
+
         SELECT
-            toString(magazakodu)                                            AS storeId,
-            concat(bulundugusehirkodu, ' - ', ilce)                          AS storeName,
-
-            sum(stok)                                                       AS stockLevel,
-
+            toString(m.magazakodu)                                          AS storeId,
+            if(
+                lengthUTF8(trim(BOTH ' ' FROM coalesce(m.district, ''))) = 0,
+                coalesce(m.city_name, toString(m.magazakodu)),
+                concat(coalesce(m.city_name, toString(m.magazakodu)), ' - ', m.district)
+            )                                                               AS storeName,
+            s.stockLevel                                                    AS stockLevel,
             round(
-                100 * sum(satismiktari) /
-                nullIf(sum(satismiktari) + sum(stok), 0),
+                100 * coalesce(sa.sales_period, 0) /
+                nullIf(coalesce(sa.sales_period, 0) + s.stockLevel, 0),
                 2
             )                                                               AS sellThroughRate,
-
             round(
-                sum(satismiktari) / nullIf(countDistinct(toDate(tarih)), 0),
+                coalesce(sa.sales_period, 0) / nullIf(coalesce(sa.days_period, 0), 0),
                 0
             )                                                               AS dailySales,
-
             round(
-                sum(stok) /
+                s.stockLevel /
                 nullIf(
-                    sum(satismiktari) / nullIf(countDistinct(toDate(tarih)), 0),
+                    coalesce(sa.sales_period, 0) / nullIf(coalesce(sa.days_period, 0), 0),
                     0
                 ),
                 0
             )                                                               AS daysOfInventory,
-
             round(
-                (
-                    0.4 * (
-                        100 * sum(satismiktari) /
-                        nullIf(sum(satismiktari) + sum(stok), 0)
-                    )
-                    +
-                    0.3 * (
-                        100 - abs(
-                            (
-                                sum(stok) /
-                                nullIf(
-                                    sum(satismiktari) /
-                                    nullIf(countDistinct(toDate(tarih)), 0),
-                                    0
-                                )
-                            ) - 30
+                0.5 * (
+                    100 * coalesce(sa.sales_period, 0) /
+                    nullIf(coalesce(sa.sales_period, 0) + s.stockLevel, 0)
+                )
+                +
+                0.5 * greatest(0, 100 - abs(
+                    (
+                        s.stockLevel /
+                        nullIf(
+                            coalesce(sa.sales_period, 0) / nullIf(coalesce(sa.days_period, 0), 0),
+                            0
                         )
-                    )
-                    +
-                    0.3 * (
-                        sum(satismiktari) /
-                        nullIf(countDistinct(toDate(tarih)), 0)
-                    )
-                ),
+                    ) - {int(days)}
+                )),
                 2
             )                                                               AS storeEfficiency
 
-        FROM {table_name}
-        WHERE {where_sql}
-        GROUP BY magazakodu, bulundugusehirkodu, ilce
+        FROM store_meta m
+        LEFT JOIN store_stock s USING (magazakodu)
+        LEFT JOIN store_sales sa USING (magazakodu)
+        WHERE s.stockLevel IS NOT NULL
         ORDER BY storeEfficiency DESC
     """
 

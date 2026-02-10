@@ -67,7 +67,8 @@ export const demandApi = {
     storeIds?: string[];
     categoryIds?: string[];
     productIds?: string[];
-    type: 'high' | 'low';
+    days?: number;
+    type: 'all' | 'high' | 'low';
   }) =>
     apiClient.get<{ products: GrowthProduct[] }>(
       '/api/demand/growth-products',
@@ -82,6 +83,7 @@ export const demandApi = {
     categoryIds?: string[];
     productIds?: string[];
     severityFilter?: string;
+    days?: number;
   }) =>
     apiClient.get<{ products: ForecastErrorProduct[] }>(
       '/api/demand/forecast-errors',

@@ -85,13 +85,13 @@ export function FastestMovingTable({
             </TableHead>
             <TableHead className='text-xs text-muted-foreground font-normal text-center'>
               <div className='flex items-center justify-center gap-1'>
-                Günlük Satış
+                Tahmini Talep
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Info className='h-3 w-3 text-muted-foreground hover:text-foreground cursor-help' />
                   </TooltipTrigger>
                   <TooltipContent>
-                    <p>Son {period} günlük ortalama satış adedi</p>
+                    <p>Gelecek {period} gün için öngörülen satış adedi</p>
                   </TooltipContent>
                 </Tooltip>
               </div>
@@ -133,7 +133,7 @@ export function FastestMovingTable({
                   {item.stockLevel}
                 </TableCell>
                 <TableCell className='text-center text-xs py-3 text-emerald-600 font-medium'>
-                  {Math.round(item.forecastedDemand)}
+                  {item.forecastedDemand.toLocaleString('tr-TR')}
                 </TableCell>
                 <TableCell className='text-center text-xs py-3'>
                   ₺{item.stockValue.toLocaleString('tr-TR')}

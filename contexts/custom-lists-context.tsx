@@ -9,6 +9,7 @@ interface CustomListsContextType {
   updateList: (list: CustomProductList) => void;
   deleteList: (id: string) => void;
   replaceLists: (lists: CustomProductList[]) => void;
+  replaceAutoLists: (lists: CustomProductList[]) => void;
 }
 
 const CustomListsContext = createContext<CustomListsContextType | undefined>(
@@ -40,9 +41,23 @@ export function CustomListsProvider({
     setLists(nextLists);
   }, []);
 
+  const replaceAutoLists = useCallback((autoLists: CustomProductList[]) => {
+    setLists((prev) => {
+      const customLists = prev.filter((list) => !list.id.startsWith('AUTO_LIST_'));
+      return [...customLists, ...autoLists];
+    });
+  }, []);
+
   return (
     <CustomListsContext.Provider
-      value={{ lists, addList, updateList, deleteList, replaceLists }}
+      value={{
+        lists,
+        addList,
+        updateList,
+        deleteList,
+        replaceLists,
+        replaceAutoLists,
+      }}
     >
       {children}
     </CustomListsContext.Provider>

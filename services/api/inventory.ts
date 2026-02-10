@@ -18,7 +18,7 @@ export const inventoryApi = {
   /**
    * Get inventory KPIs
    */
-  getKPIs: (params?: FilterParams) =>
+  getKPIs: (params?: FilterParams & { days?: number }) =>
     apiClient.get<InventoryKPIs>('/api/inventory/kpis', params),
 
   /**
@@ -28,6 +28,7 @@ export const inventoryApi = {
     params?: FilterParams &
       PaginationParams & {
         status?: 'In Stock' | 'Low Stock' | 'Out of Stock' | 'Overstock';
+        days?: number;
       },
   ) =>
     apiClient.get<PaginatedResponse<InventoryItem>>(
@@ -51,7 +52,7 @@ export const inventoryApi = {
   /**
    * Get store performance
    */
-  getStorePerformance: (params?: FilterParams) =>
+  getStorePerformance: (params?: FilterParams & { days?: number }) =>
     apiClient.get<{ stores: StorePerformance[] }>(
       '/api/inventory/store-performance',
       params,
@@ -60,8 +61,8 @@ export const inventoryApi = {
   /**
    * Get inventory alerts
    */
-  getAlerts: (params?: FilterParams & { limit?: number }) =>
-    apiClient.get<{ alerts: InventoryAlert[] }>(
+  getAlerts: (params?: FilterParams & { limit?: number; days?: number }) =>
+    apiClient.get<{ alerts: InventoryAlert[]; totalCount?: number }>(
       '/api/alerts/inventory',
       params,
     ),

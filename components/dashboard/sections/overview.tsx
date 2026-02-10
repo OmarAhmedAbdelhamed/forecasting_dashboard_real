@@ -22,7 +22,6 @@ import {
   CalendarRange,
   Info,
 } from 'lucide-react';
-import { generateInventoryAlerts } from '@/data/mock-data';
 import { useRef } from 'react';
 import {
   useHistoricalChart,
@@ -34,6 +33,7 @@ import {
 import { useFilterOptions } from '@/services/hooks/filters/use-filter-options';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useVisibility } from '@/hooks/use-visibility';
+import { PageLoading } from '@/components/ui/shared/page-loading';
 
 const DEFAULT_METRICS = {
   accuracy: 0,
@@ -75,7 +75,8 @@ export function OverviewSection() {
 
   // --- Dynamic Data Calculation ---
   // Metrics from API
-  const { data: metricsData } = useDashboardMetrics(filterParams);
+  const { data: metricsData, isLoading: metricsLoading } =
+    useDashboardMetrics(filterParams);
   const metrics = metricsData || DEFAULT_METRICS;
 
   // Helper to format large numbers to M (Millions) or K (Thousands)
@@ -91,16 +92,31 @@ export function OverviewSection() {
   };
 
   // Revenue Chart
-  const { data: revenueResponse } = useRevenueChart(filterParams);
+  const { data: revenueResponse, isLoading: revenueLoading } =
+    useRevenueChart(filterParams);
   const revenueData = revenueResponse?.data || [];
   console.log('OverviewSection: Revenue Chart Data:', revenueData);
 
   // Historical Chart
-  const { data: historicalChartData } = useHistoricalChart(filterParams);
+  const { data: historicalChartData, isLoading: historicalLoading } =
+    useHistoricalChart(filterParams);
   const historicalData = historicalChartData?.data || [];
 
+  const alertsSummaryParams = useMemo(
+    () => ({
+      regionIds: selectedRegions,
+      storeIds:
+        selectedStores.length > 0
+          ? selectedStores
+          : storeOptions.map((store) => store.value),
+      categoryIds: selectedCategories,
+    }),
+    [selectedRegions, selectedStores, selectedCategories, storeOptions],
+  );
+
   // Alerts
-  const { data: alertsSummaryData } = useAlertsSummary(filterParams);
+  const { data: alertsSummaryData, isLoading: alertsSummaryLoading } =
+    useAlertsSummary(alertsSummaryParams);
 
   useEffect(() => {
     if (alertsSummaryData) {
@@ -112,7 +128,8 @@ export function OverviewSection() {
   }, [alertsSummaryData]);
 
   // Promotions
-  const { data: promotionsResponse } = useDashboardPromotions(filterParams);
+  const { data: promotionsResponse, isLoading: promotionsLoading } =
+    useDashboardPromotions(filterParams);
   const promotions = promotionsResponse?.promotions || [];
 
   useEffect(() => {
@@ -124,11 +141,31 @@ export function OverviewSection() {
     }
   }, [promotionsResponse]);
 
-  // Inventory Alerts
-  const inventoryAlerts = useMemo(
-    () => generateInventoryAlerts(selectedRegions, selectedStores),
-    [selectedRegions, selectedStores],
-  );
+  const isInitialLoading =
+    metricsLoading ||
+    revenueLoading ||
+    historicalLoading ||
+    alertsSummaryLoading ||
+    promotionsLoading;
+
+  const hasInitialData =
+    metricsData !== undefined ||
+    revenueResponse !== undefined ||
+    historicalChartData !== undefined ||
+    alertsSummaryData !== undefined ||
+    promotionsResponse !== undefined;
+
+  const showLoading = isInitialLoading && !hasInitialData;
+/*
+    return (
+      <PageLoading
+        title='Genel Bakış yükleniyor…'
+        description='KPI, grafik ve uyarılar getiriliyor.'
+      />
+    );
+  }
+
+*/
 
   // Sync with Dashboard Context - Optimized to prevent loops
   const { setSection, setFilters, setMetrics } = useDashboardContext();
@@ -186,7 +223,12 @@ export function OverviewSection() {
     setSelectedCategories([]);
   };
 
-  return (
+  return showLoading ? (
+    <PageLoading
+      title='Genel Bakış yükleniyor…'
+      description='KPI, grafik ve uyarılar getiriliyor.'
+    />
+  ) : (
     <div className='space-y-4'>
       {/* Global Filter */}
       <FilterBar
@@ -254,7 +296,7 @@ export function OverviewSection() {
           {/* Forecast Gap KPI */}
           {canSeeKpi('overview-forecast-gap') && (
             <MetricCard
-              title='Forecast Gap to Sales'
+              title='Satışa Göre Tahmin Sapması'
               value={`${(metrics.gapToSales || 0).toFixed(1)}%`}
               subtext='Tahmin Sapması'
               icon={AlertTriangle}
@@ -305,7 +347,7 @@ export function OverviewSection() {
                     Düşük Büyüme
                   </span>
                   <span className='text-2xl 2xl:text-3xl font-bold text-red-600'>
-                    {alertsSummaryData?.summary?.lowGrowth?.count ?? 4}
+                    {alertsSummaryData?.summary?.lowGrowth?.count ?? 0}
                   </span>
                 </div>
                 <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
@@ -327,7 +369,7 @@ export function OverviewSection() {
                     Yüksek Büyüme
                   </span>
                   <span className='text-2xl 2xl:text-3xl font-bold text-green-600'>
-                    {alertsSummaryData?.summary?.highGrowth?.count ?? 12}
+                    {alertsSummaryData?.summary?.highGrowth?.count ?? 0}
                   </span>
                 </div>
                 <div className='bg-card border rounded-lg p-1.5 2xl:p-3 flex flex-col items-center justify-center text-center shadow-sm hover:shadow-md transition-shadow cursor-pointer mx-auto w-full relative group'>
@@ -349,7 +391,7 @@ export function OverviewSection() {
                     Tahmin Hataları
                   </span>
                   <span className='text-2xl 2xl:text-3xl font-bold text-orange-600'>
-                    {alertsSummaryData?.summary?.forecastErrors?.count ?? 7}
+                    {alertsSummaryData?.summary?.forecastErrors?.count ?? 0}
                   </span>
                 </div>
                 <Link
@@ -374,8 +416,7 @@ export function OverviewSection() {
                     Stok uyarıları
                   </span>
                   <span className='text-2xl 2xl:text-3xl font-bold text-red-600'>
-                    {alertsSummaryData?.summary?.inventory?.count ??
-                      inventoryAlerts.length}
+                    {alertsSummaryData?.summary?.inventory?.count ?? 0}
                   </span>
                 </Link>
               </div>

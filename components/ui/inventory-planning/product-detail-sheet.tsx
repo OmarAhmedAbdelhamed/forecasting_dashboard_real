@@ -42,12 +42,17 @@ import {
 } from '@/lib/actions-service';
 
 // Generate AI recommendation based on product status
-function getRecommendation(item: InventoryItem): string | null {
+function getRecommendation(
+  item: InventoryItem,
+  periodDays: number,
+): string | null {
   if (item.status === 'Out of Stock') {
-    return `Bu ürün stokta kalmadı. Acil sipariş vererek ${item.forecastedDemand} adetlik 30 günlük talebi karşılayabilirsiniz. Tedarikçi ile hızlı teslimat için iletişime geçmenizi öneriyoruz.`;
+    return `Bu ürün stokta kalmadı. Acil sipariş vererek ${item.forecastedDemand} adetlik ${periodDays} günlük talebi karşılayabilirsiniz. Tedarikçi ile hızlı teslimat için iletişime geçmenizi öneriyoruz.`;
   }
   if (item.status === 'Low Stock') {
-    const daysLeft = Math.floor(item.stockLevel / (item.forecastedDemand / 30));
+    const dailyDemand = periodDays > 0 ? item.forecastedDemand / periodDays : 0;
+    const daysLeft =
+      dailyDemand > 0 ? Math.floor(item.stockLevel / dailyDemand) : 0;
     return `Stok seviyesi kritik! Tahmini ${daysLeft} gün içinde stok tükenebilir. Sipariş noktasına (${item.reorderPoint} adet) ulaşmadan yeniden sipariş vermenizi öneriyoruz.`;
   }
   if (item.status === 'Overstock') {
@@ -65,6 +70,7 @@ interface ProductDetailSheetProps {
   item: InventoryItem | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  period?: number;
 }
 
 type ActiveForm = 'none' | 'purchase' | 'transfer' | 'safety';
@@ -73,6 +79,7 @@ export function ProductDetailSheet({
   item,
   open,
   onOpenChange,
+  period = 30,
 }: ProductDetailSheetProps) {
   const router = useRouter();
   const [activeForm, setActiveForm] = useState<ActiveForm>('none');
@@ -211,7 +218,7 @@ export function ProductDetailSheet({
                 </div>
                 <div className='p-4 bg-muted/30 rounded-lg border border-border hover:border-muted-foreground/20 transition-colors'>
                   <p className='text-xs text-muted-foreground font-medium mb-1.5'>
-                    Tahmini Talep (30 Gün)
+                    Tahmini Talep ({period} Gün)
                   </p>
                   <p className='text-2xl font-bold text-foreground'>
                     {item.forecastedDemand.toLocaleString('tr-TR')}
@@ -236,7 +243,7 @@ export function ProductDetailSheet({
               </div>
 
               {/* AI Recommendation */}
-              {getRecommendation(item) && (
+              {getRecommendation(item, period) && (
                 <div className='relative overflow-hidden rounded-lg bg-indigo-50/50 border border-indigo-100 p-3'>
                   <div className='flex items-start gap-3'>
                     <div className='mt-0.5 p-1.5 bg-indigo-100 rounded-full shrink-0'>
@@ -247,7 +254,7 @@ export function ProductDetailSheet({
                         Yapay Zeka Önerisi
                       </p>
                       <p className='text-xs text-indigo-900 leading-relaxed'>
-                        {getRecommendation(item)}
+                        {getRecommendation(item, period)}
                       </p>
                     </div>
                   </div>

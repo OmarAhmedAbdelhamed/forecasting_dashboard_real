@@ -15,7 +15,7 @@ export interface InventoryItem {
   minStockLevel: number; // Safety Stock
   maxStockLevel: number;
   reorderPoint: number;
-  forecastedDemand: number; // Next 30 days
+  forecastedDemand: number; // Next selected period (days)
   stockValue: number;
   daysOfCoverage: number;
   status: InventoryStatus;

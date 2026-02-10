@@ -11,6 +11,7 @@ import { InventoryKPIs } from '@/types/inventory';
 
 interface InventoryKpiSectionProps {
   data: InventoryKPIs;
+  period?: number;
 }
 
 // Mock sparkline data
@@ -48,7 +49,10 @@ const SPARKLINE_DATA_2 = [
   { value: 18 },
 ];
 
-export function InventoryKpiSection({ data }: InventoryKpiSectionProps) {
+export function InventoryKpiSection({
+  data,
+  period = 30,
+}: InventoryKpiSectionProps) {
   const kpiData = data;
 
   return (
@@ -204,7 +208,7 @@ export function InventoryKpiSection({ data }: InventoryKpiSectionProps) {
                 <CircleAlert className='h-3.5 w-3.5 text-muted-foreground/50 hover:text-muted-foreground/80 cursor-help transition-colors' />
               </TooltipTrigger>
               <TooltipContent side='top' className='bg-slate-900 text-white'>
-                <p className='text-xs'>Son 30 günlük ortalama satış adedi</p>
+                <p className='text-xs'>Son {period} günlük ortalama satış adedi</p>
               </TooltipContent>
             </Tooltip>
           </div>
