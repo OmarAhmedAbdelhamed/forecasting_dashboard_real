@@ -75,7 +75,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 
 # CORS middleware for Next.js frontend
 cors_allow_origins_raw = os.getenv("CORS_ALLOW_ORIGINS", "").strip()
-cors_allow_origin_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX", "").strip()
+cors_allow_origin_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX", "").strip() or None
 
 cors_allow_origins = ["http://localhost:3000", "http://127.0.0.1:3000"]
 if cors_allow_origins_raw:
@@ -86,9 +86,14 @@ if cors_allow_origins_raw:
             o.strip() for o in cors_allow_origins_raw.split(",") if o.strip()
         ]
 
-# Dev convenience: allow any localhost/127.0.0.1 port by default.
-if not cors_allow_origin_regex:
+# Dev convenience: allow any localhost/127.0.0.1 port only when no env override is provided.
+# In prod, an overly-restrictive regex breaks preflight for real domains.
+if not cors_allow_origins_raw and cors_allow_origin_regex is None:
     cors_allow_origin_regex = r"^https?://(localhost|127\\.0\\.0\\.1)(:\\d+)?$"
+
+# If allow_origins is "*", never apply an origin regex.
+if cors_allow_origins == ["*"]:
+    cors_allow_origin_regex = None
 
 # If allow_origins is "*", credentials cannot be enabled in CORSMiddleware.
 cors_allow_credentials = cors_allow_origins != ["*"]
