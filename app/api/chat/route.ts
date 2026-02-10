@@ -7,12 +7,22 @@ import {
   PROMOTION_HISTORY_DATA,
 } from '@/data/mock-data';
 import { InventoryAlert } from '@/types/inventory';
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 export async function POST(req: NextRequest) {
   try {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        {
+          error:
+            'OPENAI_API_KEY tanimli degil. Vercel/ortam degiskenlerinden ekleyin.',
+        },
+        { status: 500 },
+      );
+    }
+
+    const openai = new OpenAI({ apiKey });
+
     const { message, context, history } = await req.json();
 
     if (!message) {

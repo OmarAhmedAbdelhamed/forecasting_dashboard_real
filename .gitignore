@@ -30,6 +30,6 @@ next-env.d.ts
 .claude
 docs
 scripts
-supabase
+/supabase/
 
 /CLAUDE.md

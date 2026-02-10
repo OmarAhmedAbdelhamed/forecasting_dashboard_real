@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@/lib/supabase/server';
+import { createAdminClient, createClient } from '@/lib/supabase/server';
 import { ROLE_CONFIGS } from '@/types/permissions';
 import type { UserRole } from '@/types/auth';
 import { createUserSchema } from '@/lib/validations/user';
@@ -158,7 +158,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create user in auth.users using admin API
-    const supabaseAdmin = await createClient();
+    const supabaseAdmin = createAdminClient();
     const { data: newUser, error: createError } =
       await supabaseAdmin.auth.admin.createUser({
         email,
