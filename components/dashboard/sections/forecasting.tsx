@@ -1062,7 +1062,17 @@ export function ForecastingSection() {
         istenenFiyat: aktifPromosyonKodu === '17' ? null : selectedFiyat,
       };
 
-      await forecastingApi.predictDemand(payload);
+      // Best-effort: the UI uses local simulation for visualization, so do not
+      // block the chart if the external model is slow/unavailable.
+      void forecastingApi.predictDemand(payload).catch((error) => {
+        console.error('predictDemand failed:', error);
+        toast({
+          title: 'Tahmin servisi uyarısı',
+          description:
+            'Modelden yanıt alınamadı, ancak simülasyon grafiği gösteriliyor.',
+          variant: 'destructive',
+        });
+      });
     } catch (error) {
       toast({
         title: 'Tahmin servisi hatası',
@@ -1070,8 +1080,7 @@ export function ForecastingSection() {
           error instanceof Error ? error.message : 'Tahmin modeline istek gönderilemedi.',
         variant: 'destructive',
       });
-      setIsLoading(false);
-      return;
+      // Continue with simulation even if the model call cannot be sent.
     }
 
     // Response visualization formatı net olmadığı için tahmin serisini simülasyonla üretiyoruz.
@@ -1157,7 +1166,13 @@ export function ForecastingSection() {
       data.push({
         tarih: format(currentDate, "yyyy-MM-dd'T'00:00:00"),
         baseline: parseFloat(patternBase.toFixed(0)), // Units
-        tahmin: isPromoActive ? parseFloat(finalTahmin.toFixed(0)) : null, // Units
+        // Promosyonsuz senaryoda (kod=17) yine de tahmin serisini goster.
+        tahmin:
+          aktifPromosyonKodu === '17'
+            ? parseFloat(finalTahmin.toFixed(0))
+            : isPromoActive
+              ? parseFloat(finalTahmin.toFixed(0))
+              : null, // Units
         unconstrained_demand:
           lostSales > 0 ? parseFloat(dailyDemand.toFixed(0)) : null, // Units (Potential Sales)
         lost_sales: lostSales,
