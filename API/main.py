@@ -57,6 +57,10 @@ app = FastAPI(
     version="1.0.0",
 )
 
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception):
   # Ensure the frontend always receives a JSON error payload (useful in dev).
