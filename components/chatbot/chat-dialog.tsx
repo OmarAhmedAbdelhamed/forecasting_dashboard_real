@@ -13,6 +13,10 @@ interface Message {
   content: string;
 }
 
+interface ChatApiSuccessResponse {
+  response: string;
+}
+
 interface ChatDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -29,7 +33,7 @@ export function ChatDialog({ open, onOpenChange }: ChatDialogProps) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { getContext } = useDashboardContext();
+  const { getContext, filters } = useDashboardContext();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -41,8 +45,7 @@ export function ChatDialog({ open, onOpenChange }: ChatDialogProps) {
     }
   }, [messages, open]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const sendMessage = async () => {
     if (!input.trim() || isLoading) {return;}
 
     const userMessage = input.trim();
@@ -58,13 +61,14 @@ export function ChatDialog({ open, onOpenChange }: ChatDialogProps) {
         body: JSON.stringify({
           message: userMessage,
           context,
+          filters,
           history: messages.slice(-6),
         }),
       });
 
       if (!response.ok) {throw new Error('Failed to get response');}
 
-      const data = await response.json();
+      const data = (await response.json()) as ChatApiSuccessResponse;
       setMessages((prev) => [
         ...prev,
         { role: 'assistant', content: data.response },
@@ -83,13 +87,17 @@ export function ChatDialog({ open, onOpenChange }: ChatDialogProps) {
     }
   };
 
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void sendMessage();
+  };
+
   if (!open) {return null;}
 
   return (
     <div
       className={cn(
         'fixed bottom-24 right-6 z-50 flex flex-col w-[440px] h-[600px] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden transition-all duration-300 transform animate-in fade-in slide-in-from-bottom-4',
-        !open && 'scale-95 opacity-0 pointer-events-none',
       )}
     >
       {/* Header */}
@@ -178,7 +186,7 @@ export function ChatDialog({ open, onOpenChange }: ChatDialogProps) {
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
-                handleSubmit(e);
+                void sendMessage();
               }
             }}
           />

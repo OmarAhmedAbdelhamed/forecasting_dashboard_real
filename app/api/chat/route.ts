@@ -1,17 +1,117 @@
 import { NextRequest, NextResponse } from 'next/server';
 import OpenAI from 'openai';
-import {
-  getInventoryKPIs,
-  generateInventoryAlerts,
-  generateInventoryItems,
-  PROMOTION_HISTORY_DATA,
-} from '@/data/mock-data';
-import { InventoryAlert } from '@/types/inventory';
+
+const API_BASE_URL =
+  process.env.API_BASE_URL ??
+  process.env.NEXT_PUBLIC_API_URL ??
+  'http://localhost:8000';
+
+type ChatRole = 'user' | 'assistant';
+
+interface ChatMessage {
+  role: ChatRole;
+  content: string;
+}
+
+interface DashboardFilters {
+  regions?: string[];
+  stores?: string[];
+  categories?: string[];
+  products?: string[];
+}
+
+interface ChatRequestBody {
+  message?: string;
+  context?: string;
+  history?: ChatMessage[];
+  filters?: DashboardFilters;
+}
+
+interface InventoryKpisResponse {
+  totalStockValue?: number;
+  stockCoverageDays?: number;
+  stockOutRiskItems?: number;
+  excessInventoryItems?: number;
+}
+
+interface InventoryItemResponse {
+  sku?: string;
+  productName?: string;
+  stockLevel?: number;
+  forecastedDemand?: number;
+  price?: number;
+  status?: string;
+  category?: string;
+}
+
+interface InventoryItemsResponse {
+  items?: InventoryItemResponse[];
+}
+
+interface InventoryAlertResponse {
+  severity?: string;
+}
+
+interface InventoryAlertsResponse {
+  alerts?: InventoryAlertResponse[];
+}
+
+function appendArrayParam(url: URL, key: string, values?: string[]) {
+  if (!Array.isArray(values)) {
+    return;
+  }
+
+  values
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .forEach((value) => {
+      url.searchParams.append(key, value);
+    });
+}
+
+function buildApiUrl(
+  endpoint: string,
+  filters?: DashboardFilters,
+  extraParams?: Record<string, string | number>,
+) {
+  const url = new URL(endpoint, API_BASE_URL);
+
+  appendArrayParam(url, 'regionIds', filters?.regions);
+  appendArrayParam(url, 'storeIds', filters?.stores);
+  appendArrayParam(url, 'categoryIds', filters?.categories);
+  appendArrayParam(url, 'productIds', filters?.products);
+
+  if (extraParams !== undefined) {
+    Object.entries(extraParams).forEach(([key, value]) => {
+      url.searchParams.set(key, String(value));
+    });
+  }
+
+  return url.toString();
+}
+
+async function safeFetchJson<T>(url: string): Promise<T | null> {
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      cache: 'no-store',
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
 
 export async function POST(req: NextRequest) {
   try {
     const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) {
+    if (apiKey === undefined || apiKey.trim() === '') {
       return NextResponse.json(
         {
           error:
@@ -23,7 +123,11 @@ export async function POST(req: NextRequest) {
 
     const openai = new OpenAI({ apiKey });
 
-    const { message, context, history } = await req.json();
+    const body = (await req.json()) as ChatRequestBody;
+    const message = (body.message ?? '').trim();
+    const context = body.context ?? '';
+    const history = Array.isArray(body.history) ? body.history : [];
+    const filters = body.filters;
 
     if (!message) {
       return NextResponse.json(
@@ -32,63 +136,100 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Generate Global Intelligence
-    const globalKPIs = getInventoryKPIs([], [], []);
-    const globalAlerts = generateInventoryAlerts([], []);
-    const highSeverityAlerts = globalAlerts.filter(
-      (a: InventoryAlert) => a.severity === 'high',
-    );
-    // Generate Full Product Catalog (concise format)
-    const allInventoryItems = generateInventoryItems([], [], [], []);
-    const productCatalog = allInventoryItems
-      .map(
-        (i) =>
-          `SKU: ${i.sku} | Ürün: ${i.productName} | Stok: ${i.stockLevel} | Tahmin: ${i.forecastedDemand} | Fiyat: ${i.price}TL | Durum: ${i.status}`,
-      )
-      .join('\n');
+    const [globalKPIs, globalItemsResponse, globalAlertsResponse] =
+      await Promise.all([
+        safeFetchJson<InventoryKpisResponse>(
+          buildApiUrl('/api/inventory/kpis', filters, { days: 30 }),
+        ),
+        safeFetchJson<InventoryItemsResponse>(
+          buildApiUrl('/api/inventory/items', filters, {
+            days: 30,
+            page: 1,
+            limit: 120,
+            sortBy: 'stockValue',
+            sortOrder: 'desc',
+          }),
+        ),
+        safeFetchJson<InventoryAlertsResponse>(
+          buildApiUrl('/api/alerts/inventory', filters, {
+            days: 30,
+            limit: 200,
+          }),
+        ),
+      ]);
 
-    // Build system prompt with both specific context and global intelligence
-    const systemPrompt = `Sen Bee2 Forecasting Dashboard için bir AI asistanısın. Kullanıcılara envanter, satış tahminleri ve stok yönetimi konularında yardımcı oluyorsun.
+    const globalAlerts = globalAlertsResponse?.alerts ?? [];
+    const highSeverityAlerts = globalAlerts.filter((alert) => {
+      const severity = (alert.severity ?? '').toLowerCase();
+      return severity === 'high' || severity === 'critical';
+    });
 
-Mevcut Sayfa Durumu (Kullanıcının Baktığı Ekran):
-${context || 'Henüz veri yüklenmedi'}
+    const allInventoryItems = globalItemsResponse?.items ?? [];
+    const productCatalog =
+      allInventoryItems.length > 0
+        ? allInventoryItems
+            .map((item) => {
+              const sku = item.sku ?? '-';
+              const productName = item.productName ?? '-';
+              const category = item.category ?? '-';
+              const stockLevel = item.stockLevel ?? 0;
+              const forecastedDemand = item.forecastedDemand ?? 0;
+              const price = item.price ?? 0;
+              const status = item.status ?? '-';
+              return `SKU: ${sku} | Urun: ${productName} | Kategori: ${category} | Stok: ${String(stockLevel)} | Tahmin: ${String(forecastedDemand)} | Fiyat: ${String(price)} TL | Durum: ${status}`;
+            })
+            .join('\n')
+        : 'Urun verisi alinamadi.';
 
-Tüm Dashboard Özeti (Genel Büyük Resim):
-- Toplam Stok Değeri: ${(globalKPIs.totalStockValue / 1000000).toFixed(1)}M TL
-- Stok Kapsam Süresi: ${globalKPIs.stockCoverageDays.toFixed(1)} Gün
-- Kritik Stok Riski (OOS): ${globalKPIs.stockOutRiskItems} Ürün
-- Fazla Stok (Overstock): ${globalKPIs.excessInventoryItems} Ürün
-- Aktif Alarm Sayısı: ${globalAlerts.length} (Bunların ${highSeverityAlerts.length} tanesi Yüksek Öncelikli)
+    const totalStockValue = globalKPIs?.totalStockValue ?? 0;
+    const stockCoverageDays = globalKPIs?.stockCoverageDays ?? 0;
+    const stockOutRiskItems = globalKPIs?.stockOutRiskItems ?? 0;
+    const excessInventoryItems = globalKPIs?.excessInventoryItems ?? 0;
 
-Tüm Ürün Veritabanı (Detaylı Liste):
+    const systemPrompt = `Sen Bee2 Forecasting Dashboard icin bir AI asistansın. Kullanicilara envanter, satis tahminleri ve stok yonetimi konularinda yardimci oluyorsun.
+
+Mevcut Sayfa Durumu (Kullanicinin Baktigi Ekran):
+${context !== '' ? context : 'Henuz veri yuklenmedi'}
+
+Tum Dashboard Ozeti (Genel Buyuk Resim):
+- Toplam Stok Degeri: ${(totalStockValue / 1000000).toFixed(1)}M TL
+- Stok Kapsam Suresi: ${stockCoverageDays.toFixed(1)} Gun
+- Kritik Stok Riski (OOS): ${String(stockOutRiskItems)} Urun
+- Fazla Stok (Overstock): ${String(excessInventoryItems)} Urun
+- Aktif Alarm Sayisi: ${String(globalAlerts.length)} (Bunlarin ${String(highSeverityAlerts.length)} tanesi yuksek oncelikli)
+
+Tum Urun Veritabani (Detayli Liste):
 ${productCatalog}
 
-Görevin:
-- Kullanıcı sorularını Türkçe olarak yanıtla.
-- Kullanıcı belirli bir ürün, SKU veya genel stok durumu hakkında sorarsa "Tüm Ürün Veritabanı"nı kullan.
-- Veri odaklı, net ve kısa cevaplar ver.
-- Sayıları Türkçe formatında göster (örn: 1.234,56).
+Gorevin:
+- Kullanicinin sorularini Turkce olarak yanitla.
+- Kullanici belirli bir urun, SKU veya genel stok durumu hakkinda sorarsa "Tum Urun Veritabani"ni kullan.
+- Veri odakli, net ve kisa cevaplar ver.
+- Sayilari Turkce formatinda goster (orn: 1.234,56).
 - Profesyonel ama samimi bir ton kullan.
 
-Önemli: Artık şirketteki TÜM ürünlerin verisine sahipsin. Kullanıcı "X ürününden ne kadar var?" veya "Hangi ürünler stok dışı?" diye sorduğunda aşağıdaki listeden kontrol edip net cevap ver.`;
+Onemli:
+- Sadece yukaridaki API verisini kullanarak yanit ver.
+- Veri bulunamayan durumda bunu acikca belirt.`;
 
-    // Build messages array
-    const messages: any[] = [{ role: 'system', content: systemPrompt }];
+    const messages: {
+      role: 'system' | ChatRole;
+      content: string;
+    }[] = [{ role: 'system', content: systemPrompt }];
 
-    // Add conversation history (last 3 exchanges)
-    if (history && Array.isArray(history)) {
-      history.forEach((msg: any) => {
-        messages.push({
-          role: msg.role,
-          content: msg.content,
-        });
+    history.slice(-6).forEach((msg) => {
+      if (typeof msg.content !== 'string' || !msg.content.trim()) {
+        return;
+      }
+
+      messages.push({
+        role: msg.role,
+        content: msg.content,
       });
-    }
+    });
 
-    // Add current user message
     messages.push({ role: 'user', content: message });
 
-    // Call OpenAI API
     const completion = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages,
@@ -97,30 +238,32 @@ Görevin:
     });
 
     const response =
-      completion.choices[0]?.message?.content ||
-      'Üzgünüm, yanıt oluşturamadım. Lütfen tekrar deneyin.';
+      completion.choices[0]?.message?.content ??
+      'Uzgunum, yanit olusturamadim. Lutfen tekrar deneyin.';
 
     return NextResponse.json({ response });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Chat API error:', error);
 
-    // Handle specific OpenAI errors
-    if (error?.status === 401) {
+    const errorWithStatus = error as { status?: number };
+    const status = errorWithStatus.status;
+
+    if (status === 401) {
       return NextResponse.json(
-        { error: 'API anahtarı geçersiz' },
+        { error: 'API anahtari gecersiz' },
         { status: 401 },
       );
     }
 
-    if (error?.status === 429) {
+    if (status === 429) {
       return NextResponse.json(
-        { error: 'Çok fazla istek. Lütfen biraz bekleyin.' },
+        { error: 'Cok fazla istek. Lutfen biraz bekleyin.' },
         { status: 429 },
       );
     }
 
     return NextResponse.json(
-      { error: 'Bir hata oluştu. Lütfen tekrar deneyin.' },
+      { error: 'Bir hata olustu. Lutfen tekrar deneyin.' },
       { status: 500 },
     );
   }
