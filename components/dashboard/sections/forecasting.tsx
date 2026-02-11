@@ -1335,8 +1335,8 @@ export function ForecastingSection() {
         {/* Left Column: Inputs & Special Days */}
         <div className='lg:col-span-4 space-y-2 2xl:space-y-3'>
           {/* Configuration Card */}
-          <Card className='h-fit'>
-            <CardHeader className='py-2 2xl:py-3'>
+          <Card className='h-fit max-w-[210px] md:max-w-[220px] lg:max-w-[360px] 2xl:max-w-[380px]'>
+            <CardHeader className='py-1.5 2xl:py-2.5'>
               <CardTitle className='text-base 2xl:text-lg'>
                 Konfigürasyon
               </CardTitle>
@@ -1344,10 +1344,10 @@ export function ForecastingSection() {
                 Analiz parametrelerini giriniz
               </CardDescription>
             </CardHeader>
-            <CardContent className='space-y-2 2xl:space-y-3 pb-2 2xl:pb-3'>
+            <CardContent className='space-y-1.5 2xl:space-y-2.5 pb-2 2xl:pb-2.5'>
               <div className='space-y-0.5'>
                 <div className='flex items-center gap-1'>
-                  <Label className='text-[10px] 2xl:text-xs'>Bölge</Label>
+                  <Label className='text-xs 2xl:text-sm'>Bölge</Label>
                   <UITooltip>
                     <UITooltipTrigger>
                       <Info className='h-3 w-3 text-muted-foreground/60 hover:text-indigo-600 cursor-help' />
@@ -1367,7 +1367,7 @@ export function ForecastingSection() {
 
               <div className='space-y-0.5'>
                 <div className='flex items-center gap-1'>
-                  <Label className='text-[10px] 2xl:text-xs'>Mağaza Kodu</Label>
+                  <Label className='text-xs 2xl:text-sm'>Mağaza Kodu</Label>
                   <UITooltip>
                     <UITooltipTrigger>
                       <Info className='h-3 w-3 text-muted-foreground/60 hover:text-indigo-600 cursor-help' />
@@ -1387,7 +1387,7 @@ export function ForecastingSection() {
 
               <div className='space-y-0.5'>
                 <div className='flex items-center gap-1'>
-                  <Label className='text-[10px] 2xl:text-xs'>Reyon</Label>
+                  <Label className='text-xs 2xl:text-sm'>Reyon</Label>
                   <UITooltip>
                     <UITooltipTrigger>
                       <Info className='h-3 w-3 text-muted-foreground/60 hover:text-indigo-600 cursor-help' />
@@ -1407,7 +1407,7 @@ export function ForecastingSection() {
 
               <div className='space-y-0.5'>
                 <div className='flex items-center gap-1'>
-                  <Label className='text-[10px] 2xl:text-xs'>Ürün Kodu</Label>
+                  <Label className='text-xs 2xl:text-sm'>Ürün Kodu</Label>
                   <UITooltip>
                     <UITooltipTrigger>
                       <Info className='h-3 w-3 text-muted-foreground/60 hover:text-indigo-600 cursor-help' />
@@ -1427,7 +1427,7 @@ export function ForecastingSection() {
 
               <div className='space-y-0.5'>
                 <div className='flex items-center gap-1'>
-                  <Label className='text-[10px] 2xl:text-xs'>
+                  <Label className='text-xs 2xl:text-sm'>
                     Tahminleme Tarih Aralığı
                   </Label>
                   <UITooltip>
@@ -1441,25 +1441,25 @@ export function ForecastingSection() {
                     </UITooltipContent>
                   </UITooltip>
                 </div>
-                <div className='grid grid-cols-2 gap-2'>
+                <div className='grid grid-cols-2 gap-1.5'>
                   <DatePicker
                     date={startDate}
                     setDate={setStartDate}
                     placeholder='Başlangıç'
-                    className='h-7 2xl:h-9 text-xs'
+                    className='h-6 2xl:h-8 text-xs'
                   />
                   <DatePicker
                     date={endDate}
                     setDate={setEndDate}
                     placeholder='Bitiş'
-                    className='h-7 2xl:h-9 text-xs'
+                    className='h-6 2xl:h-8 text-xs'
                   />
                 </div>
               </div>
 
               <div className='space-y-0.5'>
                 <div className='flex items-center gap-1'>
-                  <Label className='text-[10px] 2xl:text-xs'>
+                  <Label className='text-xs 2xl:text-sm'>
                     Promosyon Tarih Aralığı
                   </Label>
                   <UITooltip>
@@ -1471,26 +1471,26 @@ export function ForecastingSection() {
                     </UITooltipContent>
                   </UITooltip>
                 </div>
-                <div className='grid grid-cols-2 gap-2'>
+                <div className='grid grid-cols-2 gap-1.5'>
                   <DatePicker
                     date={startPromosyon}
                     setDate={setStartPromosyon}
                     placeholder='Başlangıç'
-                    className='h-7 2xl:h-9 text-xs'
+                    className='h-6 2xl:h-8 text-xs'
                   />
                   <DatePicker
                     date={endPromosyon}
                     setDate={setEndPromosyon}
                     placeholder='Bitiş'
-                    className='h-7 2xl:h-9 text-xs'
+                    className='h-6 2xl:h-8 text-xs'
                   />
                 </div>
               </div>
 
-              <div className='bg-muted/30 p-2 rounded-lg border space-y-2'>
+              <div className='bg-muted/30 p-1.5 rounded-lg border space-y-1.5'>
                 <div className='flex items-center justify-between'>
                   <div className='flex items-center gap-1'>
-                    <Label className='text-[10px] 2xl:text-xs font-semibold'>
+                    <Label className='text-xs 2xl:text-sm font-semibold'>
                       Fiyatlandırma Stratejisi
                     </Label>
                     <UITooltip>
@@ -1505,13 +1505,13 @@ export function ForecastingSection() {
                       </UITooltipContent>
                     </UITooltip>
                   </div>
-                  <span className='text-[10px] text-muted-foreground'>
+                  <span className='text-xs text-muted-foreground'>
                     Ref Fiyat: 87.45 TL
                   </span>
                 </div>
 
                 <div className='space-y-0.5'>
-                  <Label className='text-[10px] 2xl:text-xs text-muted-foreground'>
+                  <Label className='text-xs 2xl:text-sm text-muted-foreground'>
                     Aktif Promosyon Kodu
                   </Label>
                   <Select
@@ -1526,18 +1526,18 @@ export function ForecastingSection() {
                       }
                     }}
                   >
-                    <SelectTrigger className='h-7 2xl:h-8 text-[10px]'>
+                    <SelectTrigger className='h-6 2xl:h-7 text-xs'>
                       <SelectValue placeholder='Promosyon seçiniz' />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value='17' className='text-[10px]'>
+                      <SelectItem value='17' className='text-xs'>
                         Promosyonsuz (Kod: 17)
                       </SelectItem>
                       {promotionOptions.map((option) => (
                         <SelectItem
                           key={option.code}
                           value={option.code}
-                          className='text-[10px]'
+                          className='text-xs'
                         >
                           {option.label}
                         </SelectItem>
@@ -1545,7 +1545,7 @@ export function ForecastingSection() {
                     </SelectContent>
                   </Select>
                   {promotionOptionsLoading && (
-                    <p className='text-[10px] text-muted-foreground'>
+                    <p className='text-xs text-muted-foreground'>
                       Ürünün geçmiş promosyonları yükleniyor...
                     </p>
                   )}
@@ -1558,28 +1558,28 @@ export function ForecastingSection() {
                   }}
                   className='w-full'
                 >
-                  <TabsList className='grid w-full grid-cols-3 h-7'>
-                    <TabsTrigger value='discount' className='text-[10px] h-5'>
+                  <TabsList className='grid w-full grid-cols-3 h-6'>
+                    <TabsTrigger value='discount' className='text-xs h-5'>
                       İndirim Oranı
                     </TabsTrigger>
-                    <TabsTrigger value='margin' className='text-[10px] h-5'>
+                    <TabsTrigger value='margin' className='text-xs h-5'>
                       Marj
                     </TabsTrigger>
-                    <TabsTrigger value='price' className='text-[10px] h-5'>
+                    <TabsTrigger value='price' className='text-xs h-5'>
                       Hedef Fiyat
                     </TabsTrigger>
                   </TabsList>
 
                   {aktifPromosyonKodu !== '17' && (
-                    <div className='mt-2'>
+                    <div className='mt-1.5'>
                     <TabsContent value='discount' className='mt-0 space-y-0.5'>
-                      <Label className='text-[10px] 2xl:text-xs text-muted-foreground'>
+                      <Label className='text-xs 2xl:text-sm text-muted-foreground'>
                         İndirim (%)
                       </Label>
                       <div className='relative'>
                         <Input
                           type='number'
-                          className='h-7 2xl:h-8 text-xs pr-6'
+                          className='h-6 2xl:h-7 text-xs pr-6'
                           value={promosyonIndirimOrani}
                           onChange={(e) => {
                             setPromosyonIndirimOrani(e.target.value);
@@ -1591,31 +1591,31 @@ export function ForecastingSection() {
                             }
                           }}
                         />
-                        <span className='absolute right-2 top-1.5 text-[10px] text-muted-foreground'>
+                        <span className='absolute right-2 top-1.5 text-xs text-muted-foreground'>
                           %
                         </span>
                       </div>
                     </TabsContent>
 
                     <TabsContent value='margin' className='mt-0 space-y-0.5'>
-                      <Label className='text-[10px] 2xl:text-xs text-muted-foreground'>
+                      <Label className='text-xs 2xl:text-sm text-muted-foreground'>
                         İstenen Marj (%)
                       </Label>
                       <Input
                         type='number'
-                        className='h-7 2xl:h-8 text-xs'
+                        className='h-6 2xl:h-7 text-xs'
                         value={promosyonMarj}
                         onChange={(e) => setPromosyonMarj(e.target.value)}
                       />
                     </TabsContent>
 
                     <TabsContent value='price' className='mt-0 space-y-0.5'>
-                      <Label className='text-[10px] 2xl:text-xs text-muted-foreground'>
+                      <Label className='text-xs 2xl:text-sm text-muted-foreground'>
                         Hedef Fiyat (TL)
                       </Label>
                       <Input
                         type='number'
-                        className='h-7 2xl:h-8 text-xs'
+                        className='h-6 2xl:h-7 text-xs'
                         value={targetPrice}
                         onChange={(e) => {
                           setTargetPrice(e.target.value);
@@ -1633,7 +1633,7 @@ export function ForecastingSection() {
                 </Tabs>
 
                 {/* Info Display for the other value */}
-                <div className='text-[10px] text-muted-foreground text-center bg-background/50 py-0.5 rounded border'>
+                <div className='text-xs text-muted-foreground text-center bg-background/50 py-0.5 rounded border'>
                   {aktifPromosyonKodu === '17' ? (
                     <>
                       Promosyonsuz senaryo: aktifPromosyonKodu=17, indirim/marj/fiyat
@@ -1664,10 +1664,10 @@ export function ForecastingSection() {
                 </div>
               </div>
 
-              <div className='bg-muted/30 p-2 rounded-lg border space-y-2 mt-2'>
+              <div className='bg-muted/30 p-1.5 rounded-lg border space-y-1.5 mt-1.5'>
                 <div className='flex items-center justify-between'>
                   <div className='flex items-center gap-1'>
-                    <Label className='text-[10px] 2xl:text-xs font-semibold'>
+                    <Label className='text-xs 2xl:text-sm font-semibold'>
                       Kısıtlar & Bütçe
                     </Label>
                     <UITooltip>
@@ -1681,10 +1681,10 @@ export function ForecastingSection() {
                   </div>
                 </div>
 
-                <div className='flex bg-muted rounded-md p-0.5 h-6'>
+                <div className='flex bg-muted rounded-md p-0.5 h-5.5'>
                   <button
                     onClick={() => setBudgetMode('budget')}
-                    className={`flex-1 text-[9px] rounded-sm font-medium transition-all ${
+                    className={`flex-1 text-xs rounded-sm font-medium transition-all ${
                       budgetMode === 'budget'
                         ? 'bg-white shadow-sm text-foreground'
                         : 'text-muted-foreground hover:text-foreground'
@@ -1694,7 +1694,7 @@ export function ForecastingSection() {
                   </button>
                   <button
                     onClick={() => setBudgetMode('units')}
-                    className={`flex-1 text-[9px] rounded-sm font-medium transition-all ${
+                    className={`flex-1 text-xs rounded-sm font-medium transition-all ${
                       (budgetMode as string) === 'units'
                         ? 'bg-white shadow-sm text-foreground'
                         : 'text-muted-foreground hover:text-foreground'
@@ -1709,13 +1709,13 @@ export function ForecastingSection() {
                   placeholder={
                     budgetMode === 'budget' ? 'Örn: 50000 TL' : 'Örn: 1000 Adet'
                   }
-                  className='h-7 2xl:h-9 text-xs'
+                  className='h-6 2xl:h-8 text-xs'
                   value={budget}
                   onChange={(e) => setBudget(e.target.value)}
                 />
 
                 {budget && parseFloat(budget) > 0 && (
-                  <div className='text-[10px] text-muted-foreground px-1'>
+                  <div className='text-xs text-muted-foreground px-1'>
                     {budgetMode === 'budget' ? (
                       <span>
                         ~
@@ -1735,7 +1735,7 @@ export function ForecastingSection() {
               </div>
 
               <Button
-                className='w-full mt-2 h-8 2xl:h-10 2xl:text-sm text-xs'
+                className='w-full mt-1.5 h-7 2xl:h-9 2xl:text-sm text-xs'
                 onClick={handleAnalyze}
                 disabled={isLoading}
               >
