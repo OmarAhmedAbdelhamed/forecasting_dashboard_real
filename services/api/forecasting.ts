@@ -64,7 +64,11 @@ export const forecastingApi = {
   /**
    * Get only previously used promotions for selected store + product
    */
-  getProductPromotions: (params: { storeCode: number; productCode: number }) =>
+  getProductPromotions: (params: {
+    productCode: number;
+    storeCode?: number;
+    storeIds?: number[];
+  }) =>
     apiClient.get<{ promotions: ProductPromotionOption[] }>(
       '/api/forecast/product-promotions',
       params,

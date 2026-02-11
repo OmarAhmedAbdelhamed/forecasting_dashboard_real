@@ -553,27 +553,48 @@ export function ForecastingSection() {
 
   const filteredCategories = useMemo(() => {
     const categories = categoriesQuery.data?.categories || [];
-    return categories
-      .filter((category) =>
-        dataScope.categories.length > 0
-          ? dataScope.categories.includes(category.value)
-          : true,
-      )
-      .map((category) => ({
-        value: category.value,
-        label: `${category.label} (${category.value})`,
-      }));
+    const uniqueCategories = new Map<string, { value: string; label: string }>();
+
+    categories.forEach((category) => {
+      const categoryCode = extractCategoryCode(category.value);
+      const isAllowed =
+        dataScope.categories.length === 0 ||
+        dataScope.categories.includes(category.value) ||
+        dataScope.categories.includes(categoryCode);
+
+      if (!isAllowed || uniqueCategories.has(categoryCode)) {
+        return;
+      }
+
+      uniqueCategories.set(categoryCode, {
+        value: categoryCode,
+        label: `${category.label} (${categoryCode})`,
+      });
+    });
+
+    return Array.from(uniqueCategories.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, 'tr'),
+    );
   }, [categoriesQuery.data?.categories, dataScope.categories]);
 
   const filteredProducts = useMemo(() => {
     const products = productsQuery.data?.products || [];
-    return products.map((product) => {
+    const uniqueProducts = new Map<string, { value: string; label: string }>();
+
+    products.forEach((product) => {
       const code = extractProductCode(product.value) || product.value;
-      return {
-        value: product.value,
+      if (uniqueProducts.has(code)) {
+        return;
+      }
+      uniqueProducts.set(code, {
+        value: code,
         label: `${product.label} (${code})`,
-      };
+      });
     });
+
+    return Array.from(uniqueProducts.values()).sort((a, b) =>
+      a.label.localeCompare(b.label, 'tr'),
+    );
   }, [productsQuery.data?.products]);
 
   const stockScopeStoreIds =
@@ -644,10 +665,9 @@ export function ForecastingSection() {
 
   useEffect(() => {
     const loadPromotions = async () => {
-      const storeCode = numericStoreIds[0];
       const productCode = numericProductIds[0];
 
-      if (!storeCode || !productCode) {
+      if (!productCode) {
         setPromotionOptions([]);
         setAktifPromosyonKodu('17');
         setPromosyon('Promosyonsuz');
@@ -656,9 +676,19 @@ export function ForecastingSection() {
 
       setPromotionOptionsLoading(true);
       try {
+        const numericStoreCode =
+          numericStoreIds.length === 1 ? Number(numericStoreIds[0]) : undefined;
+        const numericStoreCodeList =
+          numericStoreIds.length > 1
+            ? numericStoreIds
+                .map((store) => Number(store))
+                .filter((store) => Number.isFinite(store))
+            : undefined;
+
         const response = await forecastingApi.getProductPromotions({
-          storeCode: Number(storeCode),
           productCode: Number(productCode),
+          storeCode: numericStoreCode,
+          storeIds: numericStoreCodeList,
         });
         setPromotionOptions(response.promotions || []);
       } catch (error) {
@@ -1057,13 +1087,53 @@ export function ForecastingSection() {
       return;
     }
 
-    const selectedStoreCode = numericStoreIds[0];
     const selectedProductCode = numericProductIds[0];
 
-    if (!selectedStoreCode || !selectedProductCode) {
+    if (!selectedProductCode) {
       toast({
-        title: 'Mağaza ve ürün seçimi zorunlu',
-        description: 'Tahmin göndermek için en az 1 mağaza ve 1 ürün seçin.',
+        title: 'Ürün seçimi zorunlu',
+        description: 'Tahmin göndermek için en az 1 ürün seçin.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const selectedStoreCodes: number[] =
+      numericStoreIds.length > 0
+        ? numericStoreIds
+            .map((storeId) => Number(storeId))
+            .filter((storeId) => Number.isFinite(storeId))
+        : (() => {
+            const productMatchedStoreCodes = Array.from(
+              new Set(
+                (productsQuery.data?.products || [])
+                  .filter(
+                    (product) =>
+                      extractProductCode(product.value) === selectedProductCode,
+                  )
+                  .map((product) => Number(product.value.split('_')[0]))
+                  .filter((storeCode) => Number.isFinite(storeCode)),
+              ),
+            );
+
+            if (productMatchedStoreCodes.length > 0) {
+              return productMatchedStoreCodes;
+            }
+
+            return Array.from(
+              new Set(
+                filteredStores
+                  .map((store) => Number(store.value))
+                  .filter((storeCode) => Number.isFinite(storeCode)),
+              ),
+            );
+          })();
+
+    if (selectedStoreCodes.length === 0) {
+      toast({
+        title: 'Mağaza bulunamadı',
+        description:
+          'Seçilen ürün için analiz yapılabilecek mağaza kodu bulunamadı.',
         variant: 'destructive',
       });
       return;
@@ -1107,22 +1177,64 @@ export function ForecastingSection() {
         }
       }
 
-      const payload: PredictDemandRequest = {
-        magazaKodu: Number(selectedStoreCode),
-        urunKodu: Number(selectedProductCode),
-        tarihBaslangic: format(startDate, 'yyyy-MM-dd'),
-        tarihBitis: format(endDate, 'yyyy-MM-dd'),
-        ozelgunsayisi: null,
-        aktifPromosyonKodu,
-        istenenIndirim: aktifPromosyonKodu === '17' ? null : selectedIndirim,
-        istenenMarj: aktifPromosyonKodu === '17' ? null : selectedMarj,
-        istenenFiyat: aktifPromosyonKodu === '17' ? null : selectedFiyat,
-      };
-      const predictionResult = await forecastingApi.predictDemand(payload);
+      const predictionResults = await Promise.allSettled(
+        selectedStoreCodes.map((storeCode) =>
+          forecastingApi.predictDemand({
+            magazaKodu: storeCode,
+            urunKodu: Number(selectedProductCode),
+            tarihBaslangic: format(startDate, 'yyyy-MM-dd'),
+            tarihBitis: format(endDate, 'yyyy-MM-dd'),
+            ozelgunsayisi: null,
+            aktifPromosyonKodu,
+            istenenIndirim: aktifPromosyonKodu === '17' ? null : selectedIndirim,
+            istenenMarj: aktifPromosyonKodu === '17' ? null : selectedMarj,
+            istenenFiyat: aktifPromosyonKodu === '17' ? null : selectedFiyat,
+          }),
+        ),
+      );
 
-      const responseRows = Array.isArray((predictionResult as { forecast?: unknown }).forecast)
-        ? ((predictionResult as { forecast?: unknown }).forecast as PredictForecastRow[])
-        : [];
+      const successfulPredictions = predictionResults
+        .filter(
+          (result): result is PromiseFulfilledResult<Record<string, unknown>> =>
+            result.status === 'fulfilled',
+        )
+        .map((result) => result.value);
+
+      const allRows = successfulPredictions.flatMap((result) =>
+        Array.isArray((result as { forecast?: unknown }).forecast)
+          ? ((result as { forecast?: unknown }).forecast as PredictForecastRow[])
+          : [],
+      );
+
+      const aggregatedByDate = new Map<string, PredictForecastRow>();
+      for (const row of allRows) {
+        if (!row?.tarih) continue;
+        const dateKey = String(row.tarih).slice(0, 10);
+        const current = aggregatedByDate.get(dateKey);
+        if (!current) {
+          aggregatedByDate.set(dateKey, { ...row });
+          continue;
+        }
+
+        current.tahmin = toFiniteNumber(current.tahmin, 0) + toFiniteNumber(row.tahmin, 0);
+        current.baseline =
+          toFiniteNumber(current.baseline ?? current.roll_mean_7, 0) +
+          toFiniteNumber(row.baseline ?? row.roll_mean_7, 0);
+        current.ciro_adedi = toFiniteNumber(current.ciro_adedi, 0) + toFiniteNumber(row.ciro_adedi, 0);
+        current.ciro = toFiniteNumber(current.ciro, 0) + toFiniteNumber(row.ciro, 0);
+        current.stok = toFiniteNumber(current.stok, 0) + toFiniteNumber(row.stok, 0);
+        current.gunluk_kar = toFiniteNumber(current.gunluk_kar, 0) + toFiniteNumber(row.gunluk_kar, 0);
+        current.lost_sales = toFiniteNumber(current.lost_sales, 0) + toFiniteNumber(row.lost_sales, 0);
+        current.unconstrained_demand =
+          toFiniteNumber(current.unconstrained_demand, 0) +
+          toFiniteNumber(row.unconstrained_demand, 0);
+      }
+
+      const responseRows = Array.from(aggregatedByDate.values()).sort(
+        (a, b) =>
+          new Date(String(a.tarih || '')).getTime() -
+          new Date(String(b.tarih || '')).getTime(),
+      );
 
       if (responseRows.length === 0) {
         throw new Error('Model yanıtında forecast verisi bulunamadı.');
