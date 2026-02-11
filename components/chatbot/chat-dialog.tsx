@@ -33,7 +33,7 @@ export function ChatDialog({ open, onOpenChange }: ChatDialogProps) {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const { getContext, filters } = useDashboardContext();
+  const { getContext, filters, section, metrics } = useDashboardContext();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -55,6 +55,23 @@ export function ChatDialog({ open, onOpenChange }: ChatDialogProps) {
 
     try {
       const context = getContext();
+      const normalizedMetrics: Record<
+      string,
+      string | number | boolean | null
+      > = Object.fromEntries(
+        Object.entries(metrics ?? {}).map(([key, value]) => {
+          if (
+            typeof value === 'string' ||
+            typeof value === 'number' ||
+            typeof value === 'boolean' ||
+            value === null
+          ) {
+            return [key, value];
+          }
+          return [key, String(value)];
+        }),
+      );
+
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -62,6 +79,8 @@ export function ChatDialog({ open, onOpenChange }: ChatDialogProps) {
           message: userMessage,
           context,
           filters,
+          section,
+          metrics: normalizedMetrics,
           history: messages.slice(-6),
         }),
       });
