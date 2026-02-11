@@ -968,11 +968,23 @@ def api_get_forecast_calendar(
 
 @app.get("/api/forecast/product-promotions")
 def api_get_product_promotions_for_product(
-    storeCode: int = Query(..., description="Store code (magazakodu)"),
+    storeCode: Optional[int] = Query(None, description="Store code (magazakodu)"),
+    storeIds: Optional[List[int]] = Query(None, description="Optional store filter list"),
     productCode: int = Query(..., description="Product code (urunkodu)"),
 ):
-    """Return only promotions previously applied to the selected product in selected store."""
+    """Return only promotions previously applied to the selected product.
+    If storeCode/storeIds are omitted, promotions are aggregated across all stores.
+    """
     client = get_client()
+    store_filter_sql = ""
+    if storeCode is not None:
+        store_filter_sql = f"AND toInt64(magazakodu) = {int(storeCode)}"
+    elif storeIds:
+        unique_store_ids = sorted(set(int(s) for s in storeIds))
+        if unique_store_ids:
+            store_ids_csv = ", ".join(str(s) for s in unique_store_ids)
+            store_filter_sql = f"AND toInt64(magazakodu) IN ({store_ids_csv})"
+
     query = f"""
     SELECT
         toString(aktifPromosyonKodu) AS promo_code,
@@ -982,8 +994,8 @@ def api_get_product_promotions_for_product(
         min(tarih) AS first_date,
         max(tarih) AS last_date
     FROM {TABLE_NAME}
-    WHERE toInt64(magazakodu) = {storeCode}
-      AND toInt64(urunkodu) = {productCode}
+    WHERE toInt64(urunkodu) = {productCode}
+      {store_filter_sql}
       AND aktifPromosyonKodu IS NOT NULL
       AND toString(aktifPromosyonKodu) != '17'
       AND aktifPromosyonAdi IS NOT NULL
