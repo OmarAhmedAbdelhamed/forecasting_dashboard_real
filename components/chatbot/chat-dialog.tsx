@@ -78,8 +78,8 @@ export function ChatDialog({ open, onOpenChange }: ChatDialogProps) {
         body: JSON.stringify({
           message: userMessage,
           context,
-          filters,
           section,
+          filters,
           metrics: normalizedMetrics,
           history: messages.slice(-6),
         }),

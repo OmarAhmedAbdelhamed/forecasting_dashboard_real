@@ -7,6 +7,7 @@ const API_BASE_URL =
   'http://localhost:8000';
 
 type ChatRole = 'user' | 'assistant';
+type Primitive = string | number | boolean | null;
 
 interface ChatMessage {
   role: ChatRole;
@@ -20,15 +21,13 @@ interface DashboardFilters {
   products?: string[];
 }
 
-type MetricValue = string | number | boolean | null;
-
 interface ChatRequestBody {
   message?: string;
   context?: string;
-  history?: ChatMessage[];
-  filters?: DashboardFilters;
   section?: string;
-  metrics?: Record<string, MetricValue>;
+  filters?: DashboardFilters;
+  metrics?: Record<string, Primitive>;
+  history?: ChatMessage[];
 }
 
 interface DashboardMetricsResponse {
@@ -41,10 +40,24 @@ interface DashboardMetricsResponse {
 }
 
 interface DemandKpisResponse {
-  totalForecast?: { value?: number; units?: number; trend?: number };
-  accuracy?: { value?: number; trend?: number };
-  yoyGrowth?: { value?: number; trend?: number };
-  bias?: { value?: number; type?: string };
+  totalForecast?: {
+    value?: number;
+    units?: number;
+    trend?: number;
+  };
+  accuracy?: {
+    value?: number;
+    trend?: number;
+  };
+  yoyGrowth?: {
+    value?: number;
+    trend?: number;
+  };
+  bias?: {
+    value?: number;
+    type?: string;
+    trend?: string;
+  };
   lowGrowthCount?: number;
   highGrowthCount?: number;
 }
@@ -119,6 +132,72 @@ interface ForecastErrorsResponse {
   products?: ForecastErrorProduct[];
 }
 
+interface InventoryAlertMetrics {
+  currentStock?: number;
+  threshold?: number;
+  forecastedDemand?: number;
+}
+
+interface InventoryAlertItem {
+  type?: string;
+  sku?: string;
+  productName?: string;
+  storeName?: string;
+  severity?: string;
+  recommendation?: string;
+  metrics?: InventoryAlertMetrics;
+}
+
+interface InventoryAlertsResponse {
+  alerts?: InventoryAlertItem[];
+  totalCount?: number;
+}
+
+interface RevenueChartItem {
+  week?: string;
+  actualCiro?: number;
+  plan?: number;
+}
+
+interface RevenueChartResponse {
+  data?: RevenueChartItem[];
+}
+
+interface HistoricalChartItem {
+  week?: string;
+  [key: string]: string | number | null | undefined;
+}
+
+interface HistoricalChartResponse {
+  data?: HistoricalChartItem[];
+}
+
+interface PromotionCalendarDay {
+  date?: string;
+  promotions?: {
+    id?: string;
+    name?: string;
+    type?: string;
+    discount?: number | null;
+  }[];
+}
+
+interface PromotionCalendarResponse {
+  events?: PromotionCalendarDay[];
+}
+
+interface StorePerformanceItem {
+  storeName?: string;
+  stockLevel?: number;
+  sellThroughRate?: number;
+  daysOfInventory?: number;
+  storeEfficiency?: number;
+}
+
+interface StorePerformanceResponse {
+  stores?: StorePerformanceItem[];
+}
+
 function appendArrayParam(url: URL, key: string, values?: string[]) {
   if (!Array.isArray(values)) {
     return;
@@ -171,11 +250,26 @@ async function safeFetchJson<T>(url: string): Promise<T | null> {
   }
 }
 
-function formatValue(value: number | undefined): string {
+function formatNumber(value: number | undefined): string {
   if (value === undefined || Number.isNaN(value)) {
     return '0';
   }
   return value.toLocaleString('tr-TR', { maximumFractionDigits: 1 });
+}
+
+function compactClientMetrics(metrics?: Record<string, Primitive>): string {
+  if (metrics === undefined) {
+    return 'Yok';
+  }
+
+  const entries = Object.entries(metrics).slice(0, 12);
+  if (entries.length === 0) {
+    return 'Yok';
+  }
+
+  return entries
+    .map(([key, value]) => `${key}: ${String(value)}`)
+    .join(' | ');
 }
 
 function extractKeywords(message: string): string[] {
@@ -210,40 +304,86 @@ function extractKeywords(message: string): string[] {
 
 function selectNeeds(message: string, section: string) {
   const lower = message.toLowerCase();
-
-  const asksProduct =
-    /sku|urun|product|stok|stock|out of stock|stoksuz|overstock|kategori|category/.test(
-      lower,
-    );
-  const asksPromotion =
-    /promosyon|promotion|kampanya|indirim|fiyat|roi|calendar|takvim/.test(
-      lower,
-    );
-  const asksDemandDetails =
-    /growth|buyume|bias|forecast error|hata|sapma|dogruluk/.test(lower);
+  const sectionLower = section.toLowerCase();
 
   return {
-    productDetails: asksProduct || section.toLowerCase().includes('envanter'),
+    productDetails:
+      /sku|urun|product|stok|stock|out of stock|stoksuz|overstock|kategori|category/.test(
+        lower,
+      ) || sectionLower.includes('envanter'),
     promotionDetails:
-      asksPromotion || section.toLowerCase().includes('promosyon'),
+      /promosyon|promotion|kampanya|indirim|fiyat|roi|calendar|takvim/.test(
+        lower,
+      ) || sectionLower.includes('promosyon'),
     demandDetails:
-      asksDemandDetails ||
-      section.toLowerCase().includes('demand') ||
-      section.toLowerCase().includes('forecast'),
+      /growth|buyume|bias|forecast error|hata|sapma|dogruluk|accuracy|yoy|trend/.test(
+        lower,
+      ) ||
+      sectionLower.includes('demand') ||
+      sectionLower.includes('forecast'),
+    alertDetails:
+      /uyari|alert|alarm|risk|kritik|critical|oner|advice|aksiyon|action/.test(
+        lower,
+      ) ||
+      sectionLower.includes('alert') ||
+      sectionLower.includes('envanter'),
   };
 }
 
-function compactClientMetrics(metrics?: Record<string, MetricValue>): string {
-  if (metrics === undefined) {
-    return 'Yok';
+function buildAlertAdviceLines(params: {
+  inventoryAlerts: InventoryAlertsResponse | null;
+  alertsSummary: AlertsSummaryResponse | null;
+  forecastErrors: ForecastErrorsResponse | null;
+}): string[] {
+  const lines: string[] = [];
+  const alertItems = params.inventoryAlerts?.alerts ?? [];
+
+  const stockoutCount = alertItems.filter((a) => a.type === 'stockout').length;
+  const reorderCount = alertItems.filter((a) => a.type === 'reorder').length;
+  const overstockCount = alertItems.filter((a) => a.type === 'overstock').length;
+
+  if (stockoutCount > 0) {
+    lines.push(
+      `Stockout icin oncelik: kritik SKU'larda transfer/siparis ac, gunluk takip listesi olustur (${String(stockoutCount)} urun).`,
+    );
   }
 
-  const entries = Object.entries(metrics).slice(0, 12);
-  if (entries.length === 0) {
-    return 'Yok';
+  if (reorderCount > 0) {
+    lines.push(
+      `Reorder icin oncelik: 7 gunluk talep esiginin altindaki urunlerde yeniden siparis planla (${String(reorderCount)} urun).`,
+    );
   }
 
-  return entries.map(([k, v]) => `${k}: ${String(v)}`).join(' | ');
+  if (overstockCount > 0) {
+    lines.push(
+      `Overstock icin oncelik: yavas donen SKU'larda promosyon/transfer uygula, max stok politikasini gozden gecir (${String(overstockCount)} urun).`,
+    );
+  }
+
+  const criticalForecastErrors =
+    params.alertsSummary?.summary?.forecastErrors?.criticalCount ?? 0;
+  if (criticalForecastErrors > 0) {
+    lines.push(
+      `Tahmin hatasi icin oncelik: kritik forecast error urunlerinde model/bias kalibrasyonu yap (${formatNumber(criticalForecastErrors)} urun).`,
+    );
+  }
+
+  const severeForecast = (params.forecastErrors?.products ?? []).filter(
+    (p) => (p.severity ?? '').toLowerCase() === 'critical',
+  ).length;
+  if (severeForecast > 0) {
+    lines.push(
+      `Critical forecast error urunleri icin manuel demand override ve promosyon etkisi kontrolu yap (${String(severeForecast)} urun).`,
+    );
+  }
+
+  if (lines.length === 0) {
+    lines.push(
+      'Aktif kritik alarm gorunmuyor; izleme frekansi haftalikten gunluge sadece pik donemlerde cikarilmali.',
+    );
+  }
+
+  return lines.slice(0, 5);
 }
 
 export async function POST(req: NextRequest) {
@@ -263,8 +403,8 @@ export async function POST(req: NextRequest) {
     const message = (body.message ?? '').trim();
     const context = body.context ?? '';
     const section = (body.section ?? '').trim();
-    const history = Array.isArray(body.history) ? body.history : [];
     const filters = body.filters;
+    const history = Array.isArray(body.history) ? body.history : [];
 
     if (message === '') {
       return NextResponse.json(
@@ -274,7 +414,17 @@ export async function POST(req: NextRequest) {
     }
 
     const needs = selectNeeds(message, section);
-    const [overviewMetrics, demandKpis, inventoryKpis, alertsSummary] =
+
+    const [
+      overviewMetrics,
+      demandKpis,
+      inventoryKpis,
+      alertsSummary,
+      revenueChart,
+      historicalChart,
+      promotionCalendar,
+      storePerformance,
+    ] =
       await Promise.all([
         safeFetchJson<DashboardMetricsResponse>(
           buildApiUrl('/api/dashboard/metrics', filters),
@@ -294,9 +444,30 @@ export async function POST(req: NextRequest) {
             periodUnit: 'gun',
           }),
         ),
+        safeFetchJson<RevenueChartResponse>(
+          buildApiUrl('/api/dashboard/revenue-chart', filters),
+        ),
+        safeFetchJson<HistoricalChartResponse>(
+          buildApiUrl('/api/chart/historical', filters),
+        ),
+        safeFetchJson<PromotionCalendarResponse>(
+          buildApiUrl('/api/forecast/calendar', filters, {
+            year: new Date().getFullYear(),
+            month: new Date().getMonth() + 1,
+          }),
+        ),
+        safeFetchJson<StorePerformanceResponse>(
+          buildApiUrl('/api/inventory/store-performance', filters, { days: 30 }),
+        ),
       ]);
 
-    const [inventoryItems, promotionHistory, growthProducts, forecastErrors] =
+    const [
+      inventoryItems,
+      promotionHistory,
+      growthProducts,
+      forecastErrors,
+      inventoryAlerts,
+    ] =
       await Promise.all([
         needs.productDetails
           ? safeFetchJson<InventoryItemsResponse>(
@@ -331,6 +502,14 @@ export async function POST(req: NextRequest) {
               }),
             )
           : Promise.resolve(null),
+        needs.alertDetails
+          ? safeFetchJson<InventoryAlertsResponse>(
+              buildApiUrl('/api/alerts/inventory', filters, {
+                days: 30,
+                limit: 80,
+              }),
+            )
+          : Promise.resolve(null),
       ]);
 
     const facts: string[] = [];
@@ -339,45 +518,82 @@ export async function POST(req: NextRequest) {
 
     if (overviewMetrics !== null) {
       facts.push(
-        `Overview KPI -> Accuracy: ${formatValue(overviewMetrics.accuracy)}%, ForecastRevenue: ${formatValue(overviewMetrics.forecastRevenue)}, YTDRevenue: ${formatValue(overviewMetrics.ytdRevenue)}, GapToSales: ${formatValue(overviewMetrics.gapToSales)}%`,
+        `Overview KPI -> Accuracy: ${formatNumber(overviewMetrics.accuracy)}%, ForecastRevenue: ${formatNumber(overviewMetrics.forecastRevenue)}, YTDRevenue: ${formatNumber(overviewMetrics.ytdRevenue)}, GapToSales: ${formatNumber(overviewMetrics.gapToSales)}%`,
       );
     }
 
     if (demandKpis !== null) {
       facts.push(
-        `Demand KPI -> ForecastValue: ${formatValue(demandKpis.totalForecast?.value)}, Accuracy: ${formatValue(demandKpis.accuracy?.value)}%, YoYGrowth: ${formatValue(demandKpis.yoyGrowth?.value)}%, LowGrowthCount: ${formatValue(demandKpis.lowGrowthCount)}, HighGrowthCount: ${formatValue(demandKpis.highGrowthCount)}`,
+        `Demand KPI -> ForecastValue: ${formatNumber(demandKpis.totalForecast?.value)}, Accuracy: ${formatNumber(demandKpis.accuracy?.value)}%, YoYGrowth: ${formatNumber(demandKpis.yoyGrowth?.value)}%, LowGrowthCount: ${formatNumber(demandKpis.lowGrowthCount)}, HighGrowthCount: ${formatNumber(demandKpis.highGrowthCount)}`,
       );
     }
 
     if (inventoryKpis !== null) {
       facts.push(
-        `Inventory KPI -> StockValue: ${formatValue(inventoryKpis.totalStockValue)}, CoverageDays: ${formatValue(inventoryKpis.stockCoverageDays)}, StockOutRiskItems: ${formatValue(inventoryKpis.stockOutRiskItems)}, ExcessItems: ${formatValue(inventoryKpis.excessInventoryItems)}, ReorderNeeded: ${formatValue(inventoryKpis.reorderNeededItems)}`,
+        `Inventory KPI -> StockValue: ${formatNumber(inventoryKpis.totalStockValue)}, CoverageDays: ${formatNumber(inventoryKpis.stockCoverageDays)}, StockOutRiskItems: ${formatNumber(inventoryKpis.stockOutRiskItems)}, ExcessItems: ${formatNumber(inventoryKpis.excessInventoryItems)}, ReorderNeeded: ${formatNumber(inventoryKpis.reorderNeededItems)}`,
       );
     }
 
     if (alertsSummary !== null) {
       facts.push(
-        `Alerts -> Total: ${formatValue(alertsSummary.totalAlerts)}, Inventory: ${formatValue(alertsSummary.summary?.inventory?.count)}, ForecastErrors: ${formatValue(alertsSummary.summary?.forecastErrors?.count)}, CriticalForecastErrors: ${formatValue(alertsSummary.summary?.forecastErrors?.criticalCount)}`,
+        `Alerts -> Total: ${formatNumber(alertsSummary.totalAlerts)}, Inventory: ${formatNumber(alertsSummary.summary?.inventory?.count)}, ForecastErrors: ${formatNumber(alertsSummary.summary?.forecastErrors?.count)}, CriticalForecastErrors: ${formatNumber(alertsSummary.summary?.forecastErrors?.criticalCount)}`,
+      );
+    }
+
+    if (revenueChart?.data !== undefined && revenueChart.data.length > 0) {
+      const last = revenueChart.data[revenueChart.data.length - 1];
+      facts.push(
+        `Revenue Trend -> Son Hafta ${last.week ?? '-'}: actual=${formatNumber(last.actualCiro)}, plan=${formatNumber(last.plan)}`,
+      );
+    }
+
+    if (
+      historicalChart?.data !== undefined &&
+      historicalChart.data.length > 0
+    ) {
+      const last = historicalChart.data[historicalChart.data.length - 1];
+      const yearKeys = Object.keys(last).filter((k) => k.startsWith('y'));
+      const compact = yearKeys
+        .slice(0, 3)
+        .map((k) => `${k}=${formatNumber(Number(last[k] ?? 0))}`)
+        .join(', ');
+      facts.push(`Historical Trend -> ${last.week ?? 'Hafta'}: ${compact}`);
+    }
+
+    if (promotionCalendar?.events !== undefined) {
+      const promoDays = promotionCalendar.events.filter(
+        (e) => (e.promotions ?? []).length > 0,
+      );
+      facts.push(
+        `Promosyon Takvimi -> Bu ay promosyonlu gun sayisi: ${String(promoDays.length)}`,
+      );
+    }
+
+    if (storePerformance?.stores !== undefined && storePerformance.stores.length > 0) {
+      const topStore = storePerformance.stores[0];
+      facts.push(
+        `Store Performance -> En iyi magazalardan biri: ${topStore.storeName ?? '-'} (eff=${formatNumber(topStore.storeEfficiency)}, sellThrough=${formatNumber(topStore.sellThroughRate)}%)`,
       );
     }
 
     if (inventoryItems?.items !== undefined) {
       const terms = extractKeywords(message);
-      const candidates = inventoryItems.items;
+      const source = inventoryItems.items;
       const matched =
         terms.length > 0
-          ? candidates.filter((item) => {
+          ? source.filter((item) => {
               const haystack =
                 `${item.sku ?? ''} ${item.productName ?? ''} ${item.category ?? ''}`.toLowerCase();
               return terms.some((term) => haystack.includes(term));
             })
-          : candidates;
+          : source;
 
-      const shortlist = (matched.length > 0 ? matched : candidates).slice(0, 8);
+      const shortlist = (matched.length > 0 ? matched : source).slice(0, 8);
       const line = shortlist
-        .map((item) => {
-          return `${item.sku ?? '-'}:${item.productName ?? '-'}(stok=${formatValue(item.stockLevel)}, tahmin=${formatValue(item.forecastedDemand)}, durum=${item.status ?? '-'})`;
-        })
+        .map(
+          (item) =>
+            `${item.sku ?? '-'}:${item.productName ?? '-'}(stok=${formatNumber(item.stockLevel)}, tahmin=${formatNumber(item.forecastedDemand)}, durum=${item.status ?? '-'})`,
+        )
         .join(' | ');
       facts.push(`Urun Ozeti -> ${line !== '' ? line : 'Veri yok'}`);
     }
@@ -385,9 +601,10 @@ export async function POST(req: NextRequest) {
     if (promotionHistory?.promotions !== undefined) {
       const promoLine = promotionHistory.promotions
         .slice(0, 6)
-        .map((promo) => {
-          return `${promo.name ?? '-'}(${promo.date ?? '-'}, uplift=${formatValue(promo.uplift)}, profit=${formatValue(promo.profit)})`;
-        })
+        .map(
+          (item) =>
+            `${item.name ?? '-'}(${item.date ?? '-'}, uplift=${formatNumber(item.uplift)}, profit=${formatNumber(item.profit)})`,
+        )
         .join(' | ');
       facts.push(`Promosyon Ozeti -> ${promoLine !== '' ? promoLine : 'Veri yok'}`);
     }
@@ -395,28 +612,50 @@ export async function POST(req: NextRequest) {
     if (growthProducts?.products !== undefined) {
       const growthLine = growthProducts.products
         .slice(0, 6)
-        .map((p) => `${p.name ?? '-'}(${p.type ?? '-'}:${formatValue(p.growth)}%)`)
+        .map(
+          (item) =>
+            `${item.name ?? '-'}(${item.type ?? '-'}:${formatNumber(item.growth)}%)`,
+        )
         .join(' | ');
       facts.push(`Buyume Ozeti -> ${growthLine !== '' ? growthLine : 'Veri yok'}`);
     }
 
     if (forecastErrors?.products !== undefined) {
-      const errorLine = forecastErrors.products
+      const errorsLine = forecastErrors.products
         .slice(0, 6)
         .map(
-          (p) =>
-            `${p.name ?? '-'}(err=${formatValue(p.error)}%, acc=${formatValue(p.accuracy)}%, sev=${p.severity ?? '-'})`,
+          (item) =>
+            `${item.name ?? '-'}(err=${formatNumber(item.error)}%, acc=${formatNumber(item.accuracy)}%, sev=${item.severity ?? '-'})`,
         )
         .join(' | ');
-      facts.push(`Tahmin Hata Ozeti -> ${errorLine !== '' ? errorLine : 'Veri yok'}`);
+      facts.push(`Tahmin Hata Ozeti -> ${errorsLine !== '' ? errorsLine : 'Veri yok'}`);
     }
+
+    if (inventoryAlerts?.alerts !== undefined) {
+      const alertLine = inventoryAlerts.alerts
+        .slice(0, 6)
+        .map(
+          (a) =>
+            `${a.type ?? '-'}:${a.productName ?? '-'}(${a.storeName ?? '-'}, sev=${a.severity ?? '-'})`,
+        )
+        .join(' | ');
+      facts.push(`Alarm Detay Ozeti -> ${alertLine !== '' ? alertLine : 'Veri yok'}`);
+    }
+
+    const alertAdvice = buildAlertAdviceLines({
+      inventoryAlerts,
+      alertsSummary,
+      forecastErrors,
+    });
+    facts.push(`Alarm Aksiyon Onerileri -> ${alertAdvice.join(' | ')}`);
 
     const systemPrompt = `Sen Bee2 Forecasting Dashboard AI asistansisin.
 Kurallar:
-- Sadece saglanan FACTS blogundaki verileri kullan.
-- Veri yoksa uydurma yapma; "bu veri su an mevcut degil" de.
-- Cevaplari kisa, sayisal ve Turkce ver.
-- Gerekirse maddeli ve aksiyon onerili cevap yaz.
+- Sadece FACTS blogundaki verileri kullan.
+- Veri bulunmayan endpointte, varsa Sayfa Metrikleri ve Context bilgilerini esas al.
+- Veri yoksa uydurma yapma.
+- Kisa, net, sayisal ve Turkce cevap ver.
+- Kullanici alarm/uyari/aksiyon istediginde "Alarm Aksiyon Onerileri" satirlarini temel alarak somut adimlar ver.
 
 CONTEXT:
 ${context !== '' ? context : 'Yok'}
@@ -472,3 +711,4 @@ ${facts.join('\n')}`;
     );
   }
 }
+
