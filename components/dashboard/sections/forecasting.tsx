@@ -109,6 +109,57 @@ interface ForecastData {
   unconstrained_demand: number | null;
 }
 
+type PredictForecastRow = {
+  tarih?: string;
+  tahmin?: number;
+  baseline?: number;
+  roll_mean_7?: number;
+  ciro_adedi?: number;
+  benim_promom?: unknown;
+  benim_promom_yuzde?: number;
+  ciro?: number;
+  stok?: number;
+  satisFiyati?: number;
+  ham_fiyat?: number;
+  birim_kar?: number;
+  birim_marj_yuzde?: number;
+  gunluk_kar?: number;
+  weather?: string;
+  icon?: string;
+  indirimYuzdesi?: number;
+  lost_sales?: number;
+  unconstrained_demand?: number;
+  promosyonVar?: number;
+};
+
+const toFiniteNumber = (
+  value: unknown,
+  fallback = 0,
+): number => {
+  const numeric =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number(value)
+        : NaN;
+  return Number.isFinite(numeric) ? numeric : fallback;
+};
+
+const normalizeWeather = (raw: unknown): 'sun' | 'cloud' | 'rain' => {
+  const value = String(raw || '').toLowerCase();
+  if (
+    value.includes('rain') ||
+    value.includes('shower') ||
+    value.includes('storm')
+  ) {
+    return 'rain';
+  }
+  if (value.includes('cloud') || value.includes('overcast') || value.includes('mist')) {
+    return 'cloud';
+  }
+  return 'sun';
+};
+
 import {
   REGIONS_FLAT as REGIONS,
   type SimilarCampaign,
@@ -1027,15 +1078,21 @@ export function ForecastingSection() {
 
       if (aktifPromosyonKodu !== '17') {
         if (pricingMode === 'discount') {
-          selectedIndirim = Number(promosyonIndirimOrani || 0);
+          const discountValue = Number(promosyonIndirimOrani);
+          selectedIndirim =
+            Number.isFinite(discountValue) && discountValue > 0 ? discountValue : null;
         } else if (pricingMode === 'margin') {
-          selectedMarj = Number(promosyonMarj || 0);
+          const marginValue = Number(promosyonMarj);
+          selectedMarj =
+            Number.isFinite(marginValue) && marginValue > 0 ? marginValue : null;
         } else if (pricingMode === 'price') {
-          selectedFiyat = Number(targetPrice || 0);
+          const priceValue = Number(targetPrice);
+          selectedFiyat =
+            Number.isFinite(priceValue) && priceValue > 0 ? priceValue : null;
         }
 
         const selectedCount = [selectedIndirim, selectedMarj, selectedFiyat].filter(
-          (value) => value !== null && !Number.isNaN(value),
+          (value) => value !== null,
         ).length;
 
         if (selectedCount !== 1) {
@@ -1061,17 +1118,102 @@ export function ForecastingSection() {
         istenenMarj: aktifPromosyonKodu === '17' ? null : selectedMarj,
         istenenFiyat: aktifPromosyonKodu === '17' ? null : selectedFiyat,
       };
+      const predictionResult = await forecastingApi.predictDemand(payload);
 
-      // Best-effort: the UI uses local simulation for visualization, so do not
-      // block the chart if the external model is slow/unavailable.
-      void forecastingApi.predictDemand(payload).catch((error) => {
-        console.error('predictDemand failed:', error);
-        toast({
-          title: 'Tahmin servisi uyarısı',
-          description:
-            'Modelden yanıt alınamadı, ancak simülasyon grafiği gösteriliyor.',
-          variant: 'destructive',
-        });
+      const responseRows = Array.isArray((predictionResult as { forecast?: unknown }).forecast)
+        ? ((predictionResult as { forecast?: unknown }).forecast as PredictForecastRow[])
+        : [];
+
+      if (responseRows.length === 0) {
+        throw new Error('Model yanıtında forecast verisi bulunamadı.');
+      }
+
+      const stockByDate = new Map(
+        (stockTrendsQuery.data?.trends || []).map((trend) => [
+          trend.date,
+          trend.actualStock,
+        ]),
+      );
+
+      const mappedData: ForecastData[] = responseRows
+        .map((row, index) => {
+          const fallbackDate = format(addDays(startDate, index), "yyyy-MM-dd'T'00:00:00");
+          const tarih = typeof row.tarih === 'string' ? row.tarih : fallbackDate;
+          const dateKey = format(new Date(tarih), 'yyyy-MM-dd');
+
+          const tahmin = Math.max(0, Math.round(toFiniteNumber(row.tahmin, 0)));
+          const baseline = Math.max(
+            0,
+            Math.round(
+              toFiniteNumber(
+                row.baseline ?? row.roll_mean_7,
+                tahmin,
+              ),
+            ),
+          );
+          const lostSales = Math.max(0, Math.round(toFiniteNumber(row.lost_sales, 0)));
+          const unconstrainedDemand =
+            row.unconstrained_demand !== undefined && row.unconstrained_demand !== null
+              ? Math.max(0, Math.round(toFiniteNumber(row.unconstrained_demand, 0)))
+              : lostSales > 0
+                ? tahmin + lostSales
+                : null;
+
+          const satisFiyati = toFiniteNumber(row.satisFiyati, baseSatisFiyati);
+          const hamFiyat = toFiniteNumber(row.ham_fiyat, baseHamFiyat);
+          const birimKarValue = toFiniteNumber(row.birim_kar, satisFiyati - hamFiyat);
+          const birimMarjYuzdeValue = toFiniteNumber(
+            row.birim_marj_yuzde,
+            satisFiyati > 0 ? (birimKarValue / satisFiyati) * 100 : 0,
+          );
+
+          const ciro = toFiniteNumber(row.ciro, tahmin * satisFiyati);
+          const gunlukKar = toFiniteNumber(row.gunluk_kar, tahmin * birimKarValue);
+          const promoArray = Array.isArray(row.benim_promom)
+            ? row.benim_promom.map((item) => String(item))
+            : [];
+
+          return {
+            tarih,
+            baseline,
+            tahmin,
+            ciro_adedi: Math.max(0, Math.round(toFiniteNumber(row.ciro_adedi, 0))),
+            benim_promom:
+              aktifPromosyonKodu === '17'
+                ? []
+                : promoArray.length > 0
+                  ? promoArray
+                  : [promosyon],
+            benim_promom_yuzde: toFiniteNumber(
+              row.benim_promom_yuzde ?? row.indirimYuzdesi,
+              0,
+            ),
+            ciro: parseFloat(ciro.toFixed(2)),
+            stok: Math.max(
+              0,
+              Math.round(toFiniteNumber(row.stok, stockByDate.get(dateKey) ?? 0)),
+            ),
+            satisFiyati: parseFloat(satisFiyati.toFixed(2)),
+            ham_fiyat: parseFloat(hamFiyat.toFixed(2)),
+            birim_kar: parseFloat(birimKarValue.toFixed(2)),
+            birim_marj_yuzde: parseFloat(birimMarjYuzdeValue.toFixed(2)),
+            gunluk_kar: parseFloat(gunlukKar.toFixed(2)),
+            weather: normalizeWeather(row.weather ?? row.icon),
+            lost_sales: lostSales,
+            unconstrained_demand: unconstrainedDemand,
+          };
+        })
+        .sort(
+          (a, b) => new Date(a.tarih).getTime() - new Date(b.tarih).getTime(),
+        );
+
+      setForecastData(mappedData);
+      toast({
+        title: 'Tahminleme isteği gönderildi',
+        description:
+          aktifPromosyonKodu === '17'
+            ? 'Promosyonsuz senaryo (aktifPromosyonKodu=17) modelden alındı.'
+            : 'Promosyonlu senaryo model sonucuyla güncellendi.',
       });
     } catch (error) {
       toast({
@@ -1080,136 +1222,10 @@ export function ForecastingSection() {
           error instanceof Error ? error.message : 'Tahmin modeline istek gönderilemedi.',
         variant: 'destructive',
       });
-      // Continue with simulation even if the model call cannot be sent.
+      setForecastData(null);
+    } finally {
+      setIsLoading(false);
     }
-
-    // Response visualization formatı net olmadığı için tahmin serisini simülasyonla üretiyoruz.
-    // Stok serisi ise seçili mağaza+ürün için backend stock-trends verisinden beslenir.
-    const data: ForecastData[] = [];
-    const days = differenceInDays(endDate, startDate) + 1;
-    const stockByDate = new Map(
-      (stockTrendsQuery.data?.trends || []).map((trend) => [
-        trend.date,
-        trend.actualStock,
-      ]),
-    );
-
-    // Determine discount based on mode
-    let discount = 0;
-    if (aktifPromosyonKodu === '17') {
-      discount = 0;
-    } else if (pricingMode === 'price' && targetPrice) {
-      discount =
-        ((baseSatisFiyati - parseFloat(targetPrice)) / baseSatisFiyati) * 100;
-      // Safety check
-      if (discount < 0) {
-        discount = 0;
-      }
-    } else {
-      discount = parseFloat(promosyonIndirimOrani) || 0;
-    }
-
-    // Initialize Stock (Mock) - 4-digit sales (Units)
-    let currentStock = 300;
-
-    for (let i = 0; i < days; i++) {
-      // Restock every 3 days (simulated delivery)
-      if (i > 0 && i % 2 === 0) {
-        currentStock += 350;
-      }
-
-      const currentDate = addDays(startDate, i);
-      const dateKey = format(currentDate, 'yyyy-MM-dd');
-
-      // Check if current date is within promo range
-      let isPromoActive = false;
-      if (aktifPromosyonKodu !== '17' && startPromosyon && endPromosyon) {
-        if (currentDate >= startPromosyon && currentDate <= endPromosyon) {
-          isPromoActive = true;
-        }
-      }
-
-      // 1. Calculate Unconstrained Demand (Potansiyel Talep)
-      // Base forecast in UNITS (approx 170 units * 87.45 TL ~= 14,800 TL -> 5 digits)
-      const baseForecast = 140 + Math.floor(Math.random() * 40);
-      const patternBase = createSpecificPattern(i, days, baseForecast);
-
-      // Values in Revenue (TL) for Chart
-
-      const lift = isPromoActive ? 1 + discount / 100 : 1;
-      const dailyDemand = Math.round(patternBase * lift); // This is what customers WANT to buy (Units)
-
-      // 2. Apply Constraints (Stock)
-      let actualSales = dailyDemand;
-      let lostSales = 0;
-
-      if (currentStock < dailyDemand) {
-        actualSales = currentStock; // Sell whatever is left
-        lostSales = dailyDemand - actualSales; // The rest is lost
-      }
-
-      // 3. Update Stock
-      currentStock = Math.max(0, currentStock - actualSales);
-
-      // Secondary metric (Yellow line visual logic)
-      const ciro_adedi = 0;
-
-      const finalTahmin = actualSales;
-      const ciro = finalTahmin * baseSatisFiyati;
-      const gunluk_kar = finalTahmin * birimKar;
-
-      // Random weather
-      const weatherRoll = Math.random();
-      const weather =
-        weatherRoll > 0.7 ? 'rain' : weatherRoll > 0.4 ? 'cloud' : 'sun';
-
-      data.push({
-        tarih: format(currentDate, "yyyy-MM-dd'T'00:00:00"),
-        baseline: parseFloat(patternBase.toFixed(0)), // Units
-        // Promosyonsuz senaryoda (kod=17) yine de tahmin serisini goster.
-        tahmin:
-          aktifPromosyonKodu === '17'
-            ? parseFloat(finalTahmin.toFixed(0))
-            : isPromoActive
-              ? parseFloat(finalTahmin.toFixed(0))
-              : null, // Units
-        unconstrained_demand:
-          lostSales > 0 ? parseFloat(dailyDemand.toFixed(0)) : null, // Units (Potential Sales)
-        lost_sales: lostSales,
-        ciro_adedi: ciro_adedi,
-        benim_promom: isPromoActive ? [promosyon] : [],
-        benim_promom_yuzde: isPromoActive ? discount : 0,
-        ciro: parseFloat(ciro.toFixed(2)),
-        stok: stockByDate.get(dateKey) ?? currentStock, // Backend stock (fallback: simulated)
-        satisFiyati: baseSatisFiyati,
-        ham_fiyat: baseHamFiyat,
-        birim_kar: parseFloat(birimKar.toFixed(2)),
-        birim_marj_yuzde: parseFloat(marj.toFixed(2)),
-        gunluk_kar: parseFloat(gunluk_kar.toFixed(2)),
-        weather: weather,
-      });
-    }
-
-    setForecastData(data);
-    toast({
-      title: 'Tahminleme isteği gönderildi',
-      description:
-        aktifPromosyonKodu === '17'
-          ? 'Promosyonsuz senaryo (aktifPromosyonKodu=17) başarıyla işlendi.'
-          : 'Promosyonlu senaryo tahmin servisine başarıyla gönderildi.',
-    });
-    setIsLoading(false);
-  };
-
-  const createSpecificPattern = (
-    index: number,
-    total: number,
-    base: number,
-  ) => {
-    if (index % 7 === 5 || index % 7 === 6) {
-      return Math.round(base * 1.2);
-    }
-    return base;
   };
 
   // FILTER DATA FOR ROI & STOCK CALCULATIONS (Based on Promo Period)

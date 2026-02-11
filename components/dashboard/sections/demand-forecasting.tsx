@@ -55,6 +55,7 @@ import { usePermissions } from '@/hooks/use-permissions';
 import { useVisibility } from '@/hooks/use-visibility';
 import { useFilterOptions } from '@/services/hooks/filters/use-filter-options';
 import { demandApi } from '@/services/api/demand';
+import { forecastingApi } from '@/services/api/forecasting';
 import type {
   DemandKPIs,
   DemandTrendData,
@@ -65,6 +66,75 @@ import type {
 } from '@/services/types/api';
 import { toast } from 'sonner';
 import { PageLoading } from '@/components/ui/shared/page-loading';
+
+type PredictModelPoint = {
+  tarih?: string;
+  date?: string;
+  tahmin?: number;
+  forecast?: number;
+};
+
+const normalizeDateKey = (value: string): string => {
+  if (!value) return value;
+  return value.includes('T') ? value.split('T')[0] : value.slice(0, 10);
+};
+
+const extractPredictForecastMap = (
+  rawResponse: Record<string, unknown>,
+): Map<string, number> => {
+  const map = new Map<string, number>();
+  const forecastRaw = rawResponse.forecast;
+  if (!Array.isArray(forecastRaw)) return map;
+
+  for (const row of forecastRaw) {
+    if (!row || typeof row !== 'object') continue;
+    const point = row as PredictModelPoint;
+    const rawDate = point.tarih || point.date;
+    const rawValue = point.tahmin ?? point.forecast;
+    if (!rawDate || typeof rawValue !== 'number' || !Number.isFinite(rawValue)) {
+      continue;
+    }
+    map.set(normalizeDateKey(rawDate), rawValue);
+  }
+
+  return map;
+};
+
+const applyTrendlineFromSeries = (rows: DemandTrendData[]): DemandTrendData[] => {
+  if (rows.length === 0) return rows;
+
+  const points: Array<{ x: number; y: number }> = [];
+  rows.forEach((row, idx) => {
+    const value =
+      typeof row.actual === 'number'
+        ? row.actual
+        : typeof row.forecast === 'number'
+          ? row.forecast
+          : null;
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      points.push({ x: idx, y: value });
+    }
+  });
+
+  if (points.length < 2) {
+    return rows.map((row) => ({ ...row, trendline: row.trendline ?? 0 }));
+  }
+
+  const n = points.length;
+  const sumX = points.reduce((acc, p) => acc + p.x, 0);
+  const sumY = points.reduce((acc, p) => acc + p.y, 0);
+  const sumXY = points.reduce((acc, p) => acc + p.x * p.y, 0);
+  const sumX2 = points.reduce((acc, p) => acc + p.x * p.x, 0);
+
+  const denominator = n * sumX2 - sumX * sumX;
+  const slope = denominator === 0 ? 0 : (n * sumXY - sumX * sumY) / denominator;
+  const intercept = (sumY - slope * sumX) / n;
+
+  return rows.map((row, idx) => ({
+    ...row,
+    trendline: Math.max(0, slope * idx + intercept),
+  }));
+};
 
 // Responsive chart config for different screen sizes
 const getChartConfig = (is2xl: boolean) => ({
@@ -334,6 +404,21 @@ export function DemandForecastingSection() {
           categoryIds: filterParams.categoryIds,
         };
 
+        const selectedStoreCode =
+          selectedStores.length === 1 && /^\d+$/.test(selectedStores[0])
+            ? Number(selectedStores[0])
+            : null;
+        const selectedProductCode =
+          selectedProducts.length === 1 && /^\d+$/.test(selectedProducts[0])
+            ? Number(selectedProducts[0])
+            : null;
+        const today = new Date();
+        const futureStart = new Date(today);
+        futureStart.setDate(futureStart.getDate() + 1);
+        const futureEnd = new Date(today);
+        futureEnd.setDate(futureEnd.getDate() + periodDays);
+        const toIsoDate = (d: Date) => d.toISOString().slice(0, 10);
+
         const [trendRes, biasRes, yearRes] = await Promise.allSettled([
           demandApi.getTrendForecast({
             ...detailParams,
@@ -346,7 +431,36 @@ export function DemandForecastingSection() {
         ]);
 
         if (trendRes.status === 'fulfilled' && trendRes.value?.data) {
-          setTrendDataState(trendRes.value.data);
+          if (selectedStoreCode !== null && selectedProductCode !== null) {
+            try {
+              // Keep loading until AI model responds; do not render backend-only trend first.
+              const predictResponse = (await forecastingApi.predictDemand({
+                magazaKodu: selectedStoreCode,
+                urunKodu: selectedProductCode,
+                tarihBaslangic: toIsoDate(futureStart),
+                tarihBitis: toIsoDate(futureEnd),
+                ozelgunsayisi: null,
+                aktifPromosyonKodu: '17',
+                istenenIndirim: null,
+                istenenMarj: null,
+                istenenFiyat: null,
+              })) as Record<string, unknown>;
+
+              const predictMap = extractPredictForecastMap(predictResponse);
+              const mergedTrend = trendRes.value.data.map((row) => {
+                const key = normalizeDateKey(row.date);
+                const fromModel = predictMap.get(key);
+                if (typeof fromModel !== 'number') return row;
+                return { ...row, forecast: fromModel };
+              });
+              setTrendDataState(applyTrendlineFromSeries(mergedTrend));
+            } catch (error) {
+              errorMessages.push(`AI Tahmin Modeli: ${getErrorMessage(error)}`);
+              setTrendDataState([]);
+            }
+          } else {
+            setTrendDataState(trendRes.value.data);
+          }
         } else if (trendRes.status === 'rejected') {
           errorMessages.push(`Trend Grafiği: ${getErrorMessage(trendRes.reason)}`);
         }
