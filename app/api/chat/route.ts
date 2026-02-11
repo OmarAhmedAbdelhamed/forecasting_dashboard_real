@@ -174,12 +174,12 @@ interface HistoricalChartResponse {
 
 interface PromotionCalendarDay {
   date?: string;
-  promotions?: Array<{
+  promotions?: {
     id?: string;
     name?: string;
     type?: string;
     discount?: number | null;
-  }>;
+  }[];
 }
 
 interface PromotionCalendarResponse {
@@ -344,19 +344,19 @@ function buildAlertAdviceLines(params: {
 
   if (stockoutCount > 0) {
     lines.push(
-      `Stockout icin oncelik: kritik SKU'larda transfer/siparis ac, gunluk takip listesi olustur (${stockoutCount} urun).`,
+      `Stockout icin oncelik: kritik SKU'larda transfer/siparis ac, gunluk takip listesi olustur (${String(stockoutCount)} urun).`,
     );
   }
 
   if (reorderCount > 0) {
     lines.push(
-      `Reorder icin oncelik: 7 gunluk talep eşiğinin altindaki urunlerde yeniden siparis planla (${reorderCount} urun).`,
+      `Reorder icin oncelik: 7 gunluk talep esiginin altindaki urunlerde yeniden siparis planla (${String(reorderCount)} urun).`,
     );
   }
 
   if (overstockCount > 0) {
     lines.push(
-      `Overstock icin oncelik: yavas donen SKU'larda promosyon/transfer uygula, max stok politikasini gozden gecir (${overstockCount} urun).`,
+      `Overstock icin oncelik: yavas donen SKU'larda promosyon/transfer uygula, max stok politikasini gozden gecir (${String(overstockCount)} urun).`,
     );
   }
 
@@ -373,7 +373,7 @@ function buildAlertAdviceLines(params: {
   ).length;
   if (severeForecast > 0) {
     lines.push(
-      `Critical forecast error urunleri icin manuel demand override ve promosyon etkisi kontrolu yap (${severeForecast} urun).`,
+      `Critical forecast error urunleri icin manuel demand override ve promosyon etkisi kontrolu yap (${String(severeForecast)} urun).`,
     );
   }
 
@@ -565,7 +565,7 @@ export async function POST(req: NextRequest) {
         (e) => (e.promotions ?? []).length > 0,
       );
       facts.push(
-        `Promosyon Takvimi -> Bu ay promosyonlu gun sayisi: ${promoDays.length}`,
+        `Promosyon Takvimi -> Bu ay promosyonlu gun sayisi: ${String(promoDays.length)}`,
       );
     }
 
@@ -711,3 +711,4 @@ ${facts.join('\n')}`;
     );
   }
 }
+
