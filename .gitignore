@@ -26,6 +26,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+.pyc
+__pycache__/
 .serena
 .claude
 docs
