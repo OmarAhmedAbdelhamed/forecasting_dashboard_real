@@ -3,209 +3,232 @@ export interface StoreDistance {
   to: Record<string, { raw: string; value: number | null }>;
 }
 
-function toLookupKey(value: string): string {
-  return value
-    .trim()
-    .toLocaleLowerCase('tr-TR')
-    .replace(/ı/g, 'i')
-    .replace(/İ/g, 'i')
-    .replace(/ğ/g, 'g')
-    .replace(/Ğ/g, 'g')
-    .replace(/ü/g, 'u')
-    .replace(/Ü/g, 'u')
-    .replace(/ş/g, 's')
-    .replace(/Ş/g, 's')
-    .replace(/ö/g, 'o')
-    .replace(/Ö/g, 'o')
-    .replace(/ç/g, 'c')
-    .replace(/Ç/g, 'c');
-}
+type StoreNode =
+  | 'acibadem'
+  | 'maltepe'
+  | 'merter'
+  | 'istinye'
+  | 'bayrampasa'
+  | 'eskisehir'
+  | 'adana'
+  | 'izmir';
 
-// Normalize real market/district names to the distance-matrix nodes.
-// Mapping rationale:
-// - Kadikoy is represented by Acibadem node.
-// - Sariyer is represented by Istinye node.
-// - Bakirkoy is represented by Merter node (closest commercial cluster in this matrix).
-const STORE_NAME_ALIASES: Record<string, string> = {
-  acibadem: 'Acıbadem',
-  kadikoy: 'Acıbadem',
-  istinye: 'İstinye',
-  sariyer: 'İstinye',
-  merter: 'Merter',
-  bakirkoy: 'Merter',
-  maltepe: 'Maltepe',
-  bayrampasa: 'Bayrampaşa',
-  eskisehir: 'Eskişehir',
-  adana: 'Adana',
-  izmir: 'İzmir',
+const STORE_NODE_BY_CODE: Partial<Record<string, StoreNode>> = {
+  '1012': 'acibadem',
+  '1013': 'maltepe',
+  '1014': 'merter',
+  '1016': 'istinye',
+  '1053': 'bayrampasa',
+  '1017': 'eskisehir',
+  '1051': 'adana',
+  '1054': 'izmir',
 };
 
-export const STORE_DISTANCE_MATRIX: StoreDistance[] = [
-  {
-    from: "Acıbadem",
-    to: {
-      "Acıbadem": { raw: "—", value: null },
-      "Maltepe": { raw: "~14", value: 14 },
-      "Merter": { raw: "~18", value: 18 },
-      "İstinye": { raw: "~28", value: 28 },
-      "Bayrampaşa": { raw: "~30", value: 30 },
-      "Eskişehir": { raw: "~885", value: 885 },
-      "Adana": { raw: "~940", value: 940 },
-      "İzmir": { raw: "~470", value: 470 }
-    }
-  },
-  {
-    from: "Maltepe",
-    to: {
-      "Acıbadem": { raw: "~14", value: 14 },
-      "Maltepe": { raw: "—", value: null },
-      "Merter": { raw: "~22", value: 22 },
-      "İstinye": { raw: "~32", value: 32 },
-      "Bayrampaşa": { raw: "~28", value: 28 },
-      "Eskişehir": { raw: "~890", value: 890 },
-      "Adana": { raw: "~945", value: 945 },
-      "İzmir": { raw: "~475", value: 475 }
-    }
-  },
-  {
-    from: "Merter",
-    to: {
-      "Acıbadem": { raw: "~18", value: 18 },
-      "Maltepe": { raw: "~22", value: 22 },
-      "Merter": { raw: "—", value: null },
-      "İstinye": { raw: "~26", value: 26 },
-      "Bayrampaşa": { raw: "~4", value: 4 },
-      "Eskişehir": { raw: "~882", value: 882 },
-      "Adana": { raw: "~938", value: 938 },
-      "İzmir": { raw: "~468", value: 468 }
-    }
-  },
-  {
-    from: "İstinye",
-    to: {
-      "Acıbadem": { raw: "~28", value: 28 },
-      "Maltepe": { raw: "~32", value: 32 },
-      "Merter": { raw: "~26", value: 26 },
-      "İstinye": { raw: "—", value: null },
-      "Bayrampaşa": { raw: "~26", value: 26 },
-      "Eskişehir": { raw: "~900", value: 900 },
-      "Adana": { raw: "~960", value: 960 },
-      "İzmir": { raw: "~480", value: 480 }
-    }
-  },
-  {
-    from: "Bayrampaşa",
-    to: {
-      "Acıbadem": { raw: "~30", value: 30 },
-      "Maltepe": { raw: "~28", value: 28 },
-      "Merter": { raw: "~4", value: 4 },
-      "İstinye": { raw: "~26", value: 26 },
-      "Bayrampaşa": { raw: "—", value: null },
-      "Eskişehir": { raw: "~888", value: 888 },
-      "Adana": { raw: "~936", value: 936 },
-      "İzmir": { raw: "~472", value: 472 }
-    }
-  },
-  {
-    from: "Eskişehir",
-    to: {
-      "Acıbadem": { raw: "~885", value: 885 },
-      "Maltepe": { raw: "~890", value: 890 },
-      "Merter": { raw: "~882", value: 882 },
-      "İstinye": { raw: "~900", value: 900 },
-      "Bayrampaşa": { raw: "~888", value: 888 },
-      "Eskişehir": { raw: "—", value: null },
-      "Adana": { raw: "~480", value: 480 },
-      "İzmir": { raw: "~457", value: 457 }
-    }
-  },
-  {
-    from: "Adana",
-    to: {
-      "Acıbadem": { raw: "~940", value: 940 },
-      "Maltepe": { raw: "~945", value: 945 },
-      "Merter": { raw: "~938", value: 938 },
-      "İstinye": { raw: "~960", value: 960 },
-      "Bayrampaşa": { raw: "~936", value: 936 },
-      "Eskişehir": { raw: "~480", value: 480 },
-      "Adana": { raw: "—", value: null },
-      "İzmir": { raw: "~900", value: 900 }
-    }
-  },
-  {
-    from: "İzmir",
-    to: {
-      "Acıbadem": { raw: "~470", value: 470 },
-      "Maltepe": { raw: "~475", value: 475 },
-      "Merter": { raw: "~468", value: 468 },
-      "İstinye": { raw: "~480", value: 480 },
-      "Bayrampaşa": { raw: "~472", value: 472 },
-      "Eskişehir": { raw: "~457", value: 457 },
-      "Adana": { raw: "~900", value: 900 },
-      "İzmir": { raw: "—", value: null }
-    }
-  }
-];
+const STORE_LABEL_BY_NODE: Record<StoreNode, string> = {
+  acibadem: 'Acibadem',
+  maltepe: 'Maltepe',
+  merter: 'Merter',
+  istinye: 'Istinye',
+  bayrampasa: 'Bayrampasa',
+  eskisehir: 'Eskisehir',
+  adana: 'Adana',
+  izmir: 'Izmir',
+};
 
-function resolveStoreName(storeName: string): string | null {
-  const key = toLookupKey(storeName);
-  const alias = STORE_NAME_ALIASES[key];
-  if (alias) {
-    return alias;
-  }
+// Backward-compatible aliases for free-text store labels.
+const STORE_NAME_ALIASES: Partial<Record<string, StoreNode>> = {
+  acibadem: 'acibadem',
+  'istanbul acibadem': 'acibadem',
+  kadikoy: 'acibadem',
+  'istanbul kadikoy': 'acibadem',
 
-  const exact = STORE_DISTANCE_MATRIX.find(
-    (d) => toLookupKey(d.from) === key,
-  )?.from;
-  return exact ?? null;
+  maltepe: 'maltepe',
+  'istanbul maltepe': 'maltepe',
+
+  merter: 'merter',
+  'istanbul merter': 'merter',
+  bakirkoy: 'merter',
+  'istanbul bakirkoy': 'merter',
+
+  istinye: 'istinye',
+  'istanbul istinye': 'istinye',
+  sariyer: 'istinye',
+  'istanbul sariyer': 'istinye',
+
+  bayrampasa: 'bayrampasa',
+  'istanbul bayrampasa': 'bayrampasa',
+
+  eskisehir: 'eskisehir',
+  'eskisehir neo': 'eskisehir',
+
+  adana: 'adana',
+  'adana m1': 'adana',
+
+  izmir: 'izmir',
+  'izmir balcova': 'izmir',
+};
+
+function normalizeText(value: string): string {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase()
+    .replace(/\u0131/g, 'i')
+    .replace(/\s+/g, ' ');
 }
 
-/**
- * Get distance in km between two stores
- * @param fromStore - Origin store name
- * @param toStore - Destination store name
- * @returns Distance in km, or null if same store or not found
- */
+function extractStoreCode(input: string): string | null {
+  const exact = input.trim();
+  if (/^\d{4}$/.test(exact)) {
+    return exact;
+  }
+  const match = /(?:^|[\s_-])(\d{4})(?:$|[\s_-])/.exec(exact);
+  return match?.[1] ?? null;
+}
+
+function resolveNode(input: string): StoreNode | null {
+  const storeCode = extractStoreCode(input);
+  if (storeCode !== null && STORE_NODE_BY_CODE[storeCode]) {
+    return STORE_NODE_BY_CODE[storeCode];
+  }
+
+  const normalized = normalizeText(input.replace(/-\s*\d+\s*$/, '').trim());
+  const directAlias = STORE_NAME_ALIASES[normalized];
+  if (directAlias) {
+    return directAlias;
+  }
+
+  const parts = normalized
+    .split('-')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const lastPart = parts.length > 0 ? parts[parts.length - 1] : normalized;
+  return STORE_NAME_ALIASES[lastPart] ?? null;
+}
+
+const DISTANCE_BY_NODE: Record<
+  StoreNode,
+  Record<StoreNode, { raw: string; value: number | null }>
+> = {
+  acibadem: {
+    acibadem: { raw: '-', value: null },
+    maltepe: { raw: '~14', value: 14 },
+    merter: { raw: '~18', value: 18 },
+    istinye: { raw: '~28', value: 28 },
+    bayrampasa: { raw: '~30', value: 30 },
+    eskisehir: { raw: '~885', value: 885 },
+    adana: { raw: '~940', value: 940 },
+    izmir: { raw: '~470', value: 470 },
+  },
+  maltepe: {
+    acibadem: { raw: '~14', value: 14 },
+    maltepe: { raw: '-', value: null },
+    merter: { raw: '~22', value: 22 },
+    istinye: { raw: '~32', value: 32 },
+    bayrampasa: { raw: '~28', value: 28 },
+    eskisehir: { raw: '~890', value: 890 },
+    adana: { raw: '~945', value: 945 },
+    izmir: { raw: '~475', value: 475 },
+  },
+  merter: {
+    acibadem: { raw: '~18', value: 18 },
+    maltepe: { raw: '~22', value: 22 },
+    merter: { raw: '-', value: null },
+    istinye: { raw: '~26', value: 26 },
+    bayrampasa: { raw: '~4', value: 4 },
+    eskisehir: { raw: '~882', value: 882 },
+    adana: { raw: '~938', value: 938 },
+    izmir: { raw: '~468', value: 468 },
+  },
+  istinye: {
+    acibadem: { raw: '~28', value: 28 },
+    maltepe: { raw: '~32', value: 32 },
+    merter: { raw: '~26', value: 26 },
+    istinye: { raw: '-', value: null },
+    bayrampasa: { raw: '~26', value: 26 },
+    eskisehir: { raw: '~900', value: 900 },
+    adana: { raw: '~960', value: 960 },
+    izmir: { raw: '~480', value: 480 },
+  },
+  bayrampasa: {
+    acibadem: { raw: '~30', value: 30 },
+    maltepe: { raw: '~28', value: 28 },
+    merter: { raw: '~4', value: 4 },
+    istinye: { raw: '~26', value: 26 },
+    bayrampasa: { raw: '-', value: null },
+    eskisehir: { raw: '~888', value: 888 },
+    adana: { raw: '~936', value: 936 },
+    izmir: { raw: '~472', value: 472 },
+  },
+  eskisehir: {
+    acibadem: { raw: '~885', value: 885 },
+    maltepe: { raw: '~890', value: 890 },
+    merter: { raw: '~882', value: 882 },
+    istinye: { raw: '~900', value: 900 },
+    bayrampasa: { raw: '~888', value: 888 },
+    eskisehir: { raw: '-', value: null },
+    adana: { raw: '~480', value: 480 },
+    izmir: { raw: '~457', value: 457 },
+  },
+  adana: {
+    acibadem: { raw: '~940', value: 940 },
+    maltepe: { raw: '~945', value: 945 },
+    merter: { raw: '~938', value: 938 },
+    istinye: { raw: '~960', value: 960 },
+    bayrampasa: { raw: '~936', value: 936 },
+    eskisehir: { raw: '~480', value: 480 },
+    adana: { raw: '-', value: null },
+    izmir: { raw: '~900', value: 900 },
+  },
+  izmir: {
+    acibadem: { raw: '~470', value: 470 },
+    maltepe: { raw: '~475', value: 475 },
+    merter: { raw: '~468', value: 468 },
+    istinye: { raw: '~480', value: 480 },
+    bayrampasa: { raw: '~472', value: 472 },
+    eskisehir: { raw: '~457', value: 457 },
+    adana: { raw: '~900', value: 900 },
+    izmir: { raw: '-', value: null },
+  },
+};
+
+export const STORE_DISTANCE_MATRIX: StoreDistance[] = (
+  Object.keys(DISTANCE_BY_NODE) as StoreNode[]
+).map((fromNode) => ({
+  from: STORE_LABEL_BY_NODE[fromNode],
+  to: Object.fromEntries(
+    (Object.keys(DISTANCE_BY_NODE[fromNode]) as StoreNode[]).map((toNode) => [
+      STORE_LABEL_BY_NODE[toNode],
+      DISTANCE_BY_NODE[fromNode][toNode],
+    ]),
+  ),
+}));
+
 export function getDistance(fromStore: string, toStore: string): number | null {
-  const normalizedFrom = resolveStoreName(fromStore);
-  const normalizedTo = resolveStoreName(toStore);
-  if (!normalizedFrom || !normalizedTo) {return null;}
-
-  const fromData = STORE_DISTANCE_MATRIX.find(d => d.from === normalizedFrom);
-  if (!fromData) return null;
-
-  const distance = fromData.to[normalizedTo];
-  return distance?.value ?? null;
+  const fromNode = resolveNode(fromStore);
+  const toNode = resolveNode(toStore);
+  if (!fromNode || !toNode) {
+    return null;
+  }
+  return DISTANCE_BY_NODE[fromNode][toNode].value;
 }
 
-/**
- * Get formatted display string for distance
- * @param fromStore - Origin store name
- * @param toStore - Destination store name
- * @returns Formatted distance string (e.g., "~14" or "—")
- */
 export function getDistanceDisplay(fromStore: string, toStore: string): string {
-  const normalizedFrom = resolveStoreName(fromStore);
-  const normalizedTo = resolveStoreName(toStore);
-  if (!normalizedFrom || !normalizedTo) {return '?';}
-
-  const fromData = STORE_DISTANCE_MATRIX.find(d => d.from === normalizedFrom);
-  if (!fromData) return '?';
-
-  const distance = fromData.to[normalizedTo];
-  if (!distance) {
+  const fromNode = resolveNode(fromStore);
+  const toNode = resolveNode(toStore);
+  if (!fromNode || !toNode) {
     return '?';
   }
+  const distance = DISTANCE_BY_NODE[fromNode][toNode];
   if (distance.value === null) {
     return distance.raw;
   }
   return `${distance.raw} km`;
 }
 
-/**
- * Get all store names from the distance matrix
- * @returns Array of store names
- */
 export function getAllStoreNames(): string[] {
-  return STORE_DISTANCE_MATRIX.map(d => d.from);
+  return (Object.keys(STORE_LABEL_BY_NODE) as StoreNode[]).map(
+    (node) => STORE_LABEL_BY_NODE[node],
+  );
 }

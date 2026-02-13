@@ -126,6 +126,8 @@ export function ProductDetailSheet({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [comparisonStoreId, setComparisonStoreId] = useState<string>('');
   const [comparisonQuery, setComparisonQuery] = useState<string>('');
+  const [selectedComparisonCategory, setSelectedComparisonCategory] =
+    useState<string>('all');
   const [searchParams, setSearchParams] = useState<{
     query: string;
     storeId: string;
@@ -215,8 +217,29 @@ export function ProductDetailSheet({
     });
   }, [itemName, marketSearch.data]);
 
+  const comparisonCategoryOptions = useMemo(() => {
+    const categories = Array.from(
+      new Set(
+        comparisonRows
+          .map((row) => row.kategori)
+          .filter((category) => category && category !== '-'),
+      ),
+    ).sort((a, b) => a.localeCompare(b, 'tr-TR'));
+
+    return categories;
+  }, [comparisonRows]);
+
+  const filteredComparisonRows = useMemo(() => {
+    if (selectedComparisonCategory === 'all') {
+      return comparisonRows;
+    }
+    return comparisonRows.filter(
+      (row) => row.kategori === selectedComparisonCategory,
+    );
+  }, [comparisonRows, selectedComparisonCategory]);
+
   const comparisonStats = useMemo(() => {
-    if (comparisonRows.length === 0) {
+    if (filteredComparisonRows.length === 0) {
       return {
         uniqueMarkets: 0,
         discountCount: 0,
@@ -224,16 +247,22 @@ export function ProductDetailSheet({
         maxPrice: 0,
       };
     }
-    const uniqueMarkets = new Set(comparisonRows.map((r) => r.market)).size;
-    const discountCount = comparisonRows.filter((r) => r.isDiscount).length;
-    const prices = comparisonRows.map((r) => r.fiyat);
+    const uniqueMarkets = new Set(filteredComparisonRows.map((r) => r.market))
+      .size;
+    const discountCount = filteredComparisonRows.filter((r) => r.isDiscount)
+      .length;
+    const prices = filteredComparisonRows.map((r) => r.fiyat);
     return {
       uniqueMarkets,
       discountCount,
       minPrice: Math.min(...prices),
       maxPrice: Math.max(...prices),
     };
-  }, [comparisonRows]);
+  }, [filteredComparisonRows]);
+
+  useEffect(() => {
+    setSelectedComparisonCategory('all');
+  }, [marketSearch.data]);
 
   useEffect(() => {
     const wasOpen = prevOpenRef.current;
@@ -599,7 +628,7 @@ export function ProductDetailSheet({
               </TabsContent>
 
               <TabsContent value='comparison' className='space-y-4'>
-                <div className='grid grid-cols-1 md:grid-cols-3 gap-3'>
+                <div className='grid grid-cols-1 md:grid-cols-4 gap-3'>
                   <div>
                     <p className='text-sm font-medium text-muted-foreground mb-1.5'>Magaza</p>
                     <Select
@@ -613,6 +642,25 @@ export function ProductDetailSheet({
                         {storeOptions.map((store) => (
                           <SelectItem key={store.value} value={store.value}>
                             {store.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <p className='text-sm font-medium text-muted-foreground mb-1.5'>Kategori</p>
+                    <Select
+                      value={selectedComparisonCategory}
+                      onValueChange={setSelectedComparisonCategory}
+                    >
+                      <SelectTrigger className='h-11 text-base'>
+                        <SelectValue placeholder='Tum Kategoriler' />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value='all'>Tum Kategoriler</SelectItem>
+                        {comparisonCategoryOptions.map((category) => (
+                          <SelectItem key={category} value={category}>
+                            {category}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -682,9 +730,13 @@ export function ProductDetailSheet({
                       </div>
                     )}
                     <div className='p-3 rounded-lg border bg-slate-50'>
-                      <p className='text-sm text-slate-500 uppercase tracking-wide'>Toplam Sonuc</p>
+                      <p className='text-sm text-slate-500 uppercase tracking-wide'>
+                        {selectedComparisonCategory === 'all'
+                          ? 'Toplam Sonuc'
+                          : 'Filtrelenmis Sonuc'}
+                      </p>
                       <p className='mt-1 text-2xl font-bold text-slate-900'>
-                        {marketSearch.data.total_found.toLocaleString('tr-TR')}
+                        {filteredComparisonRows.length.toLocaleString('tr-TR')}
                       </p>
                     </div>
                     <div className='p-3 rounded-lg border bg-emerald-50/70 border-emerald-100'>
@@ -731,14 +783,14 @@ export function ProductDetailSheet({
                 <div className='space-y-2'>
                   {marketSearch.isLoading || marketSearch.isFetching ? (
                     <div className='p-4 text-sm text-muted-foreground'>Veriler getiriliyor...</div>
-                  ) : comparisonRows.length === 0 ? (
+                  ) : filteredComparisonRows.length === 0 ? (
                     <div className='p-4 text-sm text-muted-foreground'>
-                      Sonuc bulunamadi. Magaza secip urun adiyla arama yapin.
+                      Sonuc bulunamadi. Magaza secip urun adiyla arama yapin veya kategori secimini degistirin.
                     </div>
                   ) : (
                     <div className='rounded-lg border bg-white overflow-hidden'>
                       <div className='md:hidden divide-y'>
-                        {comparisonRows.map((row, idx) => (
+                        {filteredComparisonRows.map((row, idx) => (
                           <div
                             key={`${row.market}-${row.productTitle}-mobile-${String(idx)}`}
                             className='p-4 space-y-3'
@@ -808,7 +860,7 @@ export function ProductDetailSheet({
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {comparisonRows.map((row, idx) => (
+                            {filteredComparisonRows.map((row, idx) => (
                               <TableRow key={`${row.market}-${row.productTitle}-${String(idx)}`}>
                                 <TableCell className='font-medium text-base'>{row.market}</TableCell>
                                 <TableCell className='font-semibold text-slate-900 text-base'>

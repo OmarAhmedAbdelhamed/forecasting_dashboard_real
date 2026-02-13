@@ -39,21 +39,24 @@ import { PageLoading } from '@/components/ui/shared/page-loading';
 import { getDistance, getDistanceDisplay } from '@/lib/store-distances';
 
 function parseStoreCodeFromAlert(storeName?: string) {
-  if (!storeName) {
+  if (!storeName || storeName.trim().length === 0) {
     return undefined;
   }
-  const match = storeName.match(/-\s*(\d+)\s*$/);
-  return match?.[1];
+  const match = /-\s*(\d+)\s*$/.exec(storeName);
+  return match?.[1] ?? undefined;
 }
 
 function parseStoreLabelForDistance(storeName?: string) {
-  if (!storeName) {
+  if (!storeName || storeName.trim().length === 0) {
     return undefined;
   }
-  // Remove trailing store code (e.g. "Istanbul - Kadikoy - 1001" -> "Istanbul - Kadikoy")
+  const codeMatch = /-\s*(\d+)\s*$/.exec(storeName);
+  if (codeMatch?.[1]) {
+    return codeMatch[1];
+  }
+  // Fallback for labels without code.
   const withoutCode = storeName.replace(/-\s*\d+\s*$/, '').trim();
   const parts = withoutCode.split('-').map((p) => p.trim()).filter(Boolean);
-  // Distance matrix keys are branch/district-like names, usually the last segment.
   return parts.length > 0 ? parts[parts.length - 1] : withoutCode;
 }
 
