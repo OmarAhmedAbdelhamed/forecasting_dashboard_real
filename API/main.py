@@ -109,9 +109,9 @@ app.add_middleware(
 
 # ClickHouse Cloud connection settings (from sunucuDB.ipynb)
 # Ideally, these should be loaded from environment variables
-CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "l3flqlcyjf.germanywestcentral.azure.clickhouse.cloud")
+CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "hjo1xo261s.germanywestcentral.azure.clickhouse.cloud")
 CLICKHOUSE_USER = os.getenv("CLICKHOUSE_USER", "default")
-CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "e11Uq697dnZq_")
+CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "m6D_yIYXr6PyX")
 CLICKHOUSE_CONNECT_TIMEOUT = int(os.getenv("CLICKHOUSE_CONNECT_TIMEOUT", "30"))
 CLICKHOUSE_SEND_RECEIVE_TIMEOUT = int(os.getenv("CLICKHOUSE_SEND_RECEIVE_TIMEOUT", "300"))
 CLICKHOUSE_QUERY_RETRIES = int(os.getenv("CLICKHOUSE_QUERY_RETRIES", "2"))
