@@ -330,10 +330,10 @@ export function ProductDetailSheet({
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
         className={cn(
-          'max-h-[90vh] overflow-y-auto pt-8',
+          'max-h-[90vh] overflow-y-auto pt-8 w-[calc(100vw-1rem)]',
           activeTab === 'comparison'
-            ? 'w-[96vw] max-w-[96vw] 2xl:max-w-[1800px]'
-            : 'max-w-4xl',
+            ? 'sm:w-[calc(100vw-2.5rem)] sm:max-w-[calc(100vw-2.5rem)] lg:max-w-[1280px] xl:max-w-[1440px] 2xl:max-w-[1700px]'
+            : 'sm:max-w-4xl',
         )}
       >
         {successMessage && (
@@ -737,64 +737,121 @@ export function ProductDetailSheet({
                     </div>
                   ) : (
                     <div className='rounded-lg border bg-white overflow-hidden'>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className='text-base font-semibold'>Market</TableHead>
-                            <TableHead className='text-base font-semibold'>Fiyat</TableHead>
-                            <TableHead className='text-base font-semibold'>Birim Fiyat</TableHead>
-                            <TableHead className='text-base font-semibold'>Indirim</TableHead>
-                            <TableHead className='text-base font-semibold'>Urun Adi</TableHead>
-                            <TableHead className='text-base font-semibold'>Indeks Zamani</TableHead>
-                            <TableHead className='text-base font-semibold'>Kategori</TableHead>
-                            <TableHead className='text-base font-semibold'>Brand</TableHead>
-                            <TableHead className='text-base font-semibold'>Gorsel</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {comparisonRows.map((row, idx) => (
-                            <TableRow key={`${row.market}-${row.productTitle}-${String(idx)}`}>
-                              <TableCell className='font-medium text-base'>{row.market}</TableCell>
-                              <TableCell className='font-semibold text-slate-900 text-base'>
-                                {row.fiyat.toLocaleString('tr-TR')} TL
-                              </TableCell>
-                              <TableCell className='text-base'>{row.unitPrice}</TableCell>
-                              <TableCell>
-                                <Badge
-                                  variant='outline'
-                                  className={cn(
-                                    'text-sm',
-                                    row.isDiscount
-                                      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                      : 'bg-slate-50 text-slate-600 border-slate-200',
-                                  )}
-                                >
-                                  {row.isDiscount ? 'Evet' : 'Hayir'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className='max-w-64 truncate text-base' title={row.productTitle}>
-                                {row.productTitle}
-                              </TableCell>
-                              <TableCell className='text-base'>{row.indexTime}</TableCell>
-                              <TableCell className='max-w-36 truncate text-base' title={row.kategori}>
-                                {row.kategori}
-                              </TableCell>
-                              <TableCell className='text-base'>{row.brand}</TableCell>
-                              <TableCell>
-                                {row.image ? (
-                                  <img
-                                    src={row.image}
-                                    alt={row.productTitle}
-                                    className='h-12 w-12 object-cover rounded border'
-                                  />
-                                ) : (
-                                  '-'
-                                )}
-                              </TableCell>
+                      <div className='md:hidden divide-y'>
+                        {comparisonRows.map((row, idx) => (
+                          <div
+                            key={`${row.market}-${row.productTitle}-mobile-${String(idx)}`}
+                            className='p-4 space-y-3'
+                          >
+                            <div className='flex items-start justify-between gap-3'>
+                              <div>
+                                <p className='text-base font-semibold text-slate-900'>{row.market}</p>
+                                <p className='text-sm text-muted-foreground'>{row.brand}</p>
+                              </div>
+                              {row.image ? (
+                                <img
+                                  src={row.image}
+                                  alt={row.productTitle}
+                                  className='h-14 w-14 object-cover rounded border shrink-0'
+                                />
+                              ) : null}
+                            </div>
+                            <p className='text-base font-medium text-slate-900 leading-snug'>
+                              {row.productTitle}
+                            </p>
+                            <div className='grid grid-cols-2 gap-2 text-sm'>
+                              <div className='rounded-md bg-slate-50 p-2'>
+                                <p className='text-xs text-slate-500'>Fiyat</p>
+                                <p className='font-semibold'>{row.fiyat.toLocaleString('tr-TR')} TL</p>
+                              </div>
+                              <div className='rounded-md bg-slate-50 p-2'>
+                                <p className='text-xs text-slate-500'>Birim Fiyat</p>
+                                <p className='font-semibold'>{row.unitPrice}</p>
+                              </div>
+                              <div className='rounded-md bg-slate-50 p-2'>
+                                <p className='text-xs text-slate-500'>Kategori</p>
+                                <p className='font-medium truncate' title={row.kategori}>{row.kategori}</p>
+                              </div>
+                              <div className='rounded-md bg-slate-50 p-2'>
+                                <p className='text-xs text-slate-500'>Indeks Zamani</p>
+                                <p className='font-medium'>{row.indexTime}</p>
+                              </div>
+                            </div>
+                            <Badge
+                              variant='outline'
+                              className={cn(
+                                'text-sm',
+                                row.isDiscount
+                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                  : 'bg-slate-50 text-slate-600 border-slate-200',
+                              )}
+                            >
+                              {row.isDiscount ? 'Indirimli' : 'Indirimsiz'}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className='hidden md:block overflow-x-auto'>
+                        <Table className='min-w-[1100px]'>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead className='text-base font-semibold'>Market</TableHead>
+                              <TableHead className='text-base font-semibold'>Fiyat</TableHead>
+                              <TableHead className='text-base font-semibold'>Birim Fiyat</TableHead>
+                              <TableHead className='text-base font-semibold'>Indirim</TableHead>
+                              <TableHead className='text-base font-semibold'>Urun Adi</TableHead>
+                              <TableHead className='text-base font-semibold'>Indeks Zamani</TableHead>
+                              <TableHead className='text-base font-semibold'>Kategori</TableHead>
+                              <TableHead className='text-base font-semibold'>Brand</TableHead>
+                              <TableHead className='text-base font-semibold'>Gorsel</TableHead>
                             </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
+                          </TableHeader>
+                          <TableBody>
+                            {comparisonRows.map((row, idx) => (
+                              <TableRow key={`${row.market}-${row.productTitle}-${String(idx)}`}>
+                                <TableCell className='font-medium text-base'>{row.market}</TableCell>
+                                <TableCell className='font-semibold text-slate-900 text-base'>
+                                  {row.fiyat.toLocaleString('tr-TR')} TL
+                                </TableCell>
+                                <TableCell className='text-base'>{row.unitPrice}</TableCell>
+                                <TableCell>
+                                  <Badge
+                                    variant='outline'
+                                    className={cn(
+                                      'text-sm',
+                                      row.isDiscount
+                                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                                        : 'bg-slate-50 text-slate-600 border-slate-200',
+                                    )}
+                                  >
+                                    {row.isDiscount ? 'Evet' : 'Hayir'}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell className='max-w-64 truncate text-base' title={row.productTitle}>
+                                  {row.productTitle}
+                                </TableCell>
+                                <TableCell className='text-base'>{row.indexTime}</TableCell>
+                                <TableCell className='max-w-36 truncate text-base' title={row.kategori}>
+                                  {row.kategori}
+                                </TableCell>
+                                <TableCell className='text-base'>{row.brand}</TableCell>
+                                <TableCell>
+                                  {row.image ? (
+                                    <img
+                                      src={row.image}
+                                      alt={row.productTitle}
+                                      className='h-12 w-12 object-cover rounded border'
+                                    />
+                                  ) : (
+                                    '-'
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
                     </div>
                   )}
                 </div>
