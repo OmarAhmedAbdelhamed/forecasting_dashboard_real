@@ -27,6 +27,8 @@ export { useInventoryItems } from './hooks/inventory/use-inventory-items';
 export { useStockTrends } from './hooks/inventory/use-stock-trends';
 export { useStorePerformance } from './hooks/inventory/use-store-performance';
 export { useInventoryAlerts } from './hooks/inventory/use-inventory-alerts';
+export { useProductStoreComparison } from './hooks/inventory/use-product-store-comparison';
+export { useMarketProductSearch } from './hooks/market/use-market-product-search';
 
 // Export types
 export type * from './types/api';

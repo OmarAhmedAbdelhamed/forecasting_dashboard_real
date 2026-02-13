@@ -3,6 +3,43 @@ export interface StoreDistance {
   to: Record<string, { raw: string; value: number | null }>;
 }
 
+function toLookupKey(value: string): string {
+  return value
+    .trim()
+    .toLocaleLowerCase('tr-TR')
+    .replace(/ı/g, 'i')
+    .replace(/İ/g, 'i')
+    .replace(/ğ/g, 'g')
+    .replace(/Ğ/g, 'g')
+    .replace(/ü/g, 'u')
+    .replace(/Ü/g, 'u')
+    .replace(/ş/g, 's')
+    .replace(/Ş/g, 's')
+    .replace(/ö/g, 'o')
+    .replace(/Ö/g, 'o')
+    .replace(/ç/g, 'c')
+    .replace(/Ç/g, 'c');
+}
+
+// Normalize real market/district names to the distance-matrix nodes.
+// Mapping rationale:
+// - Kadikoy is represented by Acibadem node.
+// - Sariyer is represented by Istinye node.
+// - Bakirkoy is represented by Merter node (closest commercial cluster in this matrix).
+const STORE_NAME_ALIASES: Record<string, string> = {
+  acibadem: 'Acıbadem',
+  kadikoy: 'Acıbadem',
+  istinye: 'İstinye',
+  sariyer: 'İstinye',
+  merter: 'Merter',
+  bakirkoy: 'Merter',
+  maltepe: 'Maltepe',
+  bayrampasa: 'Bayrampaşa',
+  eskisehir: 'Eskişehir',
+  adana: 'Adana',
+  izmir: 'İzmir',
+};
+
 export const STORE_DISTANCE_MATRIX: StoreDistance[] = [
   {
     from: "Acıbadem",
@@ -110,6 +147,19 @@ export const STORE_DISTANCE_MATRIX: StoreDistance[] = [
   }
 ];
 
+function resolveStoreName(storeName: string): string | null {
+  const key = toLookupKey(storeName);
+  const alias = STORE_NAME_ALIASES[key];
+  if (alias) {
+    return alias;
+  }
+
+  const exact = STORE_DISTANCE_MATRIX.find(
+    (d) => toLookupKey(d.from) === key,
+  )?.from;
+  return exact ?? null;
+}
+
 /**
  * Get distance in km between two stores
  * @param fromStore - Origin store name
@@ -117,10 +167,14 @@ export const STORE_DISTANCE_MATRIX: StoreDistance[] = [
  * @returns Distance in km, or null if same store or not found
  */
 export function getDistance(fromStore: string, toStore: string): number | null {
-  const fromData = STORE_DISTANCE_MATRIX.find(d => d.from === fromStore);
+  const normalizedFrom = resolveStoreName(fromStore);
+  const normalizedTo = resolveStoreName(toStore);
+  if (!normalizedFrom || !normalizedTo) {return null;}
+
+  const fromData = STORE_DISTANCE_MATRIX.find(d => d.from === normalizedFrom);
   if (!fromData) return null;
 
-  const distance = fromData.to[toStore];
+  const distance = fromData.to[normalizedTo];
   return distance?.value ?? null;
 }
 
@@ -131,11 +185,21 @@ export function getDistance(fromStore: string, toStore: string): number | null {
  * @returns Formatted distance string (e.g., "~14" or "—")
  */
 export function getDistanceDisplay(fromStore: string, toStore: string): string {
-  const fromData = STORE_DISTANCE_MATRIX.find(d => d.from === fromStore);
+  const normalizedFrom = resolveStoreName(fromStore);
+  const normalizedTo = resolveStoreName(toStore);
+  if (!normalizedFrom || !normalizedTo) {return '?';}
+
+  const fromData = STORE_DISTANCE_MATRIX.find(d => d.from === normalizedFrom);
   if (!fromData) return '?';
 
-  const distance = fromData.to[toStore];
-  return distance?.raw ?? '?';
+  const distance = fromData.to[normalizedTo];
+  if (!distance) {
+    return '?';
+  }
+  if (distance.value === null) {
+    return distance.raw;
+  }
+  return `${distance.raw} km`;
 }
 
 /**

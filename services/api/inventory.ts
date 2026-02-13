@@ -8,6 +8,7 @@ import type {
   InventoryItem,
   StockTrend,
   StorePerformance,
+  ProductStoreComparisonItem,
   PaginatedResponse,
   FilterParams,
   PaginationParams,
@@ -67,6 +68,18 @@ export const inventoryApi = {
   getAlerts: (params?: FilterParams & { limit?: number; days?: number }) =>
     apiClient.get<{ alerts: InventoryAlert[]; totalCount?: number }>(
       '/api/alerts/inventory',
+      params,
+    ),
+
+  /**
+   * Get selected product snapshot across stores
+   */
+  getProductStoreComparison: (params: {
+    productId: string;
+    storeIds?: string[];
+  }) =>
+    apiClient.get<{ items: ProductStoreComparisonItem[] }>(
+      '/api/inventory/product-store-comparison',
       params,
     ),
 };

@@ -1092,7 +1092,7 @@ def get_inventory_alerts(
 
     rows = client.query(query).result_set
 
-    alerts: list[dict] = []
+    parsed_rows: list[dict] = []
     for (
         sku,
         product_name,
@@ -1111,14 +1111,94 @@ def get_inventory_alerts(
         action_type,
     ) in rows:
         current_stock_int = int(current_stock or 0)
-        forecast_metric_int = int(round(forecast_metric or 0))
         threshold_int = int(round(threshold or 0))
+        forecast_metric_int = int(round(forecast_metric or 0))
+        reorder_point_int = max(0, int(round((forecast_daily or 0) * 7)))
+        surplus_after_reorder = max(0, current_stock_int - reorder_point_int)
+
+        parsed_rows.append(
+            {
+                "sku": str(sku),
+                "product_name": product_name,
+                "magazakodu": int(magazakodu),
+                "store_name": store_name,
+                "current_stock": current_stock_int,
+                "threshold": threshold_int,
+                "forecast_metric": forecast_metric_int,
+                "alert_type": alert_type,
+                "recommendation": recommendation,
+                "action_type": action_type,
+                "surplus_after_reorder": surplus_after_reorder,
+            }
+        )
+
+    surplus_by_sku: dict[str, list[dict]] = {}
+    for row in parsed_rows:
+        if row["surplus_after_reorder"] <= 0:
+            continue
+        surplus_by_sku.setdefault(row["sku"], []).append(row)
+
+    alerts: list[dict] = []
+    for row in parsed_rows:
+        sku = row["sku"]
+        product_name = row["product_name"]
+        magazakodu = row["magazakodu"]
+        store_name = row["store_name"]
+        current_stock_int = row["current_stock"]
+        threshold_int = row["threshold"]
+        forecast_metric_int = row["forecast_metric"]
+        alert_type = row["alert_type"]
+        recommendation = row["recommendation"]
+
+        transfer_source_store = None
+        transfer_quantity = 0
+        final_action_type = row["action_type"]
+
+        if alert_type in {"stockout", "reorder"}:
+            needed_qty = max(0, threshold_int - current_stock_int)
+            candidates = [
+                c
+                for c in surplus_by_sku.get(sku, [])
+                if int(c["magazakodu"]) != int(magazakodu)
+            ]
+            candidates.sort(key=lambda c: c["surplus_after_reorder"], reverse=True)
+
+            if candidates and needed_qty > 0:
+                best = candidates[0]
+                transfer_quantity = min(needed_qty, int(best["surplus_after_reorder"]))
+                if transfer_quantity > 0:
+                    transfer_source_store = f"{best['store_name']} - {best['magazakodu']}"
+                    final_action_type = "transfer"
+                    recommendation = (
+                        f"{product_name} urununde hedef seviye {threshold_int} adet, mevcut stok "
+                        f"{current_stock_int} adet. Stok acigini hizli kapatmak icin "
+                        f"{transfer_source_store} magazasindan {transfer_quantity} adet transfer "
+                        f"onerilir; kalan ihtiyac varsa ek siparis acilmalidir."
+                    )
+                else:
+                    final_action_type = "reorder"
+            else:
+                final_action_type = "reorder"
+                if needed_qty > 0:
+                    recommendation = (
+                        f"{product_name} urununde mevcut stok {current_stock_int} adet, hedef seviye "
+                        f"{threshold_int} adet. Uygun transfer kaynagi bulunamadigi icin en az "
+                        f"{needed_qty} adet acil siparis planlayin."
+                    )
+        elif alert_type == "overstock":
+            final_action_type = "promotion"
+            excess_qty = max(0, current_stock_int - threshold_int)
+            recommendation = (
+                f"{product_name} urununde tahmini ihtiyacin uzerinde yaklasik {excess_qty} adet "
+                f"fazla stok var. Kampanya, raf optimizasyonu veya bolgesel transferle stok "
+                f"maliyetini azaltin."
+            )
 
         alerts.append(
             {
                 "id": f"alert-INV-{sku}-{magazakodu}",
                 "type": alert_type,
-                "sku": str(sku),
+                "sku": sku,
                 "productName": product_name,
                 "storeName": f"{store_name} - {magazakodu}",
                 "message": f"Stok durumu uyarisi: {alert_type}",
@@ -1132,11 +1212,11 @@ def get_inventory_alerts(
                     "currentStock": max(0, current_stock_int),
                     "threshold": max(0, threshold_int),
                     "forecastedDemand": max(0, forecast_metric_int),
-                    "transferSourceStore": None,
-                    "transferQuantity": 0,
+                    "transferSourceStore": transfer_source_store,
+                    "transferQuantity": max(0, int(transfer_quantity)),
                 },
                 "recommendation": recommendation,
-                "actionType": action_type,
+                "actionType": final_action_type,
             }
         )
 

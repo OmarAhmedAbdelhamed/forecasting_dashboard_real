@@ -18,6 +18,7 @@ import urllib.error
 import time
 from dotenv import load_dotenv
 import traceback
+import logging
 from pydantic import BaseModel
 
 # Import all functions from omerApi_combined
@@ -48,6 +49,10 @@ from omerApiYan import (
 )
 
 # Load environment variables
+# 1) API/.env (preferred for backend runtime)
+# 2) process environment / default .env resolution
+API_ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
+load_dotenv(API_ENV_PATH)
 load_dotenv()
 
 # Initialize FastAPI app
@@ -56,6 +61,7 @@ app = FastAPI(
     description="REST API for inventory forecasting and planning dashboard",
     version="1.0.0",
 )
+logger = logging.getLogger("uvicorn.error")
 
 @app.get("/healthz")
 def healthz():
@@ -107,17 +113,35 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# ClickHouse Cloud connection settings (from sunucuDB.ipynb)
-# Ideally, these should be loaded from environment variables
-CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "hjo1xo261s.germanywestcentral.azure.clickhouse.cloud")
+# ClickHouse Cloud connection settings
+CLICKHOUSE_HOST = os.getenv("CLICKHOUSE_HOST", "localhost")
+CLICKHOUSE_PORT = int(os.getenv("CLICKHOUSE_PORT", "8443"))
 CLICKHOUSE_USER = os.getenv("CLICKHOUSE_USER", "default")
-CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "m6D_yIYXr6PyX")
+CLICKHOUSE_PASSWORD = os.getenv("CLICKHOUSE_PASSWORD", "")
+CLICKHOUSE_SECURE = os.getenv("CLICKHOUSE_SECURE", "true").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+    "on",
+}
 CLICKHOUSE_CONNECT_TIMEOUT = int(os.getenv("CLICKHOUSE_CONNECT_TIMEOUT", "30"))
 CLICKHOUSE_SEND_RECEIVE_TIMEOUT = int(os.getenv("CLICKHOUSE_SEND_RECEIVE_TIMEOUT", "300"))
 CLICKHOUSE_QUERY_RETRIES = int(os.getenv("CLICKHOUSE_QUERY_RETRIES", "2"))
 CLICKHOUSE_CONNECT_RETRIES = int(os.getenv("CLICKHOUSE_CONNECT_RETRIES", "2"))
 TABLE_NAME = os.getenv("CLICKHOUSE_TABLE_NAME", "demoVerileri")
 PREDICTION_API_URL = os.getenv("PREDICTION_API_URL", "http://13.53.171.130:8890/predict")
+MARKET_SEARCH_API_URL = os.getenv("MARKET_SEARCH_API_URL", "http://13.53.139.80:8891/search")
+
+STORE_COORDINATES: dict[str, tuple[float, float]] = {
+    "1012": (40.9988, 29.0316),
+    "1013": (40.9206939612, 29.1640854818),
+    "1014": (40.99643167, 28.885045),
+    "1016": (41.11894, 29.049255),
+    "1053": (41.04712, 28.89906),
+    "1017": (39.77983833, 30.476605),
+    "1051": (37.01767333, 35.24059667),
+    "1054": (38.3951, 27.0477),
+}
 
 
 class PredictDemandRequest(BaseModel):
@@ -132,6 +156,14 @@ class PredictDemandRequest(BaseModel):
     istenenFiyat: Optional[float] = None
 
 
+class MarketSearchRequest(BaseModel):
+    query: str
+    storeId: str
+    page: int = 0
+    size: int = 24
+    distance: int = 10
+
+
 def get_client():
     """Create and return a ClickHouse Cloud client connection"""
     last_error = None
@@ -141,9 +173,10 @@ def get_client():
         try:
             client = clickhouse_connect.get_client(
                 host=CLICKHOUSE_HOST,
+                port=CLICKHOUSE_PORT,
                 username=CLICKHOUSE_USER,
                 password=CLICKHOUSE_PASSWORD,
-                secure=True,
+                secure=CLICKHOUSE_SECURE,
                 connect_timeout=CLICKHOUSE_CONNECT_TIMEOUT,
                 send_receive_timeout=CLICKHOUSE_SEND_RECEIVE_TIMEOUT,
                 query_retries=CLICKHOUSE_QUERY_RETRIES,
@@ -251,7 +284,20 @@ def api_get_stores(
 ):
     """Get flat store list with optional region filter"""
     client = get_client()
-    return get_stores(client, TABLE_NAME, region_ids=regionIds)
+    result = get_stores(client, TABLE_NAME, region_ids=regionIds)
+    store_count = len(result.get("stores", [])) if isinstance(result, dict) else 0
+    payload = json.dumps(result, ensure_ascii=False, default=str)
+    logger.info(
+        "DEBUG /api/stores response regionIds=%s count=%s payload=%s",
+        regionIds,
+        store_count,
+        payload,
+    )
+    print(
+        f"DEBUG: /api/stores response (regionIds={regionIds}, count={store_count}): {payload}",
+        flush=True,
+    )
+    return result
 
 
 @app.get("/api/categories")
@@ -410,7 +456,7 @@ def api_get_inventory_alerts(
     categoryIds: Optional[List[str]] = Query(None),
     productIds: Optional[List[str]] = Query(None),
     search: Optional[str] = Query(None),
-    limit: int = Query(100, ge=1, le=500),
+    limit: int = Query(5000, ge=1, le=20000),
     days: int = Query(30, ge=1, le=3650),
 ):
     """Get inventory stock alerts"""
@@ -1064,6 +1110,50 @@ def api_predict_demand(payload: PredictDemandRequest):
         raise HTTPException(status_code=500, detail=f"Prediction proxy failed: {str(e)}")
 
 
+@app.post("/api/market/search")
+def api_market_search(payload: MarketSearchRequest):
+    """Proxy request to market comparison API using store-based coordinates."""
+    coords = STORE_COORDINATES.get(str(payload.storeId))
+    if not coords:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown storeId '{payload.storeId}'. No coordinates configured.",
+        )
+
+    latitude, longitude = coords
+    request_data = {
+        "query": payload.query,
+        "latitude": latitude,
+        "longitude": longitude,
+        "page": int(payload.page),
+        "size": int(payload.size),
+        "distance": int(payload.distance),
+    }
+
+    req = urllib.request.Request(
+        MARKET_SEARCH_API_URL,
+        data=json.dumps(request_data).encode("utf-8"),
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+
+    try:
+        with urllib.request.urlopen(req) as response:
+            body = response.read().decode("utf-8")
+            return json.loads(body) if body else {"status": "ok"}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="ignore")
+        detail = body or str(e)
+        raise HTTPException(status_code=e.code or 502, detail=detail)
+    except urllib.error.URLError as e:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Market service connection failed: {e.reason}",
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Market proxy failed: {str(e)}")
+
+
 # =============================================================================
 # INVENTORY ENDPOINTS
 # =============================================================================
@@ -1171,6 +1261,100 @@ def api_get_inventory_store_performance(
         product_ids=productIds,
         days=days,
     )
+
+
+@app.get("/api/inventory/product-store-comparison")
+def api_get_inventory_product_store_comparison(
+    productId: str = Query(..., description="Product code (urunkodu)"),
+    storeIds: Optional[List[str]] = Query(None),
+):
+    """Get exact product snapshot across stores for comparison."""
+    client = get_client()
+    safe_product = str(productId).replace("'", "''")
+
+    store_filter_sql = ""
+    if storeIds:
+        safe_store_ids = [
+            "'" + str(s).replace("'", "''") + "'"
+            for s in storeIds
+            if s is not None and str(s).strip() != ""
+        ]
+        if safe_store_ids:
+            store_filter_sql = f"AND toString(magazakodu) IN ({', '.join(safe_store_ids)})"
+
+    query = f"""
+    WITH latest_snapshot AS (
+        SELECT
+            toString(magazakodu) AS storeCode,
+            toString(reyonkodu) AS categoryCode,
+            urunismi AS productName,
+            bulundugusehir AS city,
+            ilce AS district,
+            greatest(toFloat64(stok), 0) AS stockLevel,
+            greatest(toFloat64(roll_mean_7), 0) AS forecastDaily,
+            greatest(toFloat64(degerlenmisstok), 0) AS stockValue,
+            greatest(toFloat64(satisFiyati), 0) AS price
+        FROM {TABLE_NAME}
+        WHERE toString(urunkodu) = '{safe_product}'
+          {store_filter_sql}
+        ORDER BY tarih DESC
+        LIMIT 1 BY urunkodu, reyonkodu, magazakodu
+    ),
+    latest AS (
+        SELECT
+            storeCode,
+            any(productName) AS productName,
+            any(city) AS city,
+            any(district) AS district,
+            sum(stockLevel) AS stockLevel,
+            sum(forecastDaily) AS forecastDaily,
+            sum(stockValue) AS stockValue,
+            avg(price) AS price
+        FROM latest_snapshot
+        GROUP BY storeCode
+    )
+    SELECT
+        storeCode,
+        if(
+            lengthUTF8(trim(BOTH ' ' FROM coalesce(district, ''))) = 0,
+            coalesce(city, storeCode),
+            concat(coalesce(city, storeCode), ' - ', district)
+        ) AS storeName,
+        productName,
+        toInt64(round(stockLevel, 0)) AS stockLevel,
+        toInt64(round(forecastDaily * 7, 0)) AS reorderPoint,
+        toInt64(round(forecastDaily * 30, 0)) AS forecastedDemand,
+        round(price, 2) AS price,
+        round(stockValue, 2) AS stockValue,
+        round(stockLevel / nullIf(forecastDaily, 0), 1) AS daysOfCoverage,
+        multiIf(
+            stockLevel = 0, 'Out of Stock',
+            stockLevel < forecastDaily * 3, 'Low Stock',
+            stockLevel > forecastDaily * 30, 'Overstock',
+            'In Stock'
+        ) AS status
+    FROM latest
+    ORDER BY toInt64OrZero(storeCode) ASC
+    """
+
+    rows = client.query(query).result_rows
+    return {
+        "items": [
+            {
+                "storeCode": r[0],
+                "storeName": r[1],
+                "productName": r[2],
+                "stockLevel": int(r[3] or 0),
+                "reorderPoint": int(r[4] or 0),
+                "forecastedDemand": int(r[5] or 0),
+                "price": float(r[6] or 0),
+                "stockValue": float(r[7] or 0),
+                "daysOfCoverage": float(r[8] or 0),
+                "status": r[9],
+            }
+            for r in rows
+        ]
+    }
 
 
 # =============================================================================

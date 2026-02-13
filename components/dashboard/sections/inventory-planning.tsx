@@ -35,8 +35,8 @@ import {
   useInventoryAlerts,
 } from '@/services';
 import { useFilterOptions } from '@/services/hooks/filters/use-filter-options';
-import { useProximityAlerts } from '@/hooks/use-proximity-alerts';
 import { PageLoading } from '@/components/ui/shared/page-loading';
+import { getDistance, getDistanceDisplay } from '@/lib/store-distances';
 
 function parseStoreCodeFromAlert(storeName?: string) {
   if (!storeName) {
@@ -44,6 +44,17 @@ function parseStoreCodeFromAlert(storeName?: string) {
   }
   const match = storeName.match(/-\s*(\d+)\s*$/);
   return match?.[1];
+}
+
+function parseStoreLabelForDistance(storeName?: string) {
+  if (!storeName) {
+    return undefined;
+  }
+  // Remove trailing store code (e.g. "Istanbul - Kadikoy - 1001" -> "Istanbul - Kadikoy")
+  const withoutCode = storeName.replace(/-\s*\d+\s*$/, '').trim();
+  const parts = withoutCode.split('-').map((p) => p.trim()).filter(Boolean);
+  // Distance matrix keys are branch/district-like names, usually the last segment.
+  return parts.length > 0 ? parts[parts.length - 1] : withoutCode;
 }
 
 function buildRandomProductLists(
@@ -94,6 +105,7 @@ export function InventoryPlanningSection() {
   const [selectedStores, setSelectedStores] = useState<string[]>([]);
   const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
   const [selectedProducts, setSelectedProducts] = useState<string[]>([]);
+  const [selectedAlertMarket, setSelectedAlertMarket] = useState<string>('all');
   const [tablePerformanceFilter, setTablePerformanceFilter] =
     useState<string>('all');
 
@@ -107,11 +119,8 @@ export function InventoryPlanningSection() {
   // Product detail sheet state for planning alerts
   const [alertSelectedItem, setAlertSelectedItem] =
     useState<InventoryItem | null>(null);
+  const [selectedAlert, setSelectedAlert] = useState<InventoryAlert | null>(null);
   const [alertSheetOpen, setAlertSheetOpen] = useState(false);
-  const [pendingAlertTarget, setPendingAlertTarget] = useState<{
-    sku: string;
-    storeCode?: string;
-  } | null>(null);
   const { replaceAutoLists } = useCustomLists();
 
   // Get filter options from API
@@ -263,17 +272,80 @@ export function InventoryPlanningSection() {
     storeIds: effectiveSelectedStores,
     categoryIds: effectiveSelectedCategories,
     productIds: effectiveSelectedProducts,
-    limit: 40,
+    limit: 5000,
     days: periodDays,
   });
 
-  // Enhance alerts with proximity recommendations
-  const { enhancedAlerts } = useProximityAlerts(
-    inventoryAlerts,
-    periodItems
-  );
+  const enhancedAlerts = useMemo(() => {
+    return inventoryAlerts.map((alert) => {
+      const transferSourceStore = alert.metrics?.transferSourceStore;
+      const transferQuantity = alert.metrics?.transferQuantity ?? 0;
+
+      if (transferSourceStore) {
+        const targetKey = parseStoreLabelForDistance(alert.storeName);
+        const sourceKey = parseStoreLabelForDistance(transferSourceStore);
+        const distance =
+          targetKey && sourceKey ? getDistance(targetKey, sourceKey) : null;
+        const distanceDisplay =
+          targetKey && sourceKey
+            ? getDistanceDisplay(targetKey, sourceKey)
+            : '?';
+
+        return {
+          ...alert,
+          proximityOptions: [
+            {
+              storeName: transferSourceStore,
+              distance: distance ?? Number.MAX_VALUE,
+              distanceDisplay,
+              availableStock: transferQuantity,
+              isSurplus: true,
+            },
+          ],
+          noTransferOptions: false,
+        };
+      }
+
+      if (alert.type === 'stockout' || alert.type === 'reorder') {
+        return {
+          ...alert,
+          noTransferOptions: true,
+        };
+      }
+
+      return alert;
+    });
+  }, [inventoryAlerts]);
 
   const inventoryAlertCount = inventoryAlerts.length;
+
+  const alertMarketOptions = useMemo(() => {
+    if (effectiveSelectedStores.length > 0) {
+      const selectedSet = new Set(effectiveSelectedStores);
+      return storeOptions.filter((store) => selectedSet.has(store.value));
+    }
+    return storeOptions;
+  }, [effectiveSelectedStores, storeOptions]);
+
+  const effectiveSelectedAlertMarket = useMemo(() => {
+    if (effectiveSelectedStores.length === 0) {
+      return selectedAlertMarket;
+    }
+    if (effectiveSelectedStores.includes(selectedAlertMarket)) {
+      return selectedAlertMarket;
+    }
+    return effectiveSelectedStores[0];
+  }, [effectiveSelectedStores, selectedAlertMarket]);
+
+  const filteredEnhancedAlerts = useMemo(() => {
+    if (effectiveSelectedAlertMarket === 'all') {
+      return enhancedAlerts;
+    }
+    return enhancedAlerts.filter((alert) => {
+      const alertStoreCode = parseStoreCodeFromAlert(alert.storeName);
+      return alertStoreCode === effectiveSelectedAlertMarket;
+    });
+  }, [effectiveSelectedAlertMarket, enhancedAlerts]);
 
   const hasChartSelection =
     effectiveSelectedStores.length > 0 ||
@@ -301,46 +373,65 @@ export function InventoryPlanningSection() {
     [periodItems],
   );
 
+  const buildItemFromAlert = useCallback(
+    (alert: InventoryAlert): InventoryItem => {
+      const currentStock = alert.metrics?.currentStock ?? 0;
+      const threshold = alert.metrics?.threshold ?? 0;
+      const forecastedDemand = alert.metrics?.forecastedDemand ?? threshold;
+      const coverage =
+        forecastedDemand > 0
+          ? Number(
+              (
+                currentStock /
+                (forecastedDemand / Math.max(periodDays, 1))
+              ).toFixed(1),
+            )
+          : 0;
+      const status: InventoryItem['status'] =
+        alert.type === 'stockout'
+          ? 'Out of Stock'
+          : alert.type === 'reorder'
+            ? 'Low Stock'
+            : alert.type === 'overstock'
+              ? 'Overstock'
+              : 'In Stock';
+
+      return {
+        id: alert.id,
+        sku: alert.sku,
+        productName: alert.productName,
+        category: 'Belirsiz',
+        productKey: `${parseStoreCodeFromAlert(alert.storeName) ?? 'store'}_${alert.sku}`,
+        stockLevel: currentStock,
+        minStockLevel: threshold,
+        maxStockLevel: Math.max(threshold, forecastedDemand),
+        reorderPoint: threshold,
+        forecastedDemand,
+        stockValue: 0,
+        daysOfCoverage: coverage,
+        status,
+        turnoverRate: 0,
+        lastRestockDate: null,
+        leadTimeDays: 5,
+        quantityOnOrder: 0,
+        todaysSales: 0,
+        price: 0,
+      };
+    },
+    [periodDays],
+  );
+
   const handleAlertActionClick = useCallback(
     (alert: InventoryAlert) => {
       const sku = alert.sku;
       const storeCode = parseStoreCodeFromAlert(alert.storeName);
       const matchingItem = findMatchingItem(sku, storeCode);
-
-      if (matchingItem) {
-        setAlertSelectedItem(matchingItem);
-        setAlertSheetOpen(true);
-        return;
-      }
-
-      // If item is not in the current page/filter context, narrow filters
-      // so the target can be fetched and opened automatically.
-      if (storeCode) {
-        setSelectedStores([storeCode]);
-      }
-      setSelectedProducts([sku]);
-      setPendingAlertTarget({ sku, storeCode });
+      setSelectedAlert(alert);
+      setAlertSelectedItem(matchingItem ?? buildItemFromAlert(alert));
+      setAlertSheetOpen(true);
     },
-    [findMatchingItem],
+    [buildItemFromAlert, findMatchingItem],
   );
-
-  useEffect(() => {
-    if (!pendingAlertTarget) {
-      return;
-    }
-
-    const matchingItem = findMatchingItem(
-      pendingAlertTarget.sku,
-      pendingAlertTarget.storeCode,
-    );
-    if (!matchingItem) {
-      return;
-    }
-
-    setAlertSelectedItem(matchingItem);
-    setAlertSheetOpen(true);
-    setPendingAlertTarget(null);
-  }, [pendingAlertTarget, findMatchingItem]);
 
   // Sync with Dashboard Context
   const { setSection, setFilters, setMetrics } = useDashboardContext();
@@ -477,9 +568,12 @@ export function InventoryPlanningSection() {
 
       <div className='grid grid-cols-1 md:grid-cols-2 gap-6 items-start'>
         <PlanningAlerts
-          data={enhancedAlerts}
+          data={filteredEnhancedAlerts}
           onActionClick={handleAlertActionClick}
           period={periodDays}
+          marketOptions={alertMarketOptions}
+          selectedMarket={effectiveSelectedAlertMarket}
+          onMarketChange={setSelectedAlertMarket}
         />
         <StoreComparison data={storePerformance} period={periodDays} />
       </div>
@@ -510,14 +604,22 @@ export function InventoryPlanningSection() {
           performanceFilter={tablePerformanceFilter}
           onPerformanceFilterChange={setTablePerformanceFilter}
           period={periodDays}
+          storeOptions={alertMarketOptions}
         />
       </div>
 
       {/* Product Detail Sheet for Planning Alerts */}
       <ProductDetailSheet
         item={alertSelectedItem}
+        alert={selectedAlert}
+        storeOptions={storeOptions}
         open={alertSheetOpen}
-        onOpenChange={setAlertSheetOpen}
+        onOpenChange={(open) => {
+          setAlertSheetOpen(open);
+          if (!open) {
+            setSelectedAlert(null);
+          }
+        }}
         period={periodDays}
       />
     </div>

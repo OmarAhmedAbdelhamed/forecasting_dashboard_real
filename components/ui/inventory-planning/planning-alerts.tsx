@@ -11,6 +11,13 @@ import { Button } from '@/components/ui/shared/button';
 import { Badge } from '@/components/ui/shared/badge';
 import { ScrollArea } from '@/components/ui/shared/scroll-area';
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/shared/select';
+import {
   AlertTriangle,
   TrendingUp,
   PackageMinus,
@@ -26,30 +33,53 @@ interface PlanningAlertsProps {
   data: InventoryAlert[];
   onActionClick?: (alert: InventoryAlert) => void;
   period?: number;
+  marketOptions?: { value: string; label: string }[];
+  selectedMarket?: string;
+  onMarketChange?: (value: string) => void;
 }
 
 export function PlanningAlerts({
   data,
   onActionClick,
   period = 30,
+  marketOptions = [],
+  selectedMarket = 'all',
+  onMarketChange,
 }: PlanningAlertsProps) {
   return (
     <Card className='h-full flex flex-col shadow-sm'>
       <CardHeader className='pb-3 border-b'>
-        <div className='flex items-center justify-between'>
+        <div className='flex flex-wrap items-center justify-between gap-3'>
           <div className='flex items-center gap-2'>
             <AlertTriangle className='h-5 w-5 text-orange-600' />
             <div>
-              <CardTitle className='text-lg'>Planlama Uyarı Merkezi</CardTitle>
+              <CardTitle className='text-lg'>Planlama Uyari Merkezi</CardTitle>
               <CardDescription className='text-xs mt-0.5'>
-                Yapay zeka destekli stok risk analizi ve öneriler
+                Yapay zeka destekli stok risk analizi ve oneriler
               </CardDescription>
             </div>
           </div>
           <Badge variant='outline' className='ml-auto'>
-            {data.length} Aktif Uyarı
+            {data.length} Aktif Uyari
           </Badge>
         </div>
+        {onMarketChange && marketOptions.length > 0 && (
+          <div className='pt-2'>
+            <Select value={selectedMarket} onValueChange={onMarketChange}>
+              <SelectTrigger className='w-full md:w-64'>
+                <SelectValue placeholder='Market Sec' />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='all'>Tum Marketler</SelectItem>
+                {marketOptions.map((market) => (
+                  <SelectItem key={market.value} value={market.value}>
+                    {market.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </CardHeader>
       <CardContent className='flex-1 p-0 min-h-0 bg-slate-50/50'>
         <ScrollArea className='flex-1 h-135'>
@@ -66,10 +96,8 @@ export function PlanningAlerts({
             ) : (
               <div className='flex flex-col items-center justify-center py-16 text-center text-muted-foreground'>
                 <Box className='h-12 w-12 mb-3 text-slate-300' />
-                <p className='text-sm font-medium'>Her şey yolunda!</p>
-                <p className='text-xs'>
-                  Şu an için kritik bir stok uyarısı bulunmuyor.
-                </p>
+                <p className='text-sm font-medium'>Her sey yolunda!</p>
+                <p className='text-xs'>Su an icin kritik bir stok uyarisi bulunmuyor.</p>
               </div>
             )}
           </div>
@@ -104,11 +132,11 @@ function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
   const getLabel = (type: string) => {
     switch (type) {
       case 'stockout':
-        return 'Stok Tükendi';
+        return 'Stok Tukendi';
       case 'reorder':
         return 'Kritik Seviye';
       case 'surge':
-        return 'Talep Artışı';
+        return 'Talep Artisi';
       case 'overstock':
         return 'Fazla Stok';
       case 'deadstock':
@@ -119,7 +147,7 @@ function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
   };
 
   const handleActionClick = () => {
-    if (onActionClick && alert.sku) {
+    if (onActionClick) {
       onActionClick(alert);
     }
   };
@@ -131,7 +159,6 @@ function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
         'shadow-sm hover:shadow-md bg-white',
       )}
     >
-      {/* Header */}
       <div className='flex items-start justify-between gap-4'>
         <div className='flex flex-col gap-1'>
           <div className='flex items-center gap-2'>
@@ -155,34 +182,30 @@ function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
             {alert.productName}
           </h4>
           <span className='text-xs text-slate-500 font-mono'>
-            {alert.sku} • {alert.storeName || 'Tüm Mağazalar'}
+            {alert.sku} • {alert.storeName || 'Tum Magazalar'}
           </span>
         </div>
       </div>
 
-      {/* Message */}
       <p className='text-xs text-slate-600 leading-relaxed'>{alert.message}</p>
 
-      {/* Metrics Grid */}
       {alert.metrics && (
         <div className='grid grid-cols-3 gap-2 py-2 border-y border-dashed border-slate-100 my-1'>
-          {alert.metrics.currentStock !== undefined && (
-            <div className='flex flex-col items-center justify-center p-2 rounded bg-slate-50'>
-              <span className='text-[10px] text-slate-400 uppercase font-semibold'>
-                Mevcut
-              </span>
-              <span
-                className={cn(
-                  'text-sm font-bold',
-                  alert.metrics.currentStock === 0
-                    ? 'text-red-600'
-                    : 'text-slate-700',
-                )}
-              >
-                {alert.metrics.currentStock}
-              </span>
-            </div>
-          )}
+          <div className='flex flex-col items-center justify-center p-2 rounded bg-slate-50'>
+            <span className='text-[10px] text-slate-400 uppercase font-semibold'>
+              Mevcut
+            </span>
+            <span
+              className={cn(
+                'text-sm font-bold',
+                alert.metrics.currentStock === 0
+                  ? 'text-red-600'
+                  : 'text-slate-700',
+              )}
+            >
+              {alert.metrics.currentStock}
+            </span>
+          </div>
           {alert.metrics.threshold !== undefined && (
             <div className='flex flex-col items-center justify-center p-2 rounded bg-slate-50'>
               <span className='text-[10px] text-slate-400 uppercase font-semibold'>
@@ -206,7 +229,6 @@ function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
         </div>
       )}
 
-      {/* Proximity Transfer Recommendations */}
       {alert.proximityOptions && alert.proximityOptions.length > 0 && (
         <div className='relative overflow-hidden rounded-lg bg-emerald-50/50 border border-emerald-100 p-3'>
           <div className='flex items-start gap-3'>
@@ -215,16 +237,26 @@ function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
             </div>
             <div className='flex-1 space-y-1'>
               <p className='text-[11px] font-bold text-emerald-700 uppercase tracking-wide'>
-                En Yakın Stok Kaynakları
+                En Yakin Stok Kaynaklari
               </p>
               <div className='space-y-1'>
                 {alert.proximityOptions.slice(0, 3).map((option, index) => (
-                  <div key={`${alert.id}-${option.storeName}-${index}`} className='flex items-center gap-2 text-xs text-emerald-900'>
-                    <span className='font-medium'>{option.storeName || 'Bilinmeyen Mağaza'}</span>
+                  <div
+                    key={`${alert.id}-${option.storeName}-${String(index)}`}
+                    className='flex items-center gap-2 text-xs text-emerald-900'
+                  >
+                    <span className='font-medium'>
+                      {option.storeName || 'Bilinmeyen Magaza'}
+                    </span>
                     <span className='text-muted-foreground'>•</span>
                     <span className='text-emerald-700 font-semibold'>
                       {option.distanceDisplay || '-'}
                     </span>
+                    {option.availableStock > 0 && (
+                      <span className='font-semibold text-emerald-700'>
+                        ({option.availableStock} adet)
+                      </span>
+                    )}
                   </div>
                 ))}
               </div>
@@ -233,7 +265,6 @@ function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
         </div>
       )}
 
-      {/* No Transfer Options Available */}
       {alert.noTransferOptions && (
         <div className='relative overflow-hidden rounded-lg bg-amber-50/50 border border-amber-100 p-3'>
           <div className='flex items-start gap-3'>
@@ -245,14 +276,13 @@ function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
                 Stok Transferi Yok
               </p>
               <p className='text-xs text-amber-900 leading-relaxed'>
-                Tüm mağazalarda stok yetersiz. Tedarikçi ile iletişime geçin.
+                Tum magazalarda stok yetersiz. Tedarikci ile iletisime gecin.
               </p>
             </div>
           </div>
         </div>
       )}
 
-      {/* Original AI Recommendation (only show when no proximity options) */}
       {alert.recommendation && !alert.proximityOptions && (
         <div className='relative overflow-hidden rounded-lg bg-indigo-50/50 border border-indigo-100 p-3'>
           <div className='flex items-start gap-3'>
@@ -261,7 +291,7 @@ function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
             </div>
             <div className='flex-1 space-y-1'>
               <p className='text-[11px] font-bold text-indigo-700 uppercase tracking-wide'>
-                Öneri
+                Oneri
               </p>
               <p className='text-xs text-indigo-900 leading-relaxed'>
                 {alert.recommendation}
@@ -271,7 +301,6 @@ function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
         </div>
       )}
 
-      {/* Unified Action Button */}
       <div className='flex items-center gap-2 mt-1'>
         <Button
           className='w-full h-8 text-xs bg-primary hover:bg-primary/90 text-primary-foreground shadow-none'

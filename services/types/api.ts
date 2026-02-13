@@ -122,6 +122,19 @@ export interface StorePerformance {
   stockEfficiency: number; // Added for component compatibility
 }
 
+export interface ProductStoreComparisonItem {
+  storeCode: string;
+  storeName: string;
+  productName: string;
+  stockLevel: number;
+  reorderPoint: number;
+  forecastedDemand: number;
+  price: number;
+  stockValue: number;
+  daysOfCoverage: number;
+  status: 'In Stock' | 'Low Stock' | 'Out of Stock' | 'Overstock';
+}
+
 // Chart types
 export interface HistoricalChartData {
   week: string;
@@ -294,6 +307,54 @@ export interface PredictDemandRequest {
   istenenIndirim: number | null;
   istenenMarj: number | null;
   istenenFiyat: number | null;
+}
+
+export interface MarketSearchRequest {
+  query: string;
+  storeId: string;
+  page?: number;
+  size?: number;
+  distance?: number;
+}
+
+export interface MarketCategoryInfo {
+  main: string | null;
+  menu: string | null;
+  full_path: string[];
+}
+
+export interface MarketPriceOffer {
+  market: string;
+  price: number;
+  unit_price: string | null;
+  is_discount: boolean;
+  index_time: string | null;
+  depot_name: string | null;
+  product_title: string | null;
+}
+
+export interface MarketProduct {
+  id: string;
+  title: string;
+  brand: string;
+  image: string;
+  category_details: MarketCategoryInfo;
+  offers: MarketPriceOffer[];
+}
+
+export interface MarketGlobalAnalysis {
+  total_offers_analyzed: number;
+  cheapest_offer: MarketPriceOffer | null;
+  most_expensive_offer: MarketPriceOffer | null;
+  average_price: number;
+  price_range: number;
+  price_difference_percentage: string;
+}
+
+export interface MarketSearchResponse {
+  total_found: number;
+  analysis: MarketGlobalAnalysis;
+  results: MarketProduct[];
 }
 
 // Demand Forecasting types

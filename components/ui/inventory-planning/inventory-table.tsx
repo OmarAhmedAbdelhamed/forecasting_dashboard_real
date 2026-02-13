@@ -33,6 +33,7 @@ interface InventoryTableProps {
   performanceFilter?: string;
   onPerformanceFilterChange?: (filter: string) => void;
   period?: number;
+  storeOptions?: { value: string; label: string }[];
 }
 
 export function InventoryTable({
@@ -40,6 +41,7 @@ export function InventoryTable({
   performanceFilter: externalPerformanceFilter,
   onPerformanceFilterChange,
   period = 30,
+  storeOptions = [],
 }: InventoryTableProps) {
   const [sortColumn, setSortColumn] = useState<keyof InventoryItem | null>(
     null,
@@ -702,6 +704,7 @@ export function InventoryTable({
 
       <ProductDetailSheet
         item={selectedItem}
+        storeOptions={storeOptions}
         open={isSheetOpen}
         onOpenChange={setIsSheetOpen}
         period={period}
