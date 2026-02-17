@@ -351,6 +351,25 @@ export function ProductDetailSheet({
     });
   };
 
+  const handleComparisonStoreChange = (nextStoreId: string) => {
+    setComparisonStoreId(nextStoreId);
+
+    const q = comparisonQuery.trim() || searchParams.query.trim();
+    if (!nextStoreId || !q) {
+      return;
+    }
+
+    setSearchParams((prev) => {
+      if (prev.storeId === nextStoreId && prev.query === q) {
+        return prev;
+      }
+      return {
+        query: q,
+        storeId: nextStoreId,
+      };
+    });
+  };
+
   if (!item) {
     return null;
   }
@@ -633,7 +652,7 @@ export function ProductDetailSheet({
                     <p className='text-sm font-medium text-muted-foreground mb-1.5'>Magaza</p>
                     <Select
                       value={comparisonStoreId}
-                      onValueChange={setComparisonStoreId}
+                      onValueChange={handleComparisonStoreChange}
                     >
                       <SelectTrigger className='h-11 text-base'>
                         <SelectValue placeholder='Magaza secin' />
