@@ -42,7 +42,14 @@ import {
 } from 'recharts';
 import { generateSingleProductStockTrends } from '@/data/mock-data';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, Tag, Lightbulb, Search, Loader2 } from 'lucide-react';
+import {
+  CheckCircle2,
+  Tag,
+  Lightbulb,
+  Search,
+  Loader2,
+  MessageSquare,
+} from 'lucide-react';
 import { useMarketProductSearch, useProductStoreComparison } from '@/services';
 
 // Form Components
@@ -689,6 +696,10 @@ export function ProductDetailSheet({
                     >
                       <Tag className='mr-2 h-4 w-4' />
                       Promosyon Yap
+                    </Button>
+                    <Button variant='outline' className='w-full' size='lg'>
+                      <MessageSquare className='mr-2 h-4 w-4' />
+                      Potansiyel Musterilere SMS Gonder
                     </Button>
                   </div>
                 </div>

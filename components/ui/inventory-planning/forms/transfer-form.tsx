@@ -22,6 +22,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/shared/tooltip';
 import { Info } from 'lucide-react';
+import { maxSafeTransferForSender, toDailyDemand } from '../transfer-safety';
 
 interface TransferFormProps {
   item: InventoryItem;
@@ -98,14 +99,25 @@ export function TransferForm({
   const destinationStoreOption = stores.find((s) => s.value === destinationStore);
   const sourceStoreCode = currentStoreId || '-';
   const destinationStoreCode = destinationStore || '-';
-  const sourceStockAfterTransfer = Math.max(0, item.stockLevel - transferQuantity);
-  const transferRatioPct =
-    item.stockLevel > 0 ? Math.round((transferQuantity / item.stockLevel) * 100) : 0;
   const sourceDemand30 =
     periodDays > 0
       ? Math.round((item.forecastedDemand / periodDays) * 30)
       : item.forecastedDemand;
-  const sourceDailyDemand = sourceDemand30 / 30;
+  const sourceDailyDemand = toDailyDemand(item.forecastedDemand, periodDays);
+  const maxTransferQty = maxSafeTransferForSender(
+    item.stockLevel,
+    item.forecastedDemand,
+    periodDays,
+  );
+  const effectiveTransferQuantity = Math.min(transferQuantity, maxTransferQty);
+  const sourceStockAfterTransfer = Math.max(
+    0,
+    item.stockLevel - effectiveTransferQuantity,
+  );
+  const transferRatioPct =
+    item.stockLevel > 0
+      ? Math.round((effectiveTransferQuantity / item.stockLevel) * 100)
+      : 0;
   const sourceCurrentDays =
     sourceDailyDemand > 0 ? Math.floor(item.stockLevel / sourceDailyDemand) : 0;
   const sourceAfterDays =
@@ -126,8 +138,8 @@ export function TransferForm({
     destinationStoreMetricsQuery.data?.items?.[0] ?? null;
   const destinationCurrentStock = Number(destinationMetrics?.stockLevel ?? 0);
   const destinationDemand30 = Number(destinationMetrics?.forecastedDemand ?? 0);
-  const destinationDailyDemand = destinationDemand30 / 30;
-  const destinationAfterStock = destinationCurrentStock + transferQuantity;
+  const destinationDailyDemand = toDailyDemand(destinationDemand30, 30);
+  const destinationAfterStock = destinationCurrentStock + effectiveTransferQuantity;
   const destinationCurrentDays =
     destinationDailyDemand > 0
       ? Math.floor(destinationCurrentStock / destinationDailyDemand)
@@ -138,7 +150,7 @@ export function TransferForm({
       : destinationCurrentDays;
 
   const handleSubmit = async () => {
-    if (!destinationStore || !reason || transferQuantity <= 0) {return;}
+    if (!destinationStore || !reason || effectiveTransferQuantity <= 0) {return;}
 
     setIsSubmitting(true);
 
@@ -153,7 +165,7 @@ export function TransferForm({
       destinationStore:
         stores.find((s) => s.value === destinationStore)?.label ||
         destinationStore,
-      transferQuantity,
+      transferQuantity: effectiveTransferQuantity,
       reason,
       notes,
       createdAt: new Date().toISOString(),
@@ -162,8 +174,6 @@ export function TransferForm({
     onSave(data);
     setIsSubmitting(false);
   };
-
-  const maxTransferQty = item.stockLevel;
 
   return (
     <div className='space-y-5'>
@@ -243,7 +253,7 @@ export function TransferForm({
               </Tooltip>
             </div>
             <p className='text-lg font-bold text-emerald-700'>
-              {transferQuantity.toLocaleString('tr-TR')} adet
+              {effectiveTransferQuantity.toLocaleString('tr-TR')} adet
             </p>
           </div>
           <div className='rounded-md border bg-white p-2'>
@@ -360,7 +370,7 @@ export function TransferForm({
           id='transferQuantity'
           type='number'
           className='text-lg font-semibold bg-white'
-          value={transferQuantity}
+          value={effectiveTransferQuantity}
           onChange={(e) =>
             { setTransferQuantity(
               Math.min(
@@ -369,13 +379,18 @@ export function TransferForm({
               ),
             ); }
           }
-          min={1}
+          min={0}
           max={maxTransferQty}
         />
-        {transferQuantity > maxTransferQty * 0.8 && (
+        {maxTransferQty > 0 && effectiveTransferQuantity > maxTransferQty * 0.8 && (
           <p className='text-xs text-amber-600'>
             ⚠️ Yüksek transfer miktarı kaynak mağazada stok eksikliğine neden
             olabilir.
+          </p>
+        )}
+        {maxTransferQty <= 0 && (
+          <p className='text-xs text-red-600'>
+            Gonderen magazada en az 30 gunluk stok korunmali. Bu magazadan transfer onerilmez.
           </p>
         )}
       </div>
@@ -420,7 +435,7 @@ export function TransferForm({
           disabled={
             !destinationStore ||
             !reason ||
-            transferQuantity <= 0 ||
+            effectiveTransferQuantity <= 0 ||
             isSubmitting
           }
         >

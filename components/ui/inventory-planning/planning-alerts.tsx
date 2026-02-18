@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { InventoryAlert } from '@/types/inventory';
 import { cn } from '@/lib/utils';
+import { maxSafeTransferForSender, toDailyDemand } from './transfer-safety';
 
 export interface TransferAdviceClickPayload {
   sku: string;
@@ -76,8 +77,7 @@ export function PlanningAlerts({
         const receiverForecastPeriod = Number(
           targetAlert.metrics?.forecastedDemand || 0,
         );
-        const receiverDailyDemand =
-          period > 0 ? receiverForecastPeriod / period : receiverForecastPeriod;
+        const receiverDailyDemand = toDailyDemand(receiverForecastPeriod, period);
         const receiverNeedFor20Days = Math.max(
           0,
           Math.ceil(receiverDailyDemand * 20 - receiverStock),
@@ -91,9 +91,12 @@ export function PlanningAlerts({
         const sourceForecastPeriod = Number(
           sourceAlert?.metrics?.forecastedDemand || 0,
         );
-        const sourceDailyDemand =
-          period > 0 ? sourceForecastPeriod / period : sourceForecastPeriod;
-        const sourceMaxTransfer = Math.max(0, sourceStock);
+        const sourceDailyDemand = toDailyDemand(sourceForecastPeriod, period);
+        const sourceMaxTransfer = maxSafeTransferForSender(
+          sourceStock,
+          sourceForecastPeriod,
+          period,
+        );
 
         const transferQty = Math.max(
           0,
@@ -113,10 +116,11 @@ export function PlanningAlerts({
           receiverDailyDemand > 0
             ? Math.floor((receiverStock + transferQty) / receiverDailyDemand)
             : 20;
-        const senderDaysAfter =
-          sourceDailyDemand > 0
-            ? Math.floor((sourceStock - transferQty) / sourceDailyDemand)
-            : 20;
+        const senderHasValidDemand =
+          Number.isFinite(sourceDailyDemand) && sourceDailyDemand > 0;
+        const senderDaysAfter = senderHasValidDemand
+          ? Math.floor((sourceStock - transferQty) / sourceDailyDemand)
+          : 0;
 
         return {
           id: `transfer-${targetAlert.id}`,
@@ -132,7 +136,7 @@ export function PlanningAlerts({
           senderDaysAfter,
         };
       })
-      .filter((row) => row.transferQty > 0);
+      .filter((row) => row.transferQty > 0 && row.senderDaysAfter >= 30);
 
     const dedup = new Map<string, (typeof rows)[number]>();
     rows.forEach((row) => {

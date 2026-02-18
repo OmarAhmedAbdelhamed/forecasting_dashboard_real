@@ -38,6 +38,7 @@ import {
 import { useFilterOptions } from '@/services/hooks/filters/use-filter-options';
 import { PageLoading } from '@/components/ui/shared/page-loading';
 import { getDistance, getDistanceDisplay } from '@/lib/store-distances';
+import { maxSafeTransferForSender } from '@/components/ui/inventory-planning/transfer-safety';
 
 function parseStoreCodeFromAlert(storeName?: string) {
   if (!storeName || storeName.trim().length === 0) {
@@ -292,11 +293,41 @@ export function InventoryPlanningSection() {
   });
 
   const enhancedAlerts = useMemo(() => {
+    const safePeriodDays = Math.max(1, periodDays);
+    const alertBySkuAndStore = new Map<string, InventoryAlert>();
+    inventoryAlerts.forEach((alert) => {
+      const key = `${alert.sku}__${alert.storeName || ''}`;
+      alertBySkuAndStore.set(key, alert);
+    });
+
     return inventoryAlerts.map((alert) => {
       const transferSourceStore = alert.metrics?.transferSourceStore;
-      const transferQuantity = alert.metrics?.transferQuantity ?? 0;
+      const requestedTransferQty = Math.max(0, alert.metrics?.transferQuantity ?? 0);
 
-      if (transferSourceStore) {
+      const getSafeTransferQty = (): number => {
+        if (!transferSourceStore || requestedTransferQty <= 0) {
+          return 0;
+        }
+
+        const sourceKey = `${alert.sku}__${transferSourceStore}`;
+        const sourceAlert = alertBySkuAndStore.get(sourceKey);
+        if (!sourceAlert) {
+          return 0;
+        }
+
+        const sourceStock = Math.max(0, sourceAlert.metrics?.currentStock ?? 0);
+        const sourceForecastPeriod = Math.max(0, sourceAlert.metrics?.forecastedDemand ?? 0);
+        const senderTransferableSurplus = maxSafeTransferForSender(
+          sourceStock,
+          sourceForecastPeriod,
+          safePeriodDays,
+        );
+        return Math.max(0, Math.min(requestedTransferQty, senderTransferableSurplus));
+      };
+
+      const safeTransferQty = getSafeTransferQty();
+
+      if (transferSourceStore && safeTransferQty > 0) {
         const targetKey = parseStoreLabelForDistance(alert.storeName);
         const sourceKey = parseStoreLabelForDistance(transferSourceStore);
         const distance =
@@ -313,10 +344,14 @@ export function InventoryPlanningSection() {
               storeName: transferSourceStore,
               distance: distance ?? Number.MAX_VALUE,
               distanceDisplay,
-              availableStock: transferQuantity,
+              availableStock: safeTransferQty,
               isSurplus: true,
             },
           ],
+          metrics: {
+            ...alert.metrics,
+            transferQuantity: safeTransferQty,
+          },
           noTransferOptions: false,
         };
       }
@@ -324,6 +359,11 @@ export function InventoryPlanningSection() {
       if (alert.type === 'stockout' || alert.type === 'reorder') {
         return {
           ...alert,
+          metrics: {
+            ...alert.metrics,
+            transferSourceStore: null,
+            transferQuantity: 0,
+          },
           noTransferOptions: true,
         };
       }
