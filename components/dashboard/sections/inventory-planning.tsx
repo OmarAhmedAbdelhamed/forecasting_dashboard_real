@@ -8,6 +8,7 @@ import { InventoryCharts } from '@/components/ui/inventory-planning/inventory-ch
 import { StoreComparison } from '@/components/ui/inventory-planning/store-comparison';
 import { InventoryTable } from '@/components/ui/inventory-planning/inventory-table';
 import { PlanningAlerts } from '@/components/ui/inventory-planning/planning-alerts';
+import type { TransferAdviceClickPayload } from '@/components/ui/inventory-planning/planning-alerts';
 import { CustomProductLists } from '@/components/ui/inventory-planning/custom-product-lists';
 import { ProductDetailSheet } from '@/components/ui/inventory-planning/product-detail-sheet';
 import {
@@ -124,6 +125,17 @@ export function InventoryPlanningSection() {
     useState<InventoryItem | null>(null);
   const [selectedAlert, setSelectedAlert] = useState<InventoryAlert | null>(null);
   const [alertSheetOpen, setAlertSheetOpen] = useState(false);
+  const [sheetInitialForm, setSheetInitialForm] = useState<
+    'none' | 'purchase' | 'transfer' | 'safety'
+  >('none');
+  const [sheetTransferPrefill, setSheetTransferPrefill] = useState<{
+    sourceStoreLabel?: string;
+    sourceStoreId?: string;
+    destinationStoreId?: string;
+    transferQuantity?: number;
+    reason?: string;
+    notes?: string;
+  } | null>(null);
   const { replaceAutoLists } = useCustomLists();
 
   // Get filter options from API
@@ -431,9 +443,50 @@ export function InventoryPlanningSection() {
       const matchingItem = findMatchingItem(sku, storeCode);
       setSelectedAlert(alert);
       setAlertSelectedItem(matchingItem ?? buildItemFromAlert(alert));
+      setSheetInitialForm('none');
+      setSheetTransferPrefill(null);
       setAlertSheetOpen(true);
     },
     [buildItemFromAlert, findMatchingItem],
+  );
+
+  const handleTransferAdviceClick = useCallback(
+    (payload: TransferAdviceClickPayload) => {
+      const sourceStoreId = parseStoreCodeFromAlert(payload.fromStore) ?? undefined;
+      const destinationStoreId = parseStoreCodeFromAlert(payload.toStore) ?? undefined;
+
+      const sourceAlert = enhancedAlerts.find(
+        (alert) => alert.sku === payload.sku && alert.storeName === payload.fromStore,
+      );
+      const targetAlert = enhancedAlerts.find(
+        (alert) => alert.sku === payload.sku && alert.storeName === payload.toStore,
+      );
+      const fallbackAlert = targetAlert ?? sourceAlert;
+      if (!fallbackAlert) {
+        return;
+      }
+      const sourceItem = sourceStoreId
+        ? findMatchingItem(payload.sku, sourceStoreId)
+        : undefined;
+
+      setSelectedAlert(fallbackAlert);
+      setAlertSelectedItem(
+        sourceItem ??
+          (sourceAlert ? buildItemFromAlert(sourceAlert) : null) ??
+          buildItemFromAlert(fallbackAlert),
+      );
+      setSheetInitialForm('transfer');
+      setSheetTransferPrefill({
+        sourceStoreLabel: payload.fromStore,
+        sourceStoreId,
+        destinationStoreId,
+        transferQuantity: payload.transferQty,
+        reason: 'stock_balancing',
+        notes: `${payload.toStore} mağazasında 20 günlük stok hedefine ulaşmak için öneri transfer.`,
+      });
+      setAlertSheetOpen(true);
+    },
+    [buildItemFromAlert, enhancedAlerts, findMatchingItem],
   );
 
   // Sync with Dashboard Context
@@ -572,7 +625,9 @@ export function InventoryPlanningSection() {
       <div className='grid grid-cols-1 md:grid-cols-2 gap-6 items-start'>
         <PlanningAlerts
           data={filteredEnhancedAlerts}
+          allData={enhancedAlerts}
           onActionClick={handleAlertActionClick}
+          onTransferAdviceClick={handleTransferAdviceClick}
           period={periodDays}
           marketOptions={alertMarketOptions}
           selectedMarket={effectiveSelectedAlertMarket}
@@ -616,11 +671,15 @@ export function InventoryPlanningSection() {
         item={alertSelectedItem}
         alert={selectedAlert}
         storeOptions={storeOptions}
+        initialForm={sheetInitialForm}
+        transferPrefill={sheetTransferPrefill}
         open={alertSheetOpen}
         onOpenChange={(open) => {
           setAlertSheetOpen(open);
           if (!open) {
             setSelectedAlert(null);
+            setSheetInitialForm('none');
+            setSheetTransferPrefill(null);
           }
         }}
         period={periodDays}

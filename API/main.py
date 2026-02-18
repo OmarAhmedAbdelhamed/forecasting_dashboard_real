@@ -129,7 +129,7 @@ CLICKHOUSE_SEND_RECEIVE_TIMEOUT = int(os.getenv("CLICKHOUSE_SEND_RECEIVE_TIMEOUT
 CLICKHOUSE_QUERY_RETRIES = int(os.getenv("CLICKHOUSE_QUERY_RETRIES", "2"))
 CLICKHOUSE_CONNECT_RETRIES = int(os.getenv("CLICKHOUSE_CONNECT_RETRIES", "2"))
 TABLE_NAME = os.getenv("CLICKHOUSE_TABLE_NAME", "demoVerileri")
-PREDICTION_API_URL = os.getenv("PREDICTION_API_URL", "http://13.53.171.130:8890/predict")
+PREDICTION_API_URL = os.getenv("PREDICTION_API_URL", "http://13.53.45.133:8890/predict")
 MARKET_SEARCH_API_URL = os.getenv("MARKET_SEARCH_API_URL", "http://13.53.139.80:8891/search")
 
 STORE_COORDINATES: dict[str, tuple[float, float]] = {
@@ -1078,9 +1078,18 @@ def api_predict_demand(payload: PredictDemandRequest):
         request_data["istenenMarj"] = None
         request_data["istenenFiyat"] = None
     else:
+        # External model accepts 0 as "not provided"; normalize those placeholders to null.
+        for key in ["istenenIndirim", "istenenMarj", "istenenFiyat"]:
+            if request_data.get(key) == 0:
+                request_data[key] = None
+
         selected_count = sum(
             1
-            for value in [payload.istenenIndirim, payload.istenenMarj, payload.istenenFiyat]
+            for value in [
+                request_data.get("istenenIndirim"),
+                request_data.get("istenenMarj"),
+                request_data.get("istenenFiyat"),
+            ]
             if value is not None
         )
         if selected_count != 1:

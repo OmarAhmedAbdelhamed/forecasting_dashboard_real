@@ -15,9 +15,26 @@ import {
 import { InventoryItem } from '@/types/inventory';
 import { ArrowLeft, Truck, Loader2 } from 'lucide-react';
 import { getAllStores } from '@/data/mock-data';
+import { useProductStoreComparison } from '@/services';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/shared/tooltip';
+import { Info } from 'lucide-react';
 
 interface TransferFormProps {
   item: InventoryItem;
+  storeOptions?: { value: string; label: string }[];
+  periodDays?: number;
+  initialData?: {
+    sourceStoreLabel?: string;
+    sourceStoreId?: string;
+    destinationStoreId?: string;
+    transferQuantity?: number;
+    reason?: string;
+    notes?: string;
+  };
   onBack: () => void;
   onSave: (data: TransferData) => void;
 }
@@ -41,8 +58,15 @@ const TRANSFER_REASONS = [
   { value: 'promotion', label: 'Promosyon Hazırlığı' },
 ];
 
-export function TransferForm({ item, onBack, onSave }: TransferFormProps) {
-  const stores = getAllStores();
+export function TransferForm({
+  item,
+  storeOptions = [],
+  periodDays = 30,
+  initialData,
+  onBack,
+  onSave,
+}: TransferFormProps) {
+  const stores = storeOptions.length > 0 ? storeOptions : getAllStores();
 
   // Determine current store from product key
   const productKeyParts = item.productKey?.split('_') || [];
@@ -50,18 +74,68 @@ export function TransferForm({ item, onBack, onSave }: TransferFormProps) {
     productKeyParts.length >= 2
       ? `${productKeyParts[0]}_${productKeyParts[1]}`
       : '';
-  const currentStore = stores.find((s) => s.value === currentStoreKey);
+  const derivedStoreId = productKeyParts.length > 0 ? productKeyParts[0] : '';
+  const currentStoreId =
+    initialData?.sourceStoreId || derivedStoreId || currentStoreKey;
+  const currentStore =
+    stores.find((s) => s.value === currentStoreId) ||
+    stores.find((s) => s.value === currentStoreKey);
+  const sourceStoreLabel =
+    initialData?.sourceStoreLabel || currentStore?.label || 'Merkez Depo';
 
-  const [destinationStore, setDestinationStore] = useState('');
-  const [transferQuantity, setTransferQuantity] = useState(
-    Math.min(50, item.stockLevel),
+  const [destinationStore, setDestinationStore] = useState(
+    initialData?.destinationStoreId || '',
   );
-  const [reason, setReason] = useState('');
-  const [notes, setNotes] = useState('');
+  const [transferQuantity, setTransferQuantity] = useState(
+    Math.min(initialData?.transferQuantity ?? 50, item.stockLevel),
+  );
+  const [reason, setReason] = useState(initialData?.reason || '');
+  const [notes, setNotes] = useState(initialData?.notes || '');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Filter out current store from destination options
-  const destinationOptions = stores.filter((s) => s.value !== currentStoreKey);
+  const destinationOptions = stores.filter((s) => s.value !== currentStoreId);
+  const destinationStoreOption = stores.find((s) => s.value === destinationStore);
+  const sourceStoreCode = currentStoreId || '-';
+  const destinationStoreCode = destinationStore || '-';
+  const sourceStockAfterTransfer = Math.max(0, item.stockLevel - transferQuantity);
+  const transferRatioPct =
+    item.stockLevel > 0 ? Math.round((transferQuantity / item.stockLevel) * 100) : 0;
+  const sourceDemand30 =
+    periodDays > 0
+      ? Math.round((item.forecastedDemand / periodDays) * 30)
+      : item.forecastedDemand;
+  const sourceDailyDemand = sourceDemand30 / 30;
+  const sourceCurrentDays =
+    sourceDailyDemand > 0 ? Math.floor(item.stockLevel / sourceDailyDemand) : 0;
+  const sourceAfterDays =
+    sourceDailyDemand > 0
+      ? Math.floor(sourceStockAfterTransfer / sourceDailyDemand)
+      : sourceCurrentDays;
+
+  const destinationStoreMetricsQuery = useProductStoreComparison(
+    {
+      productId: item.sku,
+      storeIds: destinationStore ? [destinationStore] : [],
+    },
+    {
+      enabled: destinationStore.length > 0 && item.sku.length > 0,
+    },
+  );
+  const destinationMetrics =
+    destinationStoreMetricsQuery.data?.items?.[0] ?? null;
+  const destinationCurrentStock = Number(destinationMetrics?.stockLevel ?? 0);
+  const destinationDemand30 = Number(destinationMetrics?.forecastedDemand ?? 0);
+  const destinationDailyDemand = destinationDemand30 / 30;
+  const destinationAfterStock = destinationCurrentStock + transferQuantity;
+  const destinationCurrentDays =
+    destinationDailyDemand > 0
+      ? Math.floor(destinationCurrentStock / destinationDailyDemand)
+      : 0;
+  const destinationAfterDays =
+    destinationDailyDemand > 0
+      ? Math.floor(destinationAfterStock / destinationDailyDemand)
+      : destinationCurrentDays;
 
   const handleSubmit = async () => {
     if (!destinationStore || !reason || transferQuantity <= 0) {return;}
@@ -75,7 +149,7 @@ export function TransferForm({ item, onBack, onSave }: TransferFormProps) {
       productKey: item.productKey || item.id,
       productName: item.productName,
       sku: item.sku,
-      sourceStore: currentStore?.label || 'Merkez Depo',
+      sourceStore: sourceStoreLabel,
       destinationStore:
         stores.find((s) => s.value === destinationStore)?.label ||
         destinationStore,
@@ -119,19 +193,22 @@ export function TransferForm({ item, onBack, onSave }: TransferFormProps) {
       <div className='grid grid-cols-2 gap-4'>
         <div className='space-y-2'>
           <Label className='text-xs text-muted-foreground'>Kaynak Mağaza</Label>
-          <div className='p-3 bg-muted/30 rounded-lg border'>
+          <div className='p-3 bg-white rounded-lg border'>
             <p className='font-medium text-sm'>
-              {currentStore?.label || 'Merkez Depo'}
+              {sourceStoreLabel}
             </p>
             <p className='text-xs text-muted-foreground'>
               Mevcut: {item.stockLevel} adet
+            </p>
+            <p className='text-xs text-muted-foreground'>
+              Kod: {sourceStoreCode}
             </p>
           </div>
         </div>
         <div className='space-y-2'>
           <Label className='text-xs'>Hedef Mağaza *</Label>
           <Select value={destinationStore} onValueChange={setDestinationStore}>
-            <SelectTrigger>
+            <SelectTrigger className='bg-white'>
               <SelectValue placeholder='Mağaza seçin...' />
             </SelectTrigger>
             <SelectContent>
@@ -142,6 +219,130 @@ export function TransferForm({ item, onBack, onSave }: TransferFormProps) {
               ))}
             </SelectContent>
           </Select>
+          <p className='text-xs text-muted-foreground'>
+            Kod: {destinationStoreCode}
+          </p>
+        </div>
+      </div>
+
+      <div className='rounded-lg border bg-slate-50/70 p-3 space-y-2'>
+        <p className='text-xs font-semibold uppercase tracking-wide text-slate-500'>
+          Transfer Özeti
+        </p>
+        <div className='grid grid-cols-1 sm:grid-cols-3 gap-2'>
+          <div className='rounded-md border bg-white p-2'>
+            <div className='flex items-center gap-1'>
+              <p className='text-[11px] text-slate-500 uppercase'>Önerilen Transfer</p>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className='h-3.5 w-3.5 text-slate-400 cursor-help' />
+                </TooltipTrigger>
+                <TooltipContent>
+                  Alıcı mağazanın 20 günlük stok hedefine ulaşması için önerilen transfer miktarı.
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <p className='text-lg font-bold text-emerald-700'>
+              {transferQuantity.toLocaleString('tr-TR')} adet
+            </p>
+          </div>
+          <div className='rounded-md border bg-white p-2'>
+            <div className='flex items-center gap-1'>
+              <p className='text-[11px] text-slate-500 uppercase'>Alıcı Sonrası</p>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className='h-3.5 w-3.5 text-slate-400 cursor-help' />
+                </TooltipTrigger>
+                <TooltipContent>
+                  Transfer tamamlandıktan sonra alıcı mağazada kalacak tahmini stok gün sayısı.
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <p className='text-lg font-bold text-slate-900'>{destinationAfterDays} gün</p>
+          </div>
+          <div className='rounded-md border bg-white p-2'>
+            <div className='flex items-center gap-1'>
+              <p className='text-[11px] text-slate-500 uppercase'>Gönderen Sonrası</p>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className='h-3.5 w-3.5 text-slate-400 cursor-help' />
+                </TooltipTrigger>
+                <TooltipContent>
+                  Transfer sonrası gönderen mağazada kalacak tahmini stok gün sayısı.
+                </TooltipContent>
+              </Tooltip>
+            </div>
+            <p className='text-lg font-bold text-slate-900'>{sourceAfterDays} gün</p>
+          </div>
+        </div>
+
+        <div className='grid grid-cols-1 sm:grid-cols-2 gap-3'>
+          <div className='rounded-md border bg-white p-3 space-y-2'>
+            <p className='text-[11px] text-slate-500 uppercase'>Gönderen</p>
+            <p className='text-base font-semibold text-slate-900'>{sourceStoreLabel}</p>
+            <p className='text-sm text-slate-700'>
+              Mevcut Stok: <span className='font-semibold'>{item.stockLevel}</span> adet
+            </p>
+            <p className='text-sm text-slate-700'>
+              Talep Tahmini (30G): <span className='font-semibold'>{sourceDemand30}</span> adet
+            </p>
+            <p className='text-sm text-slate-700'>
+              Ortalama Günlük Satış Miktarı:{' '}
+              <span className='font-semibold'>{sourceDailyDemand.toFixed(1)}</span> adet
+            </p>
+            <p className='text-sm text-slate-700'>
+              Stok Günü (Önce): <span className='font-semibold'>{sourceCurrentDays}</span> gün
+            </p>
+            <p className='text-sm text-slate-700'>
+              Stok Günü (Sonra):{' '}
+              <span className='font-semibold'>
+                {sourceStockAfterTransfer} adet / {sourceAfterDays} gün
+              </span>
+            </p>
+          </div>
+          <div className='rounded-md border bg-white p-3 space-y-2'>
+            <p className='text-[11px] text-slate-500 uppercase'>Alıcı</p>
+            <p className='text-base font-semibold text-slate-900'>
+              {destinationStoreOption?.label || 'Mağaza seçiniz'}
+            </p>
+            <p className='text-sm text-slate-700'>
+              Mevcut Stok:{' '}
+              <span className='font-semibold'>
+                {destinationCurrentStock}
+              </span>{' '}
+              adet
+            </p>
+            <p className='text-sm text-slate-700'>
+              Talep Tahmini (30G):{' '}
+              <span className='font-semibold'>
+                {destinationDemand30}
+              </span>{' '}
+              adet
+            </p>
+            <p className='text-sm text-slate-700'>
+              Ortalama Günlük Satış Miktarı:{' '}
+              <span className='font-semibold'>
+                {destinationDailyDemand.toFixed(1)}
+              </span>{' '}
+              adet
+            </p>
+            <p className='text-sm text-slate-700'>
+              Stok Günü (Önce):{' '}
+              <span className='font-semibold'>
+                {destinationCurrentDays}
+              </span>{' '}
+              gün
+            </p>
+            <p className='text-sm text-slate-700'>
+              Stok Günü (Sonra):{' '}
+              <span className='font-semibold'>
+                {destinationAfterStock} adet / {destinationAfterDays} gün
+              </span>
+            </p>
+            <p className='text-xs text-slate-500'>
+              Transfer oranı: %{transferRatioPct}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -158,6 +359,7 @@ export function TransferForm({ item, onBack, onSave }: TransferFormProps) {
         <Input
           id='transferQuantity'
           type='number'
+          className='text-lg font-semibold bg-white'
           value={transferQuantity}
           onChange={(e) =>
             { setTransferQuantity(
@@ -169,7 +371,6 @@ export function TransferForm({ item, onBack, onSave }: TransferFormProps) {
           }
           min={1}
           max={maxTransferQty}
-          className='text-lg font-semibold'
         />
         {transferQuantity > maxTransferQty * 0.8 && (
           <p className='text-xs text-amber-600'>
@@ -183,7 +384,7 @@ export function TransferForm({ item, onBack, onSave }: TransferFormProps) {
       <div className='space-y-2'>
         <Label className='text-xs'>Transfer Nedeni *</Label>
         <Select value={reason} onValueChange={setReason}>
-          <SelectTrigger>
+          <SelectTrigger className='bg-white'>
             <SelectValue placeholder='Neden seçin...' />
           </SelectTrigger>
           <SelectContent>
@@ -200,6 +401,7 @@ export function TransferForm({ item, onBack, onSave }: TransferFormProps) {
       <div className='space-y-2'>
         <Label className='text-xs'>Notlar (Opsiyonel)</Label>
         <Textarea
+          className='bg-white'
           value={notes}
           onChange={(e) => { setNotes(e.target.value); }}
           placeholder='Ek bilgiler...'

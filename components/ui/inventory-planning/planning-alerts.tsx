@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import {
   Card,
   CardContent,
@@ -10,6 +11,7 @@ import {
 import { Button } from '@/components/ui/shared/button';
 import { Badge } from '@/components/ui/shared/badge';
 import { ScrollArea } from '@/components/ui/shared/scroll-area';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/shared/tabs';
 import {
   Select,
   SelectContent,
@@ -25,27 +27,123 @@ import {
   Lightbulb,
   Box,
   Zap,
+  ArrowRightLeft,
 } from 'lucide-react';
 import { InventoryAlert } from '@/types/inventory';
 import { cn } from '@/lib/utils';
 
+export interface TransferAdviceClickPayload {
+  sku: string;
+  fromStore: string;
+  toStore: string;
+  transferQty: number;
+}
+
 interface PlanningAlertsProps {
   data: InventoryAlert[];
   onActionClick?: (alert: InventoryAlert) => void;
+  onTransferAdviceClick?: (payload: TransferAdviceClickPayload) => void;
   period?: number;
   marketOptions?: { value: string; label: string }[];
   selectedMarket?: string;
   onMarketChange?: (value: string) => void;
+  allData?: InventoryAlert[];
 }
 
 export function PlanningAlerts({
   data,
   onActionClick,
+  onTransferAdviceClick,
   period = 30,
   marketOptions = [],
   selectedMarket = 'all',
   onMarketChange,
+  allData,
 }: PlanningAlertsProps) {
+  const lookupData = allData && allData.length > 0 ? allData : data;
+
+  const transferAdviceCards = useMemo(() => {
+    const rows = data
+      .filter(
+        (alert) =>
+          alert.actionType === 'transfer' &&
+          typeof alert.metrics?.transferSourceStore === 'string' &&
+          (alert.metrics?.transferSourceStore || '').trim().length > 0,
+      )
+      .map((targetAlert) => {
+        const sourceStoreName = targetAlert.metrics?.transferSourceStore || '';
+        const receiverStock = Number(targetAlert.metrics?.currentStock || 0);
+        const receiverForecastPeriod = Number(
+          targetAlert.metrics?.forecastedDemand || 0,
+        );
+        const receiverDailyDemand =
+          period > 0 ? receiverForecastPeriod / period : receiverForecastPeriod;
+        const receiverNeedFor20Days = Math.max(
+          0,
+          Math.ceil(receiverDailyDemand * 20 - receiverStock),
+        );
+
+        const sourceAlert = lookupData.find(
+          (row) =>
+            row.sku === targetAlert.sku && row.storeName === sourceStoreName,
+        );
+        const sourceStock = Number(sourceAlert?.metrics?.currentStock || 0);
+        const sourceForecastPeriod = Number(
+          sourceAlert?.metrics?.forecastedDemand || 0,
+        );
+        const sourceDailyDemand =
+          period > 0 ? sourceForecastPeriod / period : sourceForecastPeriod;
+        const sourceMaxTransfer = Math.max(0, sourceStock);
+
+        const transferQty = Math.max(
+          0,
+          Math.floor(
+            Math.min(
+              receiverNeedFor20Days,
+              sourceMaxTransfer,
+            ),
+          ),
+        );
+
+        const receiverDaysBefore =
+          receiverDailyDemand > 0
+            ? Math.floor(receiverStock / receiverDailyDemand)
+            : 0;
+        const receiverDaysAfter =
+          receiverDailyDemand > 0
+            ? Math.floor((receiverStock + transferQty) / receiverDailyDemand)
+            : 20;
+        const senderDaysAfter =
+          sourceDailyDemand > 0
+            ? Math.floor((sourceStock - transferQty) / sourceDailyDemand)
+            : 20;
+
+        return {
+          id: `transfer-${targetAlert.id}`,
+          sku: targetAlert.sku,
+          productName: targetAlert.productName,
+          fromStore: sourceStoreName,
+          toStore: targetAlert.storeName || 'Bilinmeyen mağaza',
+          transferQty,
+          sourceStock,
+          receiverNeedFor20Days,
+          receiverDaysBefore,
+          receiverDaysAfter,
+          senderDaysAfter,
+        };
+      })
+      .filter((row) => row.transferQty > 0);
+
+    const dedup = new Map<string, (typeof rows)[number]>();
+    rows.forEach((row) => {
+      const key = `${row.sku}-${row.fromStore}-${row.toStore}`;
+      if (!dedup.has(key) || row.transferQty > (dedup.get(key)?.transferQty || 0)) {
+        dedup.set(key, row);
+      }
+    });
+    return Array.from(dedup.values()).sort((a, b) => b.transferQty - a.transferQty);
+  }, [data, lookupData, period]);
+
   return (
     <Card className='h-full flex flex-col shadow-sm'>
       <CardHeader className='pb-3 border-b'>
@@ -53,9 +151,9 @@ export function PlanningAlerts({
           <div className='flex items-center gap-2'>
             <AlertTriangle className='h-5 w-5 text-orange-600' />
             <div>
-              <CardTitle className='text-lg'>Planlama Uyari Merkezi</CardTitle>
+              <CardTitle className='text-lg'>Uyarı ve Transfer Merkezi</CardTitle>
               <CardDescription className='text-xs mt-0.5'>
-                Yapay zeka destekli stok risk analizi ve oneriler
+                Yapay zeka destekli envanter uyarıları ve mağazalar arası transfer önerileri
               </CardDescription>
             </div>
           </div>
@@ -82,26 +180,130 @@ export function PlanningAlerts({
         )}
       </CardHeader>
       <CardContent className='flex-1 p-0 min-h-0 bg-slate-50/50'>
-        <ScrollArea className='flex-1 h-135'>
-          <div className='p-4 space-y-4'>
-            {data.length > 0 ? (
-              data.map((alert) => (
-                <AlertItem
-                  key={alert.id}
-                  alert={alert}
-                  onActionClick={onActionClick}
-                  period={period}
-                />
-              ))
-            ) : (
-              <div className='flex flex-col items-center justify-center py-16 text-center text-muted-foreground'>
-                <Box className='h-12 w-12 mb-3 text-slate-300' />
-                <p className='text-sm font-medium'>Her sey yolunda!</p>
-                <p className='text-xs'>Su an icin kritik bir stok uyarisi bulunmuyor.</p>
-              </div>
-            )}
+        <Tabs defaultValue='inventory-alerts' className='h-full flex flex-col'>
+          <div className='px-4 pt-4'>
+            <TabsList className='grid w-full grid-cols-2'>
+              <TabsTrigger value='inventory-alerts'>Envanter Uyarıları</TabsTrigger>
+              <TabsTrigger value='transfer-advices'>Transfer Önerileri</TabsTrigger>
+            </TabsList>
           </div>
-        </ScrollArea>
+
+          <TabsContent value='inventory-alerts' className='mt-0 flex-1'>
+            <ScrollArea className='flex-1 h-129'>
+              <div className='p-4 space-y-4'>
+                {data.length > 0 ? (
+                  data.map((alert) => (
+                    <AlertItem
+                      key={alert.id}
+                      alert={alert}
+                      onActionClick={onActionClick}
+                      period={period}
+                    />
+                  ))
+                ) : (
+                  <div className='flex flex-col items-center justify-center py-16 text-center text-muted-foreground'>
+                    <Box className='h-12 w-12 mb-3 text-slate-300' />
+                    <p className='text-sm font-medium'>Her şey yolunda</p>
+                    <p className='text-xs'>
+                      Şu an için kritik bir envanter uyarısı bulunmuyor.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value='transfer-advices' className='mt-0 flex-1'>
+            <ScrollArea className='flex-1 h-129'>
+              <div className='p-4 space-y-3'>
+                {transferAdviceCards.length > 0 ? (
+                  transferAdviceCards.map((advice) => (
+                    <div
+                      key={advice.id}
+                      className='rounded-xl border bg-white shadow-sm p-4 space-y-3 cursor-pointer hover:border-emerald-300 transition-colors'
+                      onClick={() =>
+                        onTransferAdviceClick?.({
+                          sku: advice.sku,
+                          fromStore: advice.fromStore,
+                          toStore: advice.toStore,
+                          transferQty: advice.transferQty,
+                        })
+                      }
+                    >
+                      <div className='flex items-start justify-between gap-3'>
+                        <div>
+                          <p className='text-sm font-semibold text-slate-900'>
+                            {advice.productName}
+                          </p>
+                          <p className='text-xs text-slate-500 font-mono'>
+                            {advice.sku}
+                          </p>
+                        </div>
+                        <Badge
+                          className='bg-emerald-100 text-emerald-800 border-0'
+                          variant='outline'
+                        >
+                          {advice.transferQty.toLocaleString('tr-TR')} adet transfer
+                        </Badge>
+                      </div>
+
+                      <div className='flex items-center gap-2 text-sm text-slate-800'>
+                        <ArrowRightLeft className='h-3.5 w-3.5 text-emerald-600' />
+                        <span className='font-semibold'>{advice.fromStore}</span>
+                        <span className='text-slate-400'>→</span>
+                        <span className='font-semibold'>{advice.toStore}</span>
+                      </div>
+
+                      <div className='grid grid-cols-1 sm:grid-cols-3 gap-2'>
+                        <div className='rounded-lg border bg-slate-50 p-2'>
+                          <p className='text-[10px] uppercase text-slate-500 font-semibold'>
+                            Gönderen Sonrası
+                          </p>
+                          <p className='text-sm font-semibold text-slate-900'>
+                            {advice.senderDaysAfter} gün
+                          </p>
+                          <p className='text-[11px] text-slate-500'>
+                            Transfer sonrası tahmini stok kapsaması
+                          </p>
+                        </div>
+                        <div className='rounded-lg border bg-slate-50 p-2'>
+                          <p className='text-[10px] uppercase text-slate-500 font-semibold'>
+                            Alan Mağaza Önce / Sonra
+                          </p>
+                          <p className='text-sm font-semibold text-slate-900'>
+                            {advice.receiverDaysBefore} / {advice.receiverDaysAfter} gün
+                          </p>
+                          <p className='text-[11px] text-slate-500'>
+                            20 gün hedef kapsama
+                          </p>
+                        </div>
+                        <div className='rounded-lg border bg-slate-50 p-2'>
+                          <p className='text-[10px] uppercase text-slate-500 font-semibold'>
+                            20 Gün İhtiyaç
+                          </p>
+                          <p className='text-sm font-semibold text-slate-900'>
+                            {advice.receiverNeedFor20Days.toLocaleString('tr-TR')} adet
+                          </p>
+                          <p className='text-[11px] text-slate-500'>
+                            Transfer: {advice.transferQty.toLocaleString('tr-TR')} adet
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className='flex flex-col items-center justify-center py-16 text-center text-muted-foreground'>
+                    <Box className='h-12 w-12 mb-3 text-slate-300' />
+                    <p className='text-sm font-medium'>Transfer önerisi bulunmuyor</p>
+                    <p className='text-xs'>
+                      Mevcut filtrelerde mağazalar arası uygun transfer senaryosu yok.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
       </CardContent>
     </Card>
   );

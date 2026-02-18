@@ -76,6 +76,32 @@ function parseStoreCodeFromProductKey(productKey?: string): string | null {
   return match?.[1] ?? null;
 }
 
+function isUsableProductImage(imageUrl?: string | null): boolean {
+  if (!imageUrl) {
+    return false;
+  }
+  const normalized = imageUrl.trim().toLowerCase();
+  if (normalized.length === 0) {
+    return false;
+  }
+  const blockedPatterns = [
+    'api.marketfiyati.org.tr/api/v1/resources/dummy/dummy-big.svg',
+    '/api/v1/resources/dummy/dummy-big.svg',
+    '/resources/dummy/dummy-big.svg',
+    '/resources/dummy/',
+    'default',
+    'placeholder',
+    'no-image',
+    'no_image',
+    'noimage',
+    'image-not-found',
+    'not-found',
+    '/img/default',
+    '/images/default',
+  ];
+  return !blockedPatterns.some((pattern) => normalized.includes(pattern));
+}
+
 // Generate AI recommendation based on product status
 function getRecommendation(
   item: InventoryItem,
@@ -104,6 +130,15 @@ interface ProductDetailSheetProps {
   item: InventoryItem | null;
   alert?: InventoryAlert | null;
   storeOptions?: { value: string; label: string }[];
+  initialForm?: ActiveForm;
+  transferPrefill?: {
+    sourceStoreLabel?: string;
+    sourceStoreId?: string;
+    destinationStoreId?: string;
+    transferQuantity?: number;
+    reason?: string;
+    notes?: string;
+  } | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   period?: number;
@@ -116,6 +151,8 @@ export function ProductDetailSheet({
   item,
   alert,
   storeOptions = [],
+  initialForm = 'none',
+  transferPrefill = null,
   open,
   onOpenChange,
   period = 30,
@@ -210,7 +247,7 @@ export function ProductDetailSheet({
         isDiscount: Boolean(offer.is_discount),
         productTitle: offer.product_title || product.title || itemName || '-',
         indexTime: offer.index_time || '-',
-        image: product.image || '',
+        image: isUsableProductImage(product.image) ? product.image : '',
         kategori: category || '-',
         brand: product.brand || '-',
       }));
@@ -292,8 +329,18 @@ export function ProductDetailSheet({
       storeId: defaultStore || '',
     });
     setActiveTab('overview');
+    setActiveForm(initialForm);
     lastInitItemIdRef.current = itemId;
-  }, [open, hasItem, alertStoreName, itemId, itemName, itemProductKey, firstStoreOptionValue]);
+  }, [
+    open,
+    hasItem,
+    alertStoreName,
+    itemId,
+    itemName,
+    itemProductKey,
+    firstStoreOptionValue,
+    initialForm,
+  ]);
 
   const handleOpenChange = (newOpen: boolean) => {
     if (!newOpen) {
@@ -384,6 +431,8 @@ export function ProductDetailSheet({
             : 'sm:max-w-4xl',
         )}
       >
+        <DialogTitle className='sr-only'>Ürün Detay ve Aksiyon Modülü</DialogTitle>
+
         {successMessage && (
           <div className='absolute top-2 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-green-100 text-green-700 px-4 py-2 rounded-lg border border-green-200 shadow-lg animate-in fade-in slide-in-from-top-2'>
             <CheckCircle2 className='h-4 w-4' />
@@ -404,6 +453,9 @@ export function ProductDetailSheet({
         {activeForm === 'transfer' && (
           <TransferForm
             item={item}
+            storeOptions={storeOptions}
+            periodDays={period}
+            initialData={transferPrefill || undefined}
             onBack={() => {
               setActiveForm('none');
             }}

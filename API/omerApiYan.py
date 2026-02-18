@@ -299,7 +299,7 @@ def get_products(
     Optional filters:
       - regionIds (cografi_bolge)
       - storeIds (magazakodu)
-      - categoryIds (store_sektorkodu)
+      - categoryIds (store_reyonkodu or reyonkodu)
     """
 
     where_clauses = ["1=1"]
@@ -323,7 +323,7 @@ def get_products(
                 if len(parts) == 2:
                     store_val, category_val = parts
                     composite_filters.append(
-                        f"(toString(magazakodu) = '{store_val}' AND toString(sektorkodu) = '{category_val}')"
+                        f"(toString(magazakodu) = '{store_val}' AND toString(reyonkodu) = '{category_val}')"
                     )
             else:
                 simple_ids.append(f"'{cid}'")
@@ -333,7 +333,7 @@ def get_products(
             conditions.append("(" + " OR ".join(composite_filters) + ")")
         
         if simple_ids:
-            conditions.append(f"toString(sektorkodu) IN ({', '.join(simple_ids)})")
+            conditions.append(f"toString(reyonkodu) IN ({', '.join(simple_ids)})")
             
         if conditions:
             where_clauses.append("(" + " OR ".join(conditions) + ")")
