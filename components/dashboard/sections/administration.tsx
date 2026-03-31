@@ -16,7 +16,6 @@ import {
 } from '@/components/ui/shared/tabs';
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
