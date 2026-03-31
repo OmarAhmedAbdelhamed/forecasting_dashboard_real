@@ -91,7 +91,11 @@ const extractPredictForecastMap = (
     const point = row as PredictModelPoint;
     const rawDate = point.tarih || point.date;
     const rawValue = point.tahmin ?? point.forecast;
-    if (!rawDate || typeof rawValue !== 'number' || !Number.isFinite(rawValue)) {
+    if (
+      !rawDate ||
+      typeof rawValue !== 'number' ||
+      !Number.isFinite(rawValue)
+    ) {
       continue;
     }
     map.set(normalizeDateKey(rawDate), rawValue);
@@ -100,7 +104,9 @@ const extractPredictForecastMap = (
   return map;
 };
 
-const applyTrendlineFromSeries = (rows: DemandTrendData[]): DemandTrendData[] => {
+const applyTrendlineFromSeries = (
+  rows: DemandTrendData[],
+): DemandTrendData[] => {
   if (rows.length === 0) return rows;
 
   const points: Array<{ x: number; y: number }> = [];
@@ -229,7 +235,7 @@ export function DemandForecastingSection() {
 
   const showLoading =
     (permissionsLoading || isFilterLoading || isLoading) && !hasAnyData;
-/*
+  /*
     return (
       <PageLoading
         title='Talep Tahminleme yükleniyor…'
@@ -345,7 +351,8 @@ export function DemandForecastingSection() {
 
         const filterParams = {
           storeIds: selectedStores.length > 0 ? selectedStores : undefined,
-          productIds: selectedProducts.length > 0 ? selectedProducts : undefined,
+          productIds:
+            selectedProducts.length > 0 ? selectedProducts : undefined,
           categoryIds:
             selectedReyonlar.length > 0 ? selectedReyonlar : undefined,
           periodValue: periodDays,
@@ -389,12 +396,16 @@ export function DemandForecastingSection() {
         if (growthRes.status === 'fulfilled' && growthRes.value?.products) {
           setGrowthProductsState(growthRes.value.products);
         } else if (growthRes.status === 'rejected') {
-          errorMessages.push(`Büyüme Tablosu: ${getErrorMessage(growthRes.reason)}`);
+          errorMessages.push(
+            `Büyüme Tablosu: ${getErrorMessage(growthRes.reason)}`,
+          );
         }
         if (errorRes.status === 'fulfilled' && errorRes.value?.products) {
           setErrorProductsState(errorRes.value.products);
         } else if (errorRes.status === 'rejected') {
-          errorMessages.push(`Hata Tablosu: ${getErrorMessage(errorRes.reason)}`);
+          errorMessages.push(
+            `Hata Tablosu: ${getErrorMessage(errorRes.reason)}`,
+          );
         }
 
         // Aggregate charts - fetch always with current filters
@@ -462,12 +473,16 @@ export function DemandForecastingSection() {
             setTrendDataState(trendRes.value.data);
           }
         } else if (trendRes.status === 'rejected') {
-          errorMessages.push(`Trend Grafiği: ${getErrorMessage(trendRes.reason)}`);
+          errorMessages.push(
+            `Trend Grafiği: ${getErrorMessage(trendRes.reason)}`,
+          );
         }
         if (biasRes.status === 'fulfilled' && biasRes.value?.data) {
           setBiasDataState(biasRes.value.data);
         } else if (biasRes.status === 'rejected') {
-          errorMessages.push(`Bias Grafiği: ${getErrorMessage(biasRes.reason)}`);
+          errorMessages.push(
+            `Bias Grafiği: ${getErrorMessage(biasRes.reason)}`,
+          );
         }
         if (yearRes.status === 'fulfilled' && yearRes.value?.data) {
           setYearDataState(yearRes.value.data);
@@ -477,11 +492,16 @@ export function DemandForecastingSection() {
               : null,
           );
         } else if (yearRes.status === 'rejected') {
-          errorMessages.push(`Yıllık Karşılaştırma: ${getErrorMessage(yearRes.reason)}`);
+          errorMessages.push(
+            `Yıllık Karşılaştırma: ${getErrorMessage(yearRes.reason)}`,
+          );
         }
 
         if (errorMessages.length > 0) {
-          console.warn('Demand Forecasting partial fetch errors:', errorMessages);
+          console.warn(
+            'Demand Forecasting partial fetch errors:',
+            errorMessages,
+          );
           toast.error('Bazı veriler yüklenemedi. Lütfen tekrar deneyin.');
         }
       } catch (error) {
@@ -524,7 +544,8 @@ export function DemandForecastingSection() {
 
       if (
         typeof lastHistoryVal === 'number' &&
-        (mapped[prevIdx].forecast === null || mapped[prevIdx].forecast === undefined)
+        (mapped[prevIdx].forecast === null ||
+          mapped[prevIdx].forecast === undefined)
       ) {
         mapped[prevIdx].forecast = lastHistoryVal;
       }
@@ -690,7 +711,9 @@ export function DemandForecastingSection() {
               title='Doğruluk Oranı'
               value={kpiValues.accuracy}
               subValue='Geçen Ay'
-              trend={accuracyTrend !== 0 ? formatSignedPercent(accuracyTrend) : ''}
+              trend={
+                accuracyTrend !== 0 ? formatSignedPercent(accuracyTrend) : ''
+              }
               trendUp={accuracyTrend >= 0}
               icon={Target}
               tooltip='Model doğruluğu. Tahmin ile gerçekleşen arasındaki tutarlılık.'
@@ -883,7 +906,7 @@ export function DemandForecastingSection() {
                 <ResponsiveContainer width='100%' height='100%'>
                   <LineChart
                     data={yearData}
-                    margin={{ top: 0, right: 10, left: 0, bottom: 20}}
+                    margin={{ top: 0, right: 10, left: 0, bottom: 20 }}
                   >
                     <CartesianGrid
                       strokeDasharray='3 3'
@@ -922,7 +945,10 @@ export function DemandForecastingSection() {
                         return [value.toLocaleString('tr-TR'), year];
                       }}
                       labelFormatter={(label) => formatWeekTick(String(label))}
-                      contentStyle={{ fontSize: chartConfig.tooltipFontSize, marginBottom: '50px' }}
+                      contentStyle={{
+                        fontSize: chartConfig.tooltipFontSize,
+                        marginBottom: '50px',
+                      }}
                     />
                     <Legend
                       formatter={(value) =>
@@ -934,7 +960,8 @@ export function DemandForecastingSection() {
                       }
                       wrapperStyle={{
                         fontSize: chartConfig.legendFontSize,
-                        paddingTop: '10px', marginBottom: '-50px'
+                        paddingTop: '10px',
+                        marginBottom: '-50px',
                       }}
                     />
                     <Line
@@ -1157,8 +1184,8 @@ export function DemandForecastingSection() {
                                 Önceki dönem satış × 100
                               </p>
                               <p className='mt-1'>
-                                Satış: son <strong>30</strong> gün, önceki dönem:
-                                bir önceki <strong>30</strong> gün.
+                                Satış: son <strong>30</strong> gün, önceki
+                                dönem: bir önceki <strong>30</strong> gün.
                               </p>
                             </TooltipContent>
                           </UITooltip>
@@ -1278,10 +1305,12 @@ export function DemandForecastingSection() {
                             </TooltipTrigger>
                             <TooltipContent className='max-w-[360px] text-xs 2xl:text-base'>
                               <p>
-                                Formül: <strong>|Tahmin - Satış| / Satış × 100</strong>
+                                Formül:{' '}
+                                <strong>|Tahmin - Satış| / Satış × 100</strong>
                               </p>
                               <p className='mt-1'>
-                                Hesaplama son <strong>30</strong> gün üzerinden yapılır.
+                                Hesaplama son <strong>30</strong> gün üzerinden
+                                yapılır.
                               </p>
                             </TooltipContent>
                           </UITooltip>
