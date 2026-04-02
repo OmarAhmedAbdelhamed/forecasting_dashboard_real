@@ -38,14 +38,14 @@ export async function GET(
   }
 
   const { data, error } = await supabase
-    .from('user_profiles')
+    .from('profiles')
     .select(
       `
       *,
       roles (*)
     `,
     )
-    .eq('id', id)
+    .eq('user_id', id)
     .single();
 
   if (error) {
@@ -68,15 +68,7 @@ export async function PATCH(
   const supabase = await createClient();
   const { id } = await params;
   const body = await request.json();
-  const {
-    full_name,
-    role_id,
-    organization_id,
-    allowed_regions,
-    allowed_stores,
-    allowed_categories,
-    is_active,
-  } = body;
+  const { full_name, is_active } = body;
 
   // Prevent self-deactivation
   if (id === user.id && is_active === false) {
@@ -98,9 +90,9 @@ export async function PATCH(
 
   // Get target user's profile
   const { data: targetProfile, error: targetError } = await supabase
-    .from('user_profiles')
+    .from('profiles')
     .select('*, role:roles(*)')
-    .eq('id', id)
+    .eq('user_id', id)
     .single();
 
   if (targetError || !targetProfile) {
@@ -108,7 +100,6 @@ export async function PATCH(
   }
 
   // Authorization checks for GMs
-  const isSuperAdmin = currentRole === 'super_admin';
   const isGM = currentRole === 'general_manager';
 
   if (isGM) {
@@ -123,33 +114,11 @@ export async function PATCH(
       );
     }
 
-    // If changing role, validate it
-    if (role_id && role_id !== targetProfile.role_id) {
-      const { data: newRole, error: roleError } = await supabase
-        .from('roles')
-        .select('*')
-        .eq('id', role_id)
-        .single();
-
-      if (roleError || !newRole) {
-        return NextResponse.json({ error: 'Invalid role' }, { status: 400 });
-      }
-
-      // GMs cannot assign Super Admin (level 0) or GM (level 1) roles
-      if (newRole.level <= 1) {
-        return NextResponse.json(
-          { error: 'General Managers cannot assign Super Admin or GM roles' },
-          { status: 403 },
-        );
-      }
-    }
-
-    // GMs cannot change organization
-    if (organization_id && organization_id !== targetProfile.organization_id) {
+    // GMs cannot update Super Admins or other GMs
+    if (targetProfile.role && targetProfile.role.level <= 1) {
       return NextResponse.json(
         {
-          error:
-            'General Managers cannot move users to different organizations',
+          error: 'General Managers cannot update Super Admins or other GMs',
         },
         { status: 403 },
       );
@@ -157,18 +126,13 @@ export async function PATCH(
   }
 
   const { data, error } = await supabase
-    .from('user_profiles')
+    .from('profiles')
     .update({
       full_name,
-      role_id,
-      organization_id: isSuperAdmin ? organization_id : undefined, // Only Super Admin can change org
-      allowed_regions,
-      allowed_stores,
-      allowed_categories,
       is_active,
       updated_at: new Date().toISOString(),
     })
-    .eq('id', id)
+    .eq('user_id', id)
     .select()
     .single();
 
@@ -215,9 +179,9 @@ export async function DELETE(
 
   // Get target user's profile
   const { data: targetProfile, error: targetError } = await supabase
-    .from('user_profiles')
+    .from('profiles')
     .select('*, role:roles(*)')
-    .eq('id', id)
+    .eq('user_id', id)
     .single();
 
   if (targetError || !targetProfile) {
@@ -251,9 +215,9 @@ export async function DELETE(
   }
 
   const { data, error } = await supabase
-    .from('user_profiles')
+    .from('profiles')
     .update({ is_active: false, updated_at: new Date().toISOString() })
-    .eq('id', id)
+    .eq('user_id', id)
     .select()
     .single();
 

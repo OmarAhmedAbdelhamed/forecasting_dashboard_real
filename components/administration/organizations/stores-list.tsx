@@ -106,22 +106,8 @@ export function StoresList({
 
   const fetchEligibleManagers = async (regionIdValue: string) => {
     try {
-      // Get the organization from the selected region
-      const { data: regionData } = await supabase
-        .from('regions')
-        .select('organization_id')
-        .eq('id', regionIdValue)
-        .single();
-
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id, email, full_name')
-        .overlaps('allowed_regions', [regionIdValue])
-        .eq('organization_id', regionData?.organization_id)
-        .order('full_name');
-
-      if (error) {throw error;}
-      setEligibleManagers(data || []);
+      // RBAC stripped - skip role-based query
+      setEligibleManagers([]);
     } catch (error) {
       console.error('Error fetching eligible managers:', error);
     }

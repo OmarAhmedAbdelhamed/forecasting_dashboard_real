@@ -161,26 +161,8 @@ export function RegionsList({
   const fetchRegionalManagers = async () => {
     setLoadingManagers(true);
     try {
-      const orgId = getManagerOrganizationId();
-
-      if (!orgId) {
-        console.warn('[RegionsList] No organization ID available for filtering regional managers');
-        setRegionalManagers([]);
-        return;
-      }
-
-      // Fetch regional managers filtered by organization
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('id, full_name, email')
-        .eq('role_id', (
-          await supabase.from('roles').select('id').eq('name', 'regional_manager').single()
-        ).data?.id)
-        .eq('organization_id', orgId)  // Filter by organization
-        .order('full_name');
-
-      if (error) {throw error;}
-      setRegionalManagers(data || []);
+      // RBAC stripped - skip role-based query
+      setRegionalManagers([]);
     } catch (error) {
       console.error('Error fetching regional managers:', error);
       setRegionalManagers([]);

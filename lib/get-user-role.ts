@@ -65,26 +65,15 @@ export async function getUserRole(userId: string): Promise<UserRoleResult> {
   try {
     const supabase = await createClient();
 
-    // Single query with JOIN - gets profile and role in one trip
+    // Check if user profile exists
     const { data: profile, error } = await supabase
-      .from('user_profiles')
-      .select(
-        `
-        id,
-        organization_id,
-        allowed_regions,
-        allowed_stores,
-        allowed_categories,
-        role:roles(*)
-      `,
-      )
-      .eq('id', userId)
+      .from('profiles')
+      .select('user_id, is_active')
+      .eq('user_id', userId)
       .single();
 
     if (error) {
-      // Distinguish between expected and unexpected errors
       if (error.code === 'PGRST116') {
-        // No rows returned - profile doesn't exist
         return {
           role: null,
           roleConfig: null,
@@ -94,19 +83,6 @@ export async function getUserRole(userId: string): Promise<UserRoleResult> {
         };
       }
 
-      if (error.code === '42501' || error.code === '42P17') {
-        // RLS error - database permission issue
-        console.error('[RBAC] RLS error in getUserRole:', error);
-        return {
-          role: null,
-          roleConfig: null,
-          profile: null,
-          error: 'Permission error accessing user profile',
-          errorCode: 'RLS_ERROR',
-        };
-      }
-
-      // Other database errors
       console.error('[RBAC] Database error in getUserRole:', error);
       return {
         role: null,
@@ -117,8 +93,6 @@ export async function getUserRole(userId: string): Promise<UserRoleResult> {
       };
     }
 
-    // Profile can be null even without error if row doesn't exist
-    // eslint-disable-next-line @typescript-eslint/strict-boolean-expressions
     if (!profile) {
       return {
         role: null,
@@ -129,18 +103,8 @@ export async function getUserRole(userId: string): Promise<UserRoleResult> {
       };
     }
 
-    const roleName = profile.role?.name as UserRole | null;
-
-    if (!roleName) {
-      return {
-        role: null,
-        roleConfig: null,
-        profile: null,
-        error: 'User has no role assigned',
-        errorCode: 'NO_ROLE_ASSIGNED',
-      };
-    }
-
+    // Hardcode super_admin - RBAC stripped
+    const roleName = 'super_admin' as UserRole;
     const roleConfig = ROLE_CONFIGS[roleName];
 
     if (!roleConfig) {
@@ -157,11 +121,11 @@ export async function getUserRole(userId: string): Promise<UserRoleResult> {
       role: roleName,
       roleConfig,
       profile: {
-        id: profile.id,
-        organization_id: profile.organization_id,
-        allowed_regions: profile.allowed_regions,
-        allowed_stores: profile.allowed_stores,
-        allowed_categories: profile.allowed_categories,
+        id: profile.user_id,
+        organization_id: null,
+        allowed_regions: null,
+        allowed_stores: null,
+        allowed_categories: null,
       },
     };
   } catch (unexpectedError) {

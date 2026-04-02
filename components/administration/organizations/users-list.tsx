@@ -130,20 +130,9 @@ export function UsersList() {
   const fetchUsers = async () => {
     try {
       let query = supabase
-        .from('user_profiles')
-        .select(
-          `
-          *,
-          role:roles(*),
-          organization:organizations(*)
-        `,
-        )
+        .from('profiles')
+        .select('*')
         .order('full_name');
-
-      // Filter users by organization for GMs
-      if (isGM && userProfile?.organizationId) {
-        query = query.eq('organization_id', userProfile.organizationId);
-      }
 
       const { data, error } = await query;
 

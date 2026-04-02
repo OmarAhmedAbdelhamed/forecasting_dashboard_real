@@ -4,7 +4,6 @@ import type { User } from '@supabase/supabase-js';
 
 import { supabase } from '@/lib/supabase/client';
 import type { UserProfile, UserRole, Permission, DataScope } from '@/types/auth';
-import { ROLE_CONFIGS, type DashboardSection } from '@/types/permissions';
 
 interface AuthState {
   // Existing state
@@ -132,24 +131,9 @@ export const useAuthStore = create<AuthState>()(
         try {
           // Fetch user profile with role from user_profiles table
           const { data: profileData, error: profileError } = await supabase
-            .from('user_profiles')
-            .select(`
-              id,
-              full_name,
-              role_id,
-              allowed_regions,
-              allowed_stores,
-              allowed_categories,
-              created_at,
-              updated_at,
-              roles (
-                id,
-                name,
-                description,
-                level
-              )
-            `)
-            .eq('id', userId)
+            .from('profiles')
+            .select('user_id, full_name, is_active, created_at, updated_at')
+            .eq('user_id', userId)
             .single();
 
           if (profileError) {
@@ -182,38 +166,10 @@ export const useAuthStore = create<AuthState>()(
             return;
           }
 
-          // Transform the profile data to match UserProfile interface
-          // Supabase returns single relations as objects, not arrays
-          type RoleRelation = {
-            id: string;
-            name: UserRole;
-            description: string | null;
-            level: number;
-          } | null;
-
-          const roleData = profileData.roles as RoleRelation;
-          const hasRole = roleData && typeof roleData === 'object' && 'id' in roleData;
-
           const userProfile: UserProfile = {
-            id: profileData.id,
+            id: profileData.user_id,
             fullName: profileData.full_name || undefined,
-            roleId: profileData.role_id || undefined,
-            role: hasRole && roleData
-              ? {
-                  id: roleData.id,
-                  name: roleData.name,
-                  description: roleData.description ?? undefined,
-                  level: roleData.level,
-                }
-              : undefined,
-            allowedRegions: profileData.allowed_regions,
-            allowedStores: profileData.allowed_stores,
-            allowedCategories: profileData.allowed_categories,
-            dataScope: {
-              regions: profileData.allowed_regions || [],
-              stores: profileData.allowed_stores || [],
-              categories: profileData.allowed_categories || [],
-            },
+            isActive: profileData.is_active ?? undefined,
             createdAt: new Date(profileData.created_at),
             updatedAt: new Date(profileData.updated_at),
           };
@@ -226,7 +182,7 @@ export const useAuthStore = create<AuthState>()(
           set({
             userProfile,
             permissions,
-            userRole: userProfile.role?.name || null,
+            userRole: 'super_admin' as UserRole,
             profileLoading: false,
             profileError: null,
           });
@@ -271,79 +227,15 @@ export const useAuthStore = create<AuthState>()(
        * Maps section names (e.g., 'demand-forecasting' to 'demand_forecasting').
        * Returns true for all sections if user has no role (grants default access).
        */
-      hasSectionAccess: (section: string) => {
-        const { userRole } = get();
-
-        // Grant access to all sections if user has no role (default access)
-        // This allows authenticated users to access the dashboard even without a profile role
-        if (!userRole) {
-          return true;
-        }
-
-        const roleConfig = ROLE_CONFIGS[userRole];
-        if (!roleConfig) {
-          console.warn('[Auth] No role config found for:', userRole);
-          return true;
-        }
-
-        // Map section name to match format in ROLE_CONFIGS
-        // e.g., 'demand-forecasting' is already in the correct format
-        return roleConfig.allowedSections.includes(section as DashboardSection);
+      hasSectionAccess: (_section: string) => {
+        return true;
       },
 
       /**
        * Check if user can view data based on their scope.
        * Returns true if user has 'all' scope or if data intersects with allowed scope.
        */
-      canViewData: (regions?: string[], stores?: string[], categories?: string[]) => {
-        const { userProfile } = get();
-
-        if (!userProfile) {
-          return false;
-        }
-
-        // Check regions
-        if (regions && regions.length > 0) {
-          if (userProfile.allowedRegions && userProfile.allowedRegions.length > 0) {
-            // If user has specific regions, check if any match
-            const hasAllRegions = userProfile.allowedRegions.includes('all');
-            const hasMatchingRegion = regions.some((r) =>
-              userProfile.allowedRegions?.includes(r)
-            );
-            if (!hasAllRegions && !hasMatchingRegion) {
-              return false;
-            }
-          }
-        }
-
-        // Check stores
-        if (stores && stores.length > 0) {
-          if (userProfile.allowedStores && userProfile.allowedStores.length > 0) {
-            // If user has specific stores, check if any match
-            const hasAllStores = userProfile.allowedStores.includes('all');
-            const hasMatchingStore = stores.some((s) =>
-              userProfile.allowedStores?.includes(s)
-            );
-            if (!hasAllStores && !hasMatchingStore) {
-              return false;
-            }
-          }
-        }
-
-        // Check categories
-        if (categories && categories.length > 0) {
-          if (userProfile.allowedCategories && userProfile.allowedCategories.length > 0) {
-            // If user has specific categories, check if any match
-            const hasAllCategories = userProfile.allowedCategories.includes('all');
-            const hasMatchingCategory = categories.some((c) =>
-              userProfile.allowedCategories?.includes(c)
-            );
-            if (!hasAllCategories && !hasMatchingCategory) {
-              return false;
-            }
-          }
-        }
-
+      canViewData: (_regions?: string[], _stores?: string[], _categories?: string[]) => {
         return true;
       },
 
@@ -352,35 +244,8 @@ export const useAuthStore = create<AuthState>()(
        * scopeKey specifies which field to check (e.g., 'allowedRegions').
        * Returns all data if user has 'all' scope, empty array if no scope defined.
        */
-      filterDataByScope: <T extends Record<string, unknown>>(data: T[], scopeKey: keyof DataScope): T[] => {
-        const { userProfile } = get();
-
-        if (!userProfile) {
-          return [];
-        }
-
-        const userScope = userProfile[scopeKey];
-
-        // If user has 'all' in their scope or no scope restriction, return all data
-        if (!userScope || userScope.length === 0 || userScope.includes('all')) {
-          return data;
-        }
-
-        // Filter data based on scope
-        // This assumes data objects have a region, store, or category property
-        // Adjust the property name based on your data structure
-        const scopePropertyMap: Record<keyof DataScope, string> = {
-          regions: 'region',
-          stores: 'store',
-          categories: 'category',
-        };
-
-        const propertyToCheck = scopePropertyMap[scopeKey];
-
-        return data.filter((item) => {
-          const itemScope = item[propertyToCheck] as string | undefined;
-          return itemScope !== undefined && userScope.includes(itemScope);
-        });
+      filterDataByScope: <T>(data: T[], _scopeKey: keyof DataScope): T[] => {
+        return data;
       },
 
       /**
@@ -447,11 +312,8 @@ export const useAuthStore = create<AuthState>()(
        * For now, returns true if user has any permissions.
        * Component-level permissions can be enhanced later if needed.
        */
-      canViewComponent: (component: string, section?: string) => {
-        const { permissions } = get();
-        // If user has permissions, they can view components
-        // This can be enhanced later to check component-level permissions
-        return permissions ? permissions.length > 0 : false;
+      canViewComponent: (_component: string, _section?: string) => {
+        return true;
       },
 
       /**

@@ -65,9 +65,8 @@ export function UsersByStore({ storeId, isReadOnly = false }: UsersByStoreProps)
   const fetchUsers = async () => {
     try {
       const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*, roles(*)')
-        .contains('allowed_stores', [storeId])
+        .from('profiles')
+        .select('*')
         .order('full_name');
 
       if (error) {throw error;}
@@ -118,15 +117,12 @@ export function UsersByStore({ storeId, isReadOnly = false }: UsersByStoreProps)
 
     try {
       const { error } = await supabase
-        .from('user_profiles')
+        .from('profiles')
         .update({
-          fullName: formData.fullName,
-          roleId: formData.roleId,
-          allowedRegions: formData.allowedRegions.length > 0 ? formData.allowedRegions : null,
-          allowedStores: formData.allowedStores.length > 0 ? formData.allowedStores : null,
-          allowedCategories: formData.allowedCategories.length > 0 ? formData.allowedCategories : null,
+          full_name: formData.fullName,
+          updated_at: new Date().toISOString(),
         })
-        .eq('id', selectedUser?.id);
+        .eq('user_id', selectedUser?.id);
 
       if (error) {throw error;}
 

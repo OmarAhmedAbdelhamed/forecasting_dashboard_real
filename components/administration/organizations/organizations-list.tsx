@@ -65,16 +65,8 @@ export function OrganizationsList({
 
   const fetchOrganizations = async () => {
     try {
-      // Super admins see all organizations, GMs see only their assigned organization
+      // All authenticated users see all organizations
       let query = supabase.from('organizations').select('*').order('name');
-
-      // If user is not super admin, filter by their organization
-      if (
-        userProfile?.organizationId &&
-        userProfile.role?.name !== 'super_admin'
-      ) {
-        query = query.eq('id', userProfile.organizationId);
-      }
 
       const { data, error } = await query;
 
@@ -104,8 +96,8 @@ export function OrganizationsList({
 
           // Get user count for this organization
           const { count: userCount } = await supabase
-            .from('user_profiles')
-            .select('*', { count: 'exact', head: true })
+            .from('organization_members')
+            .select('user_id', { count: 'exact', head: true })
             .eq('organization_id', org.id);
 
           return {

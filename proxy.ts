@@ -212,34 +212,13 @@ function getSectionFromPathname(pathname: string): DashboardSection | null {
 }
 
 /**
- * Fetches user profile with role from Supabase
+ * Returns hardcoded super_admin role — RBAC stripped
  */
 async function getUserRole(
-  supabase: SupabaseClient<Database>,
-  userId: string,
+  _supabase: SupabaseClient<Database>,
+  _userId: string,
 ): Promise<UserRole | null> {
-  try {
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select(
-        `
-        role_id,
-        roles (
-          name
-        )
-      `,
-      )
-      .eq('id', userId)
-      .single();
-
-    if (error || !data?.roles?.name) {
-      return null;
-    }
-
-    return data.roles.name as UserRole;
-  } catch {
-    return null;
-  }
+  return 'super_admin' as UserRole;
 }
 
 /**

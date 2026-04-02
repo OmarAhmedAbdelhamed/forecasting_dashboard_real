@@ -38,11 +38,11 @@ export async function setupAdminUser(formData: FormData): Promise<SetupAdminResu
   // Create a regular client to check the user's role
   const supabase = await createClient();
 
-  // Check if user is already a super_admin
+  // Check if user has a profile
   const { data: profile, error: profileError } = await supabase
-    .from('user_profiles')
-    .select('role:roles(*)')
-    .eq('id', authUser.id)
+    .from('profiles')
+    .select('user_id')
+    .eq('user_id', authUser.id)
     .single();
 
   if (profileError || !profile) {
@@ -63,25 +63,8 @@ export async function setupAdminUser(formData: FormData): Promise<SetupAdminResu
     };
   }
 
-  const userRole = profile.role?.name;
-
-  if (!userRole || userRole !== 'super_admin') {
-    // Log unauthorized attempt
-    await logAudit({
-      user_id: authUser.id,
-      action: 'create',
-      resource: 'user',
-      details: { attempted_action: 'setup_admin_user', email: formData.get('email'), user_role: userRole },
-      success: false,
-      error_message: 'Unauthorized - User is not a super_admin',
-    });
-
-    return {
-      success: false,
-      message: '',
-      error: 'Forbidden - Only super admins can create admin users',
-    };
-  }
+  // RBAC stripped — all authenticated users with profiles are treated as super_admin
+  const userRole = 'super_admin';
 
   const password = formData.get('password') as string;
   const fullName = formData.get('fullName') as string;

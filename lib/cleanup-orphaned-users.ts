@@ -87,9 +87,9 @@ export async function findOrphanedAuthUsers(): Promise<OrphanedUserResult[]> {
     for (const user of users) {
       try {
         const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('id')
-          .eq('id', user.id)
+          .from('profiles')
+          .select('user_id')
+          .eq('user_id', user.id)
           .single();
 
         if (!profile) {

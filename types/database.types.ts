@@ -86,50 +86,27 @@ export interface Database {
       }
       user_profiles: {
         Row: {
-          allowed_categories: string[] | null
-          allowed_regions: string[] | null
-          allowed_stores: string[] | null
-          created_at: string | null
-          email: string | null
+          user_id: string
           full_name: string | null
-          id: string
           is_active: boolean | null
-          role_id: string | null
+          created_at: string | null
           updated_at: string | null
         }
         Insert: {
-          allowed_categories?: string[] | null
-          allowed_regions?: string[] | null
-          allowed_stores?: string[] | null
-          created_at?: string | null
-          email?: string | null
+          user_id: string
           full_name?: string | null
-          id: string
           is_active?: boolean | null
-          role_id?: string | null
+          created_at?: string | null
           updated_at?: string | null
         }
         Update: {
-          allowed_categories?: string[] | null
-          allowed_regions?: string[] | null
-          allowed_stores?: string[] | null
-          created_at?: string | null
-          email?: string | null
+          user_id?: string
           full_name?: string | null
-          id?: string
           is_active?: boolean | null
-          role_id?: string | null
+          created_at?: string | null
           updated_at?: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: 'user_profiles_role_id_fkey'
-            columns: ['role_id']
-            isOneToOne: false
-            referencedRelation: 'roles'
-            referencedColumns: ['id']
-          },
-        ]
+        Relationships: []
       }
       forecast_estimates: {
         Row: {

@@ -3,9 +3,11 @@
 import { useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { DashboardProvider } from '@/contexts/dashboard-context';
 import { ChatbotButton } from '@/components/chatbot/chatbot-button';
+import { Alert, AlertTitle, AlertDescription } from '@/components/ui/shared/alert';
+import { Button } from '@/components/ui/shared/button';
 
 export default function DashboardLayout({
   children,
