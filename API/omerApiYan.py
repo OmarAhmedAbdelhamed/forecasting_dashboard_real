@@ -2361,7 +2361,7 @@ def get_inventory_kpis(
         -- Match `/api/inventory/items` snapshot logic exactly (ORDER BY tarih DESC LIMIT 1 BY ...).
         SELECT
             toString(urunkodu)                           AS sku,
-            toString(reyonkodu)                          AS category,
+            if(length(trim(toString(hier2_ad))) > 0, toString(hier2_ad), toString(reyonkodu)) AS category,
             toString(magazakodu)                         AS store,
             greatest(toFloat64(stok), 0)                 AS stock_level,
             greatest(toFloat64(degerlenmisstok), 0)      AS stock_value,
@@ -2374,7 +2374,7 @@ def get_inventory_kpis(
     sales_period AS (
         SELECT
             toString(urunkodu)                           AS sku,
-            toString(reyonkodu)                          AS category,
+            if(length(trim(toString(hier2_ad))) > 0, toString(hier2_ad), toString(reyonkodu)) AS category,
             toString(magazakodu)                         AS store,
             sumIf(
                 satismiktari,
@@ -2867,6 +2867,7 @@ def get_inventory_items(
         SELECT
             l.sku                     AS sku,
             l.category                AS category,
+            l.categoryCode            AS categoryCode,
             l.store                   AS store,
             l.stockLevel              AS stockLevel,
             l.forecastDaily           AS forecastDaily,
@@ -2878,7 +2879,8 @@ def get_inventory_items(
         FROM (
             SELECT
                 toString(urunkodu)     AS sku,
-                toString(reyonkodu)    AS category,
+                if(length(trim(toString(hier2_ad))) > 0, toString(hier2_ad), toString(reyonkodu)) AS category,
+                toString(reyonkodu)    AS categoryCode,
                 toString(magazakodu)   AS store,
                 greatest(toFloat64(stok), 0)            AS stockLevel,
                 greatest(toFloat64(roll_mean_7), 0)     AS forecastDaily,
@@ -2893,7 +2895,7 @@ def get_inventory_items(
         LEFT JOIN (
             SELECT
                 toString(urunkodu)     AS sku,
-                toString(reyonkodu)    AS category,
+                toString(reyonkodu)    AS categoryCode,
                 toString(magazakodu)   AS store,
                 greatest(sumIf(satismiktari, tarih = {anchor_date}), 0) AS todaysSales,
                 maxIf(tarih, stok > 0) AS lastRestockDate
@@ -2901,7 +2903,7 @@ def get_inventory_items(
             WHERE {where_sql}
             GROUP BY urunkodu, reyonkodu, magazakodu
         ) AS a
-        ON l.sku = a.sku AND l.category = a.category AND l.store = a.store
+        ON l.sku = a.sku AND l.categoryCode = a.categoryCode AND l.store = a.store
     """
 
     if aggregate_by_store:

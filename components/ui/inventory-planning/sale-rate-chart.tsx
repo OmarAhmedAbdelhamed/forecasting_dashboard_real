@@ -123,20 +123,20 @@ export function CategoryDistributionChart({
   const chartData = useMemo(() => {
     const categoryCounts: Record<string, number> = {};
 
-    // Count products per category from live API category values (usually numeric codes)
+    // item.category now returns hier2_ad (real name, e.g. "Temizlik") from ClickHouse
     items.forEach((item) => {
-      const categoryKey = String(item.category);
-      categoryCounts[categoryKey] = (categoryCounts[categoryKey] ?? 0) + 1;
+      const name = item.category?.trim() || 'Diğer';
+      categoryCounts[name] = (categoryCounts[name] ?? 0) + 1;
     });
 
     const total = items.length || 1;
 
     const data: CategoryData[] = Object.entries(categoryCounts)
       .sort((a, b) => b[1] - a[1])
-      .map(([key, count], index) => ({
-        name: CATEGORY_LABELS[key] || `Kategori ${key}`,
+      .map(([name, count], index) => ({
+        name,
         value: count,
-        categoryValue: key,
+        categoryValue: name,
         color: CATEGORY_COLORS[index % CATEGORY_COLORS.length],
         percentage: (count / total) * 100,
       }));
@@ -164,7 +164,9 @@ export function CategoryDistributionChart({
     const x = cx + radius * Math.cos(-midAngle * RADIAN);
     const y = cy + radius * Math.sin(-midAngle * RADIAN);
 
-    if (percent < 0.05) {return null;} // Don't show label for very small slices
+    if (percent < 0.05) {
+      return null;
+    } // Don't show label for very small slices
 
     return (
       <text
@@ -229,9 +231,15 @@ export function CategoryDistributionChart({
               outerRadius='85%'
               innerRadius='60%'
               dataKey='value'
-              onMouseEnter={(_, index) => { setActiveIndex(index); }}
-              onMouseLeave={() => { setActiveIndex(null); }}
-              onClick={(data) => { handleClick(data); }}
+              onMouseEnter={(_, index) => {
+                setActiveIndex(index);
+              }}
+              onMouseLeave={() => {
+                setActiveIndex(null);
+              }}
+              onClick={(data) => {
+                handleClick(data);
+              }}
               style={{ cursor: onCategoryClick ? 'pointer' : 'default' }}
             >
               {chartData.map((entry, index) => {
