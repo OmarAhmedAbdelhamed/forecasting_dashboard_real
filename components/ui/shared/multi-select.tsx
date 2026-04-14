@@ -33,9 +33,27 @@ export function MultiSelect({
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [isOpen, setIsOpen] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState('');
+  const uniqueOptions = React.useMemo(() => {
+    const seen = new Set<string>();
+    return options.filter((option) => {
+      if (seen.has(option.value)) {
+        return false;
+      }
+      seen.add(option.value);
+      return true;
+    });
+  }, [options]);
+  const normalizedSelected = React.useMemo(
+    () => Array.from(new Set(selected)),
+    [selected],
+  );
+  const normalizedDisplaySelected = React.useMemo(
+    () => Array.from(new Set(displaySelected ?? normalizedSelected)),
+    [displaySelected, normalizedSelected],
+  );
 
   // Filter options based on search
-  const filteredOptions = options.filter((option) =>
+  const filteredOptions = uniqueOptions.filter((option) =>
     option.label.toLowerCase().includes(searchValue.toLowerCase()),
   );
 
@@ -57,17 +75,17 @@ export function MultiSelect({
 
   // Toggle selection
   const toggleOption = (value: string) => {
-    if (selected.includes(value)) {
-      onChange(selected.filter((s) => s !== value));
+    if (normalizedSelected.includes(value)) {
+      onChange(normalizedSelected.filter((s) => s !== value));
     } else {
-      onChange([...selected, value]);
+      onChange([...normalizedSelected, value]);
     }
   };
 
   // Remove a selected item
   const removeOption = (value: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    onChange(selected.filter((s) => s !== value));
+    onChange(normalizedSelected.filter((s) => s !== value));
   };
 
   // Handle keyboard navigation
@@ -76,8 +94,12 @@ export function MultiSelect({
       setIsOpen(false);
       setSearchValue('');
     }
-    if (e.key === 'Backspace' && searchValue === '' && selected.length > 0) {
-      onChange(selected.slice(0, -1));
+    if (
+      e.key === 'Backspace' &&
+      searchValue === '' &&
+      normalizedSelected.length > 0
+    ) {
+      onChange(normalizedSelected.slice(0, -1));
     }
   };
 
@@ -98,9 +120,9 @@ export function MultiSelect({
           </span>
 
           {/* Selected Count Badge */}
-          {(displayCount ?? selected.length) > 0 && (
+          {(displayCount ?? normalizedSelected.length) > 0 && (
             <span className='inline-flex items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-medium px-2 py-0.5 min-w-5'>
-              {displayCount ?? selected.length}
+              {displayCount ?? normalizedSelected.length}
             </span>
           )}
         </div>
@@ -133,10 +155,10 @@ export function MultiSelect({
           {/* Scrollable Content Area (Selected Items + Options) */}
           <div className='max-h-60 overflow-auto'>
             {/* Selected Badges */}
-            {(displaySelected ?? selected).length > 0 && (
+            {normalizedDisplaySelected.length > 0 && (
               <div className='flex flex-wrap gap-1.5 p-2 border-b shrink-0'>
-                {(displaySelected ?? selected).map((value) => {
-                  const option = options.find((o) => o.value === value);
+                {normalizedDisplaySelected.map((value) => {
+                  const option = uniqueOptions.find((o) => o.value === value);
                   return (
                     <span
                       key={value}
@@ -162,20 +184,20 @@ export function MultiSelect({
                 <li
                   onClick={() => {
                     const allFilteredSelected = filteredOptions.every(
-                      (option) => selected.includes(option.value),
+                      (option) => normalizedSelected.includes(option.value),
                     );
                     if (allFilteredSelected) {
                       // Deselect all filtered options
-                      const newSelected = selected.filter(
+                      const newSelected = normalizedSelected.filter(
                         (s) => !filteredOptions.some((o) => o.value === s),
                       );
                       onChange(newSelected);
                     } else {
                       // Select all filtered options
                       const newSelected = [
-                        ...selected,
+                        ...normalizedSelected,
                         ...filteredOptions
-                          .filter((o) => !selected.includes(o.value))
+                          .filter((o) => !normalizedSelected.includes(o.value))
                           .map((o) => o.value),
                       ];
                       onChange(newSelected);
@@ -184,19 +206,19 @@ export function MultiSelect({
                   className={cn(
                     'flex items-center justify-between px-2 py-2 text-sm rounded-sm cursor-pointer font-semibold border-b mb-1',
                     filteredOptions.every((option) =>
-                      selected.includes(option.value),
+                      normalizedSelected.includes(option.value),
                     )
                       ? 'bg-accent text-accent-foreground'
                       : 'hover:bg-muted',
                   )}
                 >
                   {filteredOptions.every((option) =>
-                    selected.includes(option.value),
+                    normalizedSelected.includes(option.value),
                   )
                     ? 'Seçimi Kaldır'
                     : 'Tümünü Seç'}
                   {filteredOptions.every((option) =>
-                    selected.includes(option.value),
+                    normalizedSelected.includes(option.value),
                   ) && <Check className='h-4 w-4 text-primary' />}
                 </li>
               )}
@@ -206,7 +228,7 @@ export function MultiSelect({
                 </li>
               ) : (
                 filteredOptions.map((option) => {
-                  const isSelected = selected.includes(option.value);
+                  const isSelected = normalizedSelected.includes(option.value);
                   return (
                     <li
                       key={option.value}

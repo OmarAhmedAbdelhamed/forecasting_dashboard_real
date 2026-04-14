@@ -10,7 +10,7 @@ from fastapi.responses import JSONResponse
 from typing import List, Optional
 import clickhouse_connect
 import os
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import json
 import math
 import urllib.request
@@ -62,6 +62,22 @@ app = FastAPI(
     version="1.0.0",
 )
 logger = logging.getLogger("uvicorn.error")
+
+
+def _quote_sql_list(values: Optional[List[object]], *, lower: bool = False) -> str:
+    if not values:
+        return ""
+    quoted: list[str] = []
+    for value in values:
+        if value is None:
+            continue
+        token = str(value).strip()
+        if not token:
+            continue
+        if lower:
+            token = token.lower()
+        quoted.append("'" + token.replace("'", "''") + "'")
+    return ", ".join(quoted)
 
 @app.get("/healthz")
 def healthz():
@@ -162,6 +178,175 @@ class MarketSearchRequest(BaseModel):
     page: int = 0
     size: int = 24
     distance: int = 10
+
+
+def _parse_prediction_date(value: object) -> Optional[date]:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+    except ValueError:
+        try:
+            return date.fromisoformat(text[:10])
+        except ValueError:
+            return None
+
+
+def _normalize_prediction_response(
+    raw_response: object,
+    request_data: dict,
+) -> object:
+    # Helper: fetch real per-day stock and roll_mean_7 from ClickHouse
+    def _fetch_ch_timeseries(rows_to_enrich: list[dict]) -> None:
+        client = request_data.get("_client")
+        table_name = request_data.get("_table_name", "demoVerileri")
+        store_code = request_data.get("magazaKodu")
+        product_code = request_data.get("urunKodu")
+        if client is None or not rows_to_enrich:
+            return
+        dates = sorted({str(r.get("tarih") or "")[:10] for r in rows_to_enrich if r.get("tarih")})
+        if not dates:
+            return
+        min_d, max_d = dates[0], dates[-1]
+        try:
+            ch_q = f"""
+                SELECT
+                    toDate(tarih) AS day,
+                    sum(greatest(toFloat64(acilis_stok), 0)) AS stock,
+                    round(avg(greatest(toFloat64(roll_mean_7), 0)), 2) AS baseline
+                FROM {table_name}
+                WHERE
+                    toString(magazakodu) = '{store_code}'
+                    AND toString(urunkodu) = '{product_code}'
+                    AND toDate(tarih) BETWEEN '{min_d}' AND '{max_d}'
+                GROUP BY day ORDER BY day ASC
+            """
+            ch_rows = client.query(ch_q).result_rows
+            stock_map = {r[0].isoformat(): (max(0, int(r[1] or 0)), round(float(r[2] or 0), 2)) for r in ch_rows}
+            for row in rows_to_enrich:
+                key = str(row.get("tarih") or "")[:10]
+                if key in stock_map:
+                    stk, bl = stock_map[key]
+                    row["stok"] = stk
+                    if row.get("baseline") is None:
+                        row["baseline"] = bl if bl > 0 else row.get("tahmin")
+        except Exception:
+            pass  # best-effort
+
+    if isinstance(raw_response, dict) and isinstance(raw_response.get("forecast"), list):
+        _fetch_ch_timeseries(raw_response["forecast"])
+        return raw_response
+
+    weekly_rows: list[dict] = []
+    if isinstance(raw_response, dict) and isinstance(raw_response.get("value"), list):
+        weekly_rows = [
+            row for row in raw_response["value"] if isinstance(row, dict)
+        ]
+    elif isinstance(raw_response, list):
+        weekly_rows = [row for row in raw_response if isinstance(row, dict)]
+    else:
+        return raw_response
+
+    start_date = _parse_prediction_date(request_data.get("tarihBaslangic"))
+    end_date = _parse_prediction_date(request_data.get("tarihBitis"))
+    if start_date is None or end_date is None or start_date > end_date:
+        return {
+            "forecast": [],
+            "raw": raw_response,
+            "period": "weekly",
+            "normalized": False,
+        }
+
+    desired_price = request_data.get("istenenFiyat")
+    if desired_price is None:
+        desired_price = request_data.get("hedef_satisFiyati")
+
+    forecast_rows: list[dict[str, object]] = []
+    for weekly_row in weekly_rows:
+        week_start = _parse_prediction_date(weekly_row.get("haftaBaslangicTarihi"))
+        if week_start is None:
+            continue
+
+        requested_week_days = int(float(weekly_row.get("promosyonGunSayisi") or 0))
+        week_end = min(week_start + timedelta(days=6), end_date)
+        effective_start = max(week_start, start_date)
+        effective_end = min(week_end, end_date)
+        if effective_start > effective_end:
+            continue
+
+        day_count = (effective_end - effective_start).days + 1
+        divisor = max(requested_week_days, day_count, 1)
+        total_forecast = float(weekly_row.get("AI Tahmin") or 0)
+        daily_forecast = total_forecast / divisor
+        target_price = float(
+            weekly_row.get("hedef_satisFiyati")
+            or desired_price
+            or 0
+        )
+        discount_pct = float(weekly_row.get("hedef_indirimYuzdesi") or 0)
+        ham_fiyat = float(weekly_row.get("hamFiyat") or 0)
+        birim_kar = target_price - ham_fiyat
+        birim_marj = (
+            float(weekly_row.get("hedef_marj"))
+            if weekly_row.get("hedef_marj") is not None
+            else (birim_kar / target_price * 100 if target_price else 0)
+        )
+
+        for offset in range(day_count):
+            current_date = effective_start + timedelta(days=offset)
+            forecast_rows.append(
+                {
+                    "tarih": current_date.isoformat(),
+                    "tahmin": daily_forecast,
+                    "baseline": None,
+                    "ciro_adedi": daily_forecast,
+                    "ciro": daily_forecast * target_price,
+                    "stok": None,
+                    "satisFiyati": target_price,
+                    "ham_fiyat": ham_fiyat,
+                    "birim_kar": birim_kar,
+                    "birim_marj_yuzde": birim_marj,
+                    "gunluk_kar": daily_forecast * birim_kar,
+                    "benim_promom": (
+                        []
+                        if str(weekly_row.get("aktifPromosyonKodu") or "0") == "0"
+                        else [str(weekly_row.get("aktifPromosyonKodu"))]
+                    ),
+                    "benim_promom_yuzde": discount_pct,
+                    "weather": "sun",
+                    "lost_sales": 0,
+                    "unconstrained_demand": None,
+                }
+            )
+
+    forecast_rows.sort(key=lambda row: str(row.get("tarih") or ""))
+
+    # Fill any gaps between the model's last covered date and end_date by
+    # extending the last row's values forward. This prevents the chart from
+    # showing a hard drop to 0 when the model returned fewer weeks than requested.
+    if forecast_rows:
+        covered_dates = {str(r["tarih"])[:10] for r in forecast_rows}
+        last_row = forecast_rows[-1]
+        current = start_date
+        while current <= end_date:
+            key = current.isoformat()
+            if key not in covered_dates:
+                forecast_rows.append({**last_row, "tarih": key})
+            current += timedelta(days=1)
+        forecast_rows.sort(key=lambda row: str(row.get("tarih") or ""))
+
+    # Fetch real per-day stock AND roll_mean_7 baseline from ClickHouse.
+    _fetch_ch_timeseries(forecast_rows)
+
+    return {
+        "forecast": forecast_rows,
+        "raw": weekly_rows,
+        "period": "weekly",
+        "normalized": True,
+    }
 
 
 def get_client():
@@ -329,7 +514,7 @@ def api_get_products(
 
 @app.get("/api/reyonlar")
 def api_get_reyonlar():
-    """Get department (reyon) list"""
+    """Get sektor list for category filtering."""
     client = get_client()
     return get_reyonlar(client, TABLE_NAME)
 
@@ -379,9 +564,10 @@ def api_get_alerts_summary(
         # Note: Check signature. get_alerts_summary(client, region_ids, store_ids, category_ids, ...)
         raw_data = get_alerts_summary(
             client,
+            table_name=TABLE_NAME,
             region_ids=regionIds,
             store_ids=[int(s) for s in storeIds] if storeIds else None,
-            category_ids=[int(c) for c in categoryIds] if categoryIds else None,
+            category_ids=categoryIds,
         )
 
         # Keep compatibility with both old and new alerts-summary formats.
@@ -504,7 +690,7 @@ def api_get_demand_kpis(
         client,
         region_ids=regionIds,
         store_ids=[int(s) for s in storeIds] if storeIds else None,
-        category_ids=[int(c) for c in categoryIds] if categoryIds else None,
+        category_ids=categoryIds,
         product_ids=[int(p) for p in productIds] if productIds else None,
         period_value=periodValue,
         period_unit=periodUnit,
@@ -526,7 +712,7 @@ def api_get_demand_trend_forecast(
         client,
         store_ids=[int(s) for s in storeIds] if storeIds else None,
         product_ids=[int(p) for p in productIds] if productIds else None,
-        category_ids=[int(c) for c in categoryIds] if categoryIds else None,
+        category_ids=categoryIds,
         period=period,
         days_past=daysPast,
         days_future=daysFuture,
@@ -545,7 +731,7 @@ def api_get_demand_year_comparison(
         client,
         store_ids=[int(s) for s in storeIds] if storeIds else None,
         product_ids=[int(p) for p in productIds] if productIds else None,
-        category_ids=[int(c) for c in categoryIds] if categoryIds else None,
+        category_ids=categoryIds,
         table_name=TABLE_NAME
     )
 
@@ -561,7 +747,7 @@ def api_get_demand_monthly_bias(
         client,
         store_ids=[int(s) for s in storeIds] if storeIds else None,
         product_ids=[int(p) for p in productIds] if productIds else None,
-        category_ids=[int(c) for c in categoryIds] if categoryIds else None,
+        category_ids=categoryIds,
         table_name=TABLE_NAME
     )
 
@@ -578,7 +764,7 @@ def api_get_demand_growth_products(
     return get_growth_products(
         client,
         store_ids=[int(s) for s in storeIds] if storeIds else [],
-        category_ids=[int(c) for c in categoryIds] if categoryIds else None,
+        category_ids=categoryIds,
         product_ids=[int(p) for p in productIds] if productIds else None,
         type_=type,
         days=days,
@@ -599,7 +785,7 @@ def api_get_demand_forecast_errors(
     return get_forecast_errors(
         client,
         store_ids=[int(s) for s in storeIds] if storeIds else None,
-        category_ids=[int(c) for c in categoryIds] if categoryIds else None,
+        category_ids=categoryIds,
         product_ids=[int(p) for p in productIds] if productIds else None,
         severity_filter=severityFilter,
         days=days,
@@ -621,186 +807,135 @@ def api_get_promotion_history(
 ):
     """Get promotion history rows at campaign-period granularity."""
     client = get_client()
-    where_clauses = [
-        "aktifPromosyonKodu IS NOT NULL",
-        "toString(aktifPromosyonKodu) != '17'",
-        "aktifPromosyonAdi IS NOT NULL",
-        "aktifPromosyonAdi != ''",
-        "aktifPromosyonAdi != 'Tayin edilmedi'",
-    ]
-
+    where_clauses = ["(toString(aktifPromosyonKodu) NOT IN ('', '0') OR indirimVar = 1)"]
     if productIds:
-        product_list = ", ".join(str(p) for p in productIds)
-        where_clauses.append(f"toInt64(urunkodu) IN ({product_list})")
-
+        where_clauses.append(f"toString(urunkodu) IN ({_quote_sql_list(productIds)})")
     if storeIds:
-        store_list = ", ".join(str(s) for s in storeIds)
-        where_clauses.append(f"toInt64(magazakodu) IN ({store_list})")
-
+        where_clauses.append(f"toString(magazakodu) IN ({_quote_sql_list(storeIds)})")
     if regionIds:
-        region_list = ", ".join(
-            "'" + str(r).replace("'", "''").lower() + "'" for r in regionIds
-        )
-        where_clauses.append(f"lowerUTF8(cografi_bolge) IN ({region_list})")
-
+        where_clauses.append(f"lower(il) IN ({_quote_sql_list(regionIds, lower=True)})")
     if categoryIds:
-        category_list = ", ".join(
-            "'" + str(c).replace("'", "''") + "'" for c in categoryIds
-        )
-        where_clauses.append(f"toString(reyonkodu) IN ({category_list})")
-
+        where_clauses.append(f"toString(hier2_kod) IN ({_quote_sql_list(categoryIds)})")
     where_sql = " AND ".join(where_clauses)
 
     query = f"""
-    WITH daily AS (
+    WITH source AS (
         SELECT
-            toDate(tarih) AS campaign_date,
-            toInt64(magazakodu) AS store_code,
-            toInt64(urunkodu) AS product_code,
-            any(lowerUTF8(cografi_bolge)) AS region_value,
-            any(toString(reyonkodu)) AS category_value,
+            toDate(tarih) AS event_date,
+            magazakodu,
+            urunkodu,
+            il,
+            hier2_ad AS sektor,
             toString(aktifPromosyonKodu) AS promo_code,
-            any(aktifPromosyonAdi) AS promo_name,
-            toString(aktifPromosyonKodu) AS promo_type,
-            round(sum((satismiktari - roll_mean_14) * satisFiyati), 2) AS uplift_val,
-            round(sum(satistutarikdvsiz) * 0.08, 2) AS profit_val,
-            round(avg(100 - abs((satismiktari - roll_mean_14) / nullIf(roll_mean_14, 0)) * 100), 2) AS forecast_accuracy,
-            round(sum(satismiktari * satisFiyati * greatest(indirimYuzdesi, 0) / 100.0), 2) AS markdown_cost,
-            round(sum(greatest(roll_mean_14 - satismiktari, 0) * satisFiyati), 2) AS lost_sales_val,
-            round(sum(roll_mean_14 * satisFiyati), 2) AS target_revenue,
-            max(if(stok_out = 1, 1, 0)) AS stock_out_flag
+            multiIf(
+                toString(aktifPromosyonKodu) IN ('', '0'), 'Promosyon Yok',
+                abs(toFloat64(indirimYuzdesi)) > 0,
+                    concat('Promo ', toString(aktifPromosyonKodu), ' - %', toString(toInt32(round(abs(toFloat64(indirimYuzdesi)))))),
+                concat('Promo ', toString(aktifPromosyonKodu))
+            ) AS promo_name,
+            multiIf(
+                abs(toFloat64(indirimYuzdesi)) >= 25, 'Yuksek Indirim',
+                abs(toFloat64(indirimYuzdesi)) >= 10, 'Indirim Kampanyasi',
+                'Kod Bazli Kampanya'
+            ) AS promo_type,
+            toFloat64(satismiktari) AS actual_units,
+            avg(toFloat64(satismiktari)) OVER (
+                PARTITION BY magazakodu, urunkodu
+                ORDER BY toDate(tarih)
+                ROWS BETWEEN 13 PRECEDING AND CURRENT ROW
+            ) AS baseline_units,
+            toFloat64(acilis_stok) AS stock_units,
+            toFloat64(satistutarikdvsiz) AS actual_revenue,
+            if(
+                toFloat64(satismiktari) > 0,
+                toFloat64(satistutarikdvsiz) / toFloat64(satismiktari),
+                toFloat64(satisFiyati)
+            ) AS unit_price,
+            toFloat64(maliyetFiyati) AS cost_price,
+            toFloat64(indirimYuzdesi) AS discount_pct,
+            toUInt8(stok_out) AS stock_out_flag
         FROM {TABLE_NAME}
         WHERE {where_sql}
-        GROUP BY campaign_date, store_code, product_code, promo_code
-    ),
-    daily_with_seq AS (
-        SELECT
-            *,
-            row_number() OVER (
-                PARTITION BY store_code, product_code, promo_code
-                ORDER BY campaign_date
-            ) AS seq_no
-        FROM daily
-    ),
-    periodized AS (
-        SELECT
-            *,
-            (toInt32(toRelativeDayNum(campaign_date)) - toInt32(seq_no)) AS period_group
-        FROM daily_with_seq
-    ),
-    period_agg AS (
-        SELECT
-            max(campaign_date) AS event_date,
-            min(campaign_date) AS campaign_start_date,
-            max(campaign_date) AS campaign_end_date,
-            store_code,
-            product_code,
-            any(region_value) AS region_value,
-            any(category_value) AS category_value,
-            promo_code,
-            any(promo_name) AS promo_name,
-            any(promo_type) AS promo_type,
-            round(sum(uplift_val), 2) AS uplift_val,
-            round(sum(profit_val), 2) AS profit_val,
-            if(max(stock_out_flag) = 1, 'OOS', 'OK') AS stock_status,
-            round(avg(forecast_accuracy), 2) AS forecast_accuracy,
-            round(sum(markdown_cost), 2) AS stock_cost_increase,
-            round(sum(lost_sales_val), 2) AS lost_sales_val,
-            round(sum(target_revenue), 2) AS target_revenue
-        FROM periodized
-        GROUP BY store_code, product_code, promo_code, period_group
     )
     SELECT
-        event_date,
-        campaign_start_date,
-        campaign_end_date,
-        store_code,
-        product_code,
-        region_value,
-        category_value,
-        promo_code,
-        promo_name,
-        promo_type,
+        concat(toString(magazakodu), '_', toString(urunkodu), '_', promo_code, '_', toString(min(event_date))) AS campaignKey,
+        max(event_date) AS eventDate,
+        min(event_date) AS campaignStartDate,
+        max(event_date) AS campaignEndDate,
+        magazakodu AS storeCode,
+        urunkodu AS productCode,
+        any(il) AS region,
+        any(sektor) AS category,
+        promo_code AS promoCode,
+        concat(toString(min(event_date)), ' - ', toString(max(event_date))) AS date,
+        any(promo_name) AS name,
+        any(promo_type) AS type,
         round(
-            if(target_revenue = 0, 0, (uplift_val / target_revenue) * 100),
+            100 * (sum(actual_units) - sum(greatest(baseline_units, 0)))
+            / nullIf(sum(greatest(baseline_units, 0)), 0),
             2
-        ) AS uplift_pct,
-        uplift_val,
-        profit_val,
-        stock_status,
-        forecast_accuracy,
-        stock_cost_increase,
-        lost_sales_val
-    FROM period_agg
-    ORDER BY campaign_end_date DESC, store_code, product_code, promo_code
-    LIMIT {limit}
+        ) AS uplift,
+        round(sum(actual_revenue) - sum(greatest(baseline_units, 0) * unit_price), 2) AS upliftVal,
+        round(sum(actual_revenue - (actual_units * cost_price)), 2) AS profit,
+        round(avg(stock_units), 2) AS stock,
+        round(sum(greatest(baseline_units, 0)), 2) AS forecast,
+        round(avg(stock_units * cost_price), 2) AS stockCostIncrease,
+        round(sum(if(stock_out_flag = 1, greatest(baseline_units - actual_units, 0) * unit_price, 0)), 2) AS lostSalesVal
+    FROM source
+    GROUP BY magazakodu, urunkodu, promo_code
+    ORDER BY campaignEndDate DESC, campaignStartDate DESC
+    LIMIT {int(limit)}
     """
 
-    rows = client.query(query).result_set
-    def safe_number(value: Optional[float]) -> float:
-        if value is None:
-            return 0.0
-        try:
-            n = float(value)
-            return n if math.isfinite(n) else 0.0
-        except Exception:
-            return 0.0
-
-    def safe_text(value: Optional[object], fallback: str = "") -> str:
-        if value is None:
-            return fallback
-        try:
-            if isinstance(value, float) and not math.isfinite(value):
-                return fallback
-            text = str(value)
-            return text if text.strip() else fallback
-        except Exception:
-            return fallback
-
+    rows = client.query(query).result_rows
     history = []
     for row in rows:
-        (event_date, campaign_start_date, campaign_end_date, store_code, product_code, region_value, category_value, promo_code, promo_name, promo_type, uplift_pct, uplift_val, profit_val, stock_status,
-         forecast_accuracy, stock_cost_increase, lost_sales_val) = row
-        event_date_value = safe_text(event_date, "")
-        campaign_start_date_value = safe_text(campaign_start_date, event_date_value)
-        campaign_end_date_value = safe_text(campaign_end_date, event_date_value)
-        store_code_value = int(safe_number(store_code))
-        product_code_value = int(safe_number(product_code))
-        region_value_text = safe_text(region_value, "")
-        category_value_text = safe_text(category_value, "")
-        promo_code_value = safe_text(promo_code, "")
-        campaign_key = (
-            f"{store_code_value}_{product_code_value}_{promo_code_value}_"
-            f"{campaign_start_date_value}_{campaign_end_date_value}"
+        (
+            campaign_key,
+            event_date,
+            campaign_start,
+            campaign_end,
+            store_code,
+            product_code,
+            region,
+            category,
+            promo_code,
+            date_label,
+            name,
+            promo_type,
+            uplift,
+            uplift_val,
+            profit,
+            stock,
+            forecast,
+            stock_cost_increase,
+            lost_sales_val,
+        ) = row
+        type_label = f"{promo_type} (Kod: {promo_code})"
+        history.append(
+            {
+                "campaignKey": str(campaign_key),
+                "eventDate": event_date.isoformat() if event_date else None,
+                "campaignStartDate": campaign_start.isoformat() if campaign_start else None,
+                "campaignEndDate": campaign_end.isoformat() if campaign_end else None,
+                "storeCode": int(store_code),
+                "productCode": int(product_code),
+                "region": str(region or ""),
+                "category": str(category or ""),
+                "promoCode": str(promo_code),
+                "date": str(date_label),
+                "name": str(name or ""),
+                "type": str(promo_type or ""),
+                "typeLabel": type_label,
+                "uplift": round(float(uplift or 0), 2),
+                "upliftVal": round(float(uplift_val or 0), 2),
+                "profit": round(float(profit or 0), 2),
+                "stock": str(round(float(stock or 0), 2)),
+                "forecast": round(float(forecast or 0), 2),
+                "stockCostIncrease": round(float(stock_cost_increase or 0), 2),
+                "lostSalesVal": round(float(lost_sales_val or 0), 2),
+            }
         )
-        promo_name_text = safe_text(promo_name, "")
-        if promo_name_text:
-            type_label = f"{promo_name_text} (Kod: {promo_code_value})"
-        else:
-            type_label = f"Kod: {promo_code_value}"
-        history.append({
-            "campaignKey": campaign_key,
-            "eventDate": event_date_value,
-            "campaignStartDate": campaign_start_date_value,
-            "campaignEndDate": campaign_end_date_value,
-            "storeCode": store_code_value,
-            "productCode": product_code_value,
-            "region": region_value_text,
-            "category": category_value_text,
-            "promoCode": promo_code_value,
-            "date": event_date_value,
-            "name": promo_name_text or f"Promosyon {safe_text(promo_type, '')}",
-            "type": safe_text(promo_type, ""),
-            "typeLabel": type_label,
-            "uplift": safe_number(uplift_pct),
-            "upliftVal": safe_number(uplift_val),
-            "profit": safe_number(profit_val),
-            "stock": safe_text(stock_status, "OK"),
-            "forecast": safe_number(forecast_accuracy),
-            "stockCostIncrease": safe_number(stock_cost_increase),
-            "lostSalesVal": safe_number(lost_sales_val),
-        })
-
     return {"history": history}
 
 
@@ -841,127 +976,134 @@ def api_get_campaign_detail_series(
         start_date_obj = event_date_obj - timedelta(days=windowDaysBefore)
         end_date_obj = event_date_obj + timedelta(days=windowDaysAfter)
 
-    start_date = start_date_obj.isoformat()
-    end_date = end_date_obj.isoformat()
-
     query = f"""
-    WITH
-      toDate('{start_date}') AS start_date,
-      toDate('{end_date}') AS end_date
+    WITH source AS (
+        SELECT
+            toDate(tarih) AS tarih,
+            toFloat64(satismiktari)                                               AS actual_units,
+            avg(toFloat64(satismiktari)) OVER (
+                PARTITION BY magazakodu, urunkodu
+                ORDER BY toDate(tarih)
+                ROWS BETWEEN 13 PRECEDING AND CURRENT ROW
+            )                                                                     AS baseline_raw,
+            toFloat64(acilis_stok)                                                AS stock_units,
+            toFloat64(satistutarikdvsiz)                                          AS revenue,
+            if(
+                toFloat64(satismiktari) > 0,
+                toFloat64(satistutarikdvsiz) / toFloat64(satismiktari),
+                toFloat64(satisFiyati)
+            )                                                                     AS unit_price,
+            toFloat64(maliyetFiyati)                                              AS cost_price,
+            toUInt8(stok_out)                                                     AS stock_out_flag
+        FROM {TABLE_NAME}
+        WHERE magazakodu = {int(storeCode)}
+          AND urunkodu = {int(productCode)}
+          AND toString(aktifPromosyonKodu) = '{str(promoCode).replace("'", "''")}'
+          AND toDate(tarih) >= toDate('{start_date_obj.isoformat()}')
+          AND toDate(tarih) <= toDate('{end_date_obj.isoformat()}')
+    ),
+    expanded AS (
+        SELECT
+            tarih,
+            actual_units,
+            greatest(baseline_raw, 0)                          AS baseline_units,
+            stock_units,
+            revenue,
+            unit_price,
+            cost_price,
+            stock_out_flag,
+            -- pre-compute per-row derived columns to avoid agg-in-agg
+            greatest(baseline_raw, 0) * unit_price             AS baseline_revenue,
+            greatest(baseline_raw - actual_units, 0)           AS lost_units,
+            revenue - (actual_units * cost_price)              AS profit_row,
+            if(actual_units > 0,
+               greatest(0, 100 - abs(baseline_raw - actual_units) / actual_units * 100),
+               100)                                            AS accuracy_row
+        FROM source
+    )
     SELECT
-      toDate(tarih) AS d,
-      round(sum(roll_mean_14), 2) AS baseline_units,
-      round(sum(satismiktari), 2) AS actual_units,
-      round(avg(stok), 2) AS stock_units,
-      round(sum(greatest(roll_mean_14 - satismiktari, 0)), 2) AS lost_sales_units,
-      round(sum(satismiktari * satisFiyati), 2) AS revenue,
-      round(sum(roll_mean_14 * satisFiyati), 2) AS target_revenue,
-      max(if(stok_out = 1, 1, 0)) AS stock_out_days,
-      round(sum((satismiktari - roll_mean_14) * satisFiyati), 2) AS uplift_value,
-      round(sum(satistutarikdvsiz) * 0.08, 2) AS profit_effect,
-      round(avg(100 - abs((satismiktari - roll_mean_14) / nullIf(roll_mean_14, 0)) * 100), 2) AS forecast_accuracy,
-      round(
-        sum(satismiktari * satisFiyati * greatest(indirimYuzdesi, 0) / 100.0),
-        2
-      ) AS markdown_cost
-    FROM {TABLE_NAME}
-    WHERE toInt64(magazakodu) = {storeCode}
-      AND toInt64(urunkodu) = {productCode}
-      AND toString(aktifPromosyonKodu) = '{promoCode}'
-      AND toDate(tarih) BETWEEN start_date AND end_date
-    GROUP BY d
-    ORDER BY d ASC
+        tarih,
+        round(sum(baseline_units), 2)                          AS baselineUnits,
+        round(sum(actual_units), 2)                            AS actualUnits,
+        round(avg(stock_units), 2)                             AS stockUnits,
+        round(sum(lost_units), 2)                              AS lostSalesUnits,
+        round(sum(revenue), 2)                                 AS revenue,
+        round(sum(baseline_revenue), 2)                        AS targetRevenue,
+        sum(stock_out_flag)                                    AS stockOutDays,
+        round(sum(profit_row), 2)                              AS profitEffect,
+        round(avg(accuracy_row), 2)                            AS forecastAccuracy,
+        round(sum(baseline_revenue) - sum(revenue), 2)         AS markdownCost
+    FROM expanded
+    GROUP BY tarih
+    ORDER BY tarih
     """
+    rows = client.query(query).result_rows
+    if not rows:
+        return {
+            "series": [],
+            "summary": {
+                "targetRevenue": 0.0,
+                "actualRevenue": 0.0,
+                "soldUnits": 0.0,
+                "markdownCost": 0.0,
+                "sellThrough": 0.0,
+                "stockOutDays": 0,
+                "upliftValue": 0.0,
+                "profitEffect": 0.0,
+                "forecastAccuracy": 0.0,
+            },
+        }
 
-    rows = client.query(query).result_set
     series = []
-    total_target_revenue = 0.0
-    total_actual_revenue = 0.0
-    total_sold_units = 0.0
-    total_markdown_cost = 0.0
-    total_stock_out_days = 0
-    total_uplift_value = 0.0
-    total_profit_effect = 0.0
-    avg_sell_through_samples = []
-    avg_forecast_accuracy_samples = []
+    target_revenue_total = 0.0
+    actual_revenue_total = 0.0
+    sold_units_total = 0.0
+    markdown_cost_total = 0.0
+    stock_out_days_total = 0
+    profit_effect_total = 0.0
+    accuracy_samples: list[float] = []
+    sell_through_samples: list[float] = []
+    uplift_value_total = 0.0
 
     for row in rows:
-        (
-            d,
-            baseline_units,
-            actual_units,
-            stock_units,
-            lost_sales_units,
-            revenue,
-            target_revenue,
-            stock_out_days,
-            uplift_value,
-            profit_effect,
-            forecast_accuracy,
-            markdown_cost,
-        ) = row
-
-        baseline_units_f = float(baseline_units or 0)
-        actual_units_f = float(actual_units or 0)
-        stock_units_f = float(stock_units or 0)
-        lost_sales_units_f = float(lost_sales_units or 0)
-        revenue_f = float(revenue or 0)
-        target_revenue_f = float(target_revenue or 0)
-        stock_out_days_i = int(stock_out_days or 0)
-        uplift_value_f = float(uplift_value or 0)
-        profit_effect_f = float(profit_effect or 0)
-        forecast_accuracy_f = float(forecast_accuracy or 0)
-        markdown_cost_f = float(markdown_cost or 0)
-
-        sell_through_den = stock_units_f + actual_units_f
-        if sell_through_den > 0:
-            avg_sell_through_samples.append((actual_units_f / sell_through_den) * 100)
-        if math.isfinite(forecast_accuracy_f):
-            avg_forecast_accuracy_samples.append(forecast_accuracy_f)
-
-        total_target_revenue += target_revenue_f
-        total_actual_revenue += revenue_f
-        total_sold_units += actual_units_f
-        total_markdown_cost += markdown_cost_f
-        total_stock_out_days += stock_out_days_i
-        total_uplift_value += uplift_value_f
-        total_profit_effect += profit_effect_f
-
+        tarih, baseline_units, actual_units, stock_units, lost_sales_units, revenue, target_revenue, stock_out_days, profit_effect, forecast_accuracy, markdown_cost = row
         series.append(
             {
-                "date": str(d),
-                "baselineUnits": baseline_units_f,
-                "actualUnits": actual_units_f,
-                "stockUnits": stock_units_f,
-                "lostSalesUnits": lost_sales_units_f,
-                "revenue": revenue_f,
+                "date": tarih.isoformat() if tarih else None,
+                "baselineUnits": round(float(baseline_units or 0), 2),
+                "actualUnits": round(float(actual_units or 0), 2),
+                "stockUnits": round(float(stock_units or 0), 2),
+                "lostSalesUnits": round(float(lost_sales_units or 0), 2),
+                "revenue": round(float(revenue or 0), 2),
             }
         )
+        target_revenue_total += float(target_revenue or 0)
+        actual_revenue_total += float(revenue or 0)
+        sold_units_total += float(actual_units or 0)
+        markdown_cost_total += float(markdown_cost or 0)
+        stock_out_days_total += int(stock_out_days or 0)
+        profit_effect_total += float(profit_effect or 0)
+        uplift_value_total += float(revenue or 0) - float(target_revenue or 0)
+        if forecast_accuracy is not None:
+            accuracy_samples.append(float(forecast_accuracy))
+        denominator = float(stock_units or 0) + float(actual_units or 0)
+        if denominator > 0:
+            sell_through_samples.append(float(actual_units or 0) / denominator * 100.0)
 
-    sell_through = (
-        float(sum(avg_sell_through_samples) / len(avg_sell_through_samples))
-        if avg_sell_through_samples
-        else 0.0
-    )
-    forecast_accuracy = (
-        float(sum(avg_forecast_accuracy_samples) / len(avg_forecast_accuracy_samples))
-        if avg_forecast_accuracy_samples
-        else 0.0
-    )
-
-    summary = {
-        "targetRevenue": round(total_target_revenue, 2),
-        "actualRevenue": round(total_actual_revenue, 2),
-        "soldUnits": round(total_sold_units, 2),
-        "markdownCost": round(total_markdown_cost, 2),
-        "sellThrough": round(sell_through, 2),
-        "stockOutDays": int(total_stock_out_days),
-        "upliftValue": round(total_uplift_value, 2),
-        "profitEffect": round(total_profit_effect, 2),
-        "forecastAccuracy": round(forecast_accuracy, 2),
+    return {
+        "series": series,
+        "summary": {
+            "targetRevenue": round(target_revenue_total, 2),
+            "actualRevenue": round(actual_revenue_total, 2),
+            "soldUnits": round(sold_units_total, 2),
+            "markdownCost": round(markdown_cost_total, 2),
+            "sellThrough": round(sum(sell_through_samples) / len(sell_through_samples), 2) if sell_through_samples else 0.0,
+            "stockOutDays": stock_out_days_total,
+            "upliftValue": round(uplift_value_total, 2),
+            "profitEffect": round(profit_effect_total, 2),
+            "forecastAccuracy": round(sum(accuracy_samples) / len(accuracy_samples), 2) if accuracy_samples else 0.0,
+        },
     }
-
-    return {"series": series, "summary": summary}
 
 
 @app.get("/api/forecast/similar-campaigns")
@@ -1022,49 +1164,44 @@ def api_get_product_promotions_for_product(
     If storeCode/storeIds are omitted, promotions are aggregated across all stores.
     """
     client = get_client()
-    store_filter_sql = ""
+    where_clauses = [
+        f"urunkodu = {int(productCode)}",
+        "(toString(aktifPromosyonKodu) NOT IN ('', '0') OR indirimVar = 1)",
+    ]
     if storeCode is not None:
-        store_filter_sql = f"AND toInt64(magazakodu) = {int(storeCode)}"
+        where_clauses.append(f"magazakodu = {int(storeCode)}")
     elif storeIds:
-        unique_store_ids = sorted(set(int(s) for s in storeIds))
-        if unique_store_ids:
-            store_ids_csv = ", ".join(str(s) for s in unique_store_ids)
-            store_filter_sql = f"AND toInt64(magazakodu) IN ({store_ids_csv})"
-
+        where_clauses.append(f"toString(magazakodu) IN ({_quote_sql_list(storeIds)})")
     query = f"""
     SELECT
-        toString(aktifPromosyonKodu) AS promo_code,
-        any(aktifPromosyonAdi) AS promo_name,
-        count() AS day_count,
-        round(avg(indirimYuzdesi), 1) AS avg_discount,
-        min(tarih) AS first_date,
-        max(tarih) AS last_date
+        toString(aktifPromosyonKodu) AS code,
+        multiIf(
+            abs(toFloat64(indirimYuzdesi)) >= 25, 'Yuksek Indirim',
+            abs(toFloat64(indirimYuzdesi)) >= 10, 'Indirim Kampanyasi',
+            'Kod Bazli Kampanya'
+        ) AS typeLabel,
+        countDistinct(toDate(tarih)) AS occurrenceDays,
+        round(avg(toFloat64(indirimYuzdesi)), 1) AS avgDiscount,
+        min(toDate(tarih)) AS firstDate,
+        max(toDate(tarih)) AS lastDate
     FROM {TABLE_NAME}
-    WHERE toInt64(urunkodu) = {productCode}
-      {store_filter_sql}
-      AND aktifPromosyonKodu IS NOT NULL
-      AND toString(aktifPromosyonKodu) != '17'
-      AND aktifPromosyonAdi IS NOT NULL
-      AND aktifPromosyonAdi != ''
-      AND aktifPromosyonAdi != 'Tayin edilmedi'
-    GROUP BY promo_code
-    ORDER BY day_count DESC, last_date DESC
+    WHERE {" AND ".join(where_clauses)}
+    GROUP BY code, typeLabel
+    ORDER BY occurrenceDays DESC, lastDate DESC
     """
-
-    rows = client.query(query).result_set
-    promotions = [
-        {
-            "code": code,
-            "name": name,
-            "label": f"{name} (Kod: {code})",
-            "occurrenceDays": int(day_count or 0),
-            "avgDiscount": float(avg_discount) if avg_discount is not None else None,
-            "firstDate": str(first_date),
-            "lastDate": str(last_date),
-        }
-        for code, name, day_count, avg_discount, first_date, last_date in rows
-    ]
-
+    promotions = []
+    for code, type_label, occurrence_days, avg_discount, first_date, last_date in client.query(query).result_rows:
+        promotions.append(
+            {
+                "code": str(code),
+                "name": str(type_label),
+                "label": f"{type_label} (Kod: {code})",
+                "occurrenceDays": int(occurrence_days or 0),
+                "avgDiscount": None if avg_discount is None else round(float(avg_discount), 1),
+                "firstDate": first_date.isoformat() if first_date else None,
+                "lastDate": last_date.isoformat() if last_date else None,
+            }
+        )
     return {"promotions": promotions}
 
 
@@ -1073,34 +1210,36 @@ def api_predict_demand(payload: PredictDemandRequest):
     """Proxy request to external demand prediction model."""
     request_data = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
 
-    if payload.aktifPromosyonKodu == "17":
-        request_data["istenenIndirim"] = None
-        request_data["istenenMarj"] = None
-        request_data["istenenFiyat"] = None
-    else:
-        # External model accepts 0 as "not provided"; normalize those placeholders to null.
-        for key in ["istenenIndirim", "istenenMarj", "istenenFiyat"]:
-            if request_data.get(key) == 0:
-                request_data[key] = None
+    # Stash client + table for use in _normalize_prediction_response (stock fetch).
+    _ch_client = get_client()
+    request_data["_client"] = _ch_client
+    request_data["_table_name"] = TABLE_NAME
 
-        selected_count = sum(
-            1
-            for value in [
-                request_data.get("istenenIndirim"),
-                request_data.get("istenenMarj"),
-                request_data.get("istenenFiyat"),
-            ]
-            if value is not None
+    # External model accepts 0 as "not provided"; normalize those placeholders to null.
+    for key in ["istenenIndirim", "istenenMarj", "istenenFiyat"]:
+        if request_data.get(key) == 0:
+            request_data[key] = None
+
+    selected_count = sum(
+        1
+        for value in [
+            request_data.get("istenenIndirim"),
+            request_data.get("istenenMarj"),
+            request_data.get("istenenFiyat"),
+        ]
+        if value is not None
+    )
+    if selected_count != 1:
+        raise HTTPException(
+            status_code=400,
+            detail="istenenIndirim / istenenMarj / istenenFiyat alanlarından sadece biri dolu olmalı.",
         )
-        if selected_count != 1:
-            raise HTTPException(
-                status_code=400,
-                detail="Promosyon senaryosunda istenenIndirim / istenenMarj / istenenFiyat alanlarından sadece biri dolu olmalı.",
-            )
 
+    # Strip private keys before sending to external ML API.
+    api_payload = {k: v for k, v in request_data.items() if not k.startswith("_")}
     req = urllib.request.Request(
         PREDICTION_API_URL,
-        data=json.dumps(request_data).encode("utf-8"),
+        data=json.dumps(api_payload).encode("utf-8"),
         headers={"Content-Type": "application/json"},
         method="POST",
     )
@@ -1108,7 +1247,8 @@ def api_predict_demand(payload: PredictDemandRequest):
     try:
         with urllib.request.urlopen(req) as response:
             body = response.read().decode("utf-8")
-            return json.loads(body) if body else {"status": "ok"}
+            raw_response = json.loads(body) if body else {"status": "ok"}
+            return _normalize_prediction_response(raw_response, request_data)
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="ignore")
         detail = body or str(e)
@@ -1279,91 +1419,75 @@ def api_get_inventory_product_store_comparison(
 ):
     """Get exact product snapshot across stores for comparison."""
     client = get_client()
-    safe_product = str(productId).replace("'", "''")
-
-    store_filter_sql = ""
+    filters = [f"urunkodu = {int(productId)}"]
     if storeIds:
-        safe_store_ids = [
-            "'" + str(s).replace("'", "''") + "'"
-            for s in storeIds
-            if s is not None and str(s).strip() != ""
-        ]
-        if safe_store_ids:
-            store_filter_sql = f"AND toString(magazakodu) IN ({', '.join(safe_store_ids)})"
-
+        filters.append(f"toString(magazakodu) IN ({_quote_sql_list(storeIds)})")
     query = f"""
-    WITH latest_snapshot AS (
+    WITH anchor_date AS (
+        SELECT max(toDate(tarih)) AS d FROM {TABLE_NAME}
+    ),
+    latest_rows AS (
         SELECT
             toString(magazakodu) AS storeCode,
-            toString(reyonkodu) AS categoryCode,
-            urunismi AS productName,
-            bulundugusehir AS city,
-            ilce AS district,
-            greatest(toFloat64(stok), 0) AS stockLevel,
-            greatest(toFloat64(roll_mean_7), 0) AS forecastDaily,
-            greatest(toFloat64(degerlenmisstok), 0) AS stockValue,
-            greatest(toFloat64(satisFiyati), 0) AS price
+            anyLast(concat(il, ' - ', ilce)) AS storeName,
+            anyLast(urunAdi) AS productName,
+            argMax(toFloat64(acilis_stok), tarih) AS stockLevel,
+            argMax(toFloat64(satisFiyati), tarih) AS price,
+            argMax(toFloat64(degerlenmisstok), tarih) AS stockValue
         FROM {TABLE_NAME}
-        WHERE toString(urunkodu) = '{safe_product}'
-          {store_filter_sql}
-        ORDER BY tarih DESC
-        LIMIT 1 BY urunkodu, reyonkodu, magazakodu
+        WHERE {" AND ".join(filters)}
+        GROUP BY magazakodu
     ),
-    latest AS (
+    forecast_rows AS (
         SELECT
-            storeCode,
-            any(productName) AS productName,
-            any(city) AS city,
-            any(district) AS district,
-            sum(stockLevel) AS stockLevel,
-            sum(forecastDaily) AS forecastDaily,
-            sum(stockValue) AS stockValue,
-            avg(price) AS price
-        FROM latest_snapshot
-        GROUP BY storeCode
+            toString(magazakodu) AS storeCode,
+            avgIf(
+                toFloat64(satismiktari),
+                toDate(tarih) >= addDays((SELECT d FROM anchor_date), -6)
+                AND toDate(tarih) <= (SELECT d FROM anchor_date)
+            ) AS forecastedDemand
+        FROM {TABLE_NAME}
+        WHERE {" AND ".join(filters)}
+        GROUP BY magazakodu
     )
     SELECT
-        storeCode,
-        if(
-            lengthUTF8(trim(BOTH ' ' FROM coalesce(district, ''))) = 0,
-            coalesce(city, storeCode),
-            concat(coalesce(city, storeCode), ' - ', district)
-        ) AS storeName,
-        productName,
-        toInt64(round(stockLevel, 0)) AS stockLevel,
-        toInt64(round(forecastDaily * 7, 0)) AS reorderPoint,
-        toInt64(round(forecastDaily * 30, 0)) AS forecastedDemand,
-        round(price, 2) AS price,
-        round(stockValue, 2) AS stockValue,
-        round(stockLevel / nullIf(forecastDaily, 0), 1) AS daysOfCoverage,
+        l.storeCode,
+        l.storeName,
+        l.productName,
+        l.stockLevel,
+        round(greatest(coalesce(f.forecastedDemand, 0), 0) * 7, 0) AS reorderPoint,
+        round(greatest(coalesce(f.forecastedDemand, 0), 0), 0) AS forecastedDemand,
+        l.price,
+        l.stockValue,
+        round(l.stockLevel / nullIf(greatest(coalesce(f.forecastedDemand, 0), 0), 0), 1) AS daysOfCoverage,
         multiIf(
-            stockLevel = 0, 'Out of Stock',
-            stockLevel < forecastDaily * 3, 'Low Stock',
-            stockLevel > forecastDaily * 30, 'Overstock',
+            l.stockLevel <= 0, 'Out of Stock',
+            l.stockLevel <= greatest(coalesce(f.forecastedDemand, 0), 0) * 7, 'Low Stock',
+            l.stockLevel > greatest(coalesce(f.forecastedDemand, 0), 0) * 30, 'Overstock',
             'In Stock'
         ) AS status
-    FROM latest
-    ORDER BY toInt64OrZero(storeCode) ASC
+    FROM latest_rows l
+    LEFT JOIN forecast_rows f ON l.storeCode = f.storeCode
+    ORDER BY l.storeCode
     """
-
-    rows = client.query(query).result_rows
-    return {
-        "items": [
+    items = []
+    for row in client.query(query).result_rows:
+        store_code, store_name, product_name, stock_level, reorder_point, forecasted_demand, price, stock_value, days_of_coverage, status = row
+        items.append(
             {
-                "storeCode": r[0],
-                "storeName": r[1],
-                "productName": r[2],
-                "stockLevel": int(r[3] or 0),
-                "reorderPoint": int(r[4] or 0),
-                "forecastedDemand": int(r[5] or 0),
-                "price": float(r[6] or 0),
-                "stockValue": float(r[7] or 0),
-                "daysOfCoverage": float(r[8] or 0),
-                "status": r[9],
+                "storeCode": str(store_code),
+                "storeName": str(store_name or ""),
+                "productName": str(product_name or ""),
+                "stockLevel": int(round(float(stock_level or 0))),
+                "reorderPoint": int(round(float(reorder_point or 0))),
+                "forecastedDemand": int(round(float(forecasted_demand or 0))),
+                "price": round(float(price or 0), 2),
+                "stockValue": round(float(stock_value or 0), 2),
+                "daysOfCoverage": round(float(days_of_coverage or 0), 1),
+                "status": str(status or "In Stock"),
             }
-            for r in rows
-        ]
-    }
+        )
+    return {"items": items}
 
 
 # =============================================================================
@@ -1375,10 +1499,18 @@ def health_check():
     """Health check endpoint"""
     try:
         client = get_client()
-        client.query("SELECT 1")
-        return {"status": "healthy", "database": "connected"}
+        row_count, latest_date = client.query(
+            f"SELECT count() AS rows, max(toDate(tarih)) AS latestDate FROM {TABLE_NAME}"
+        ).first_row
+        return {
+            "status": "healthy",
+            "database": "clickhouse",
+            "rows": int(row_count or 0),
+            "latestDate": latest_date.isoformat() if latest_date else None,
+            "table": TABLE_NAME,
+        }
     except Exception as e:
-        return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
+        return {"status": "unhealthy", "database": "clickhouse", "error": str(e)}
 
 
 # =============================================================================

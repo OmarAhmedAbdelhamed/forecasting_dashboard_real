@@ -5,6 +5,131 @@ from datetime import date, timedelta
 import math
 import random
 import hashlib
+import re
+
+# Legacy note:
+# This module was originally written against the older ClickHouse layout
+# that exposed fields such as `reyonkodu`, `urunismi`, `bulundugusehir`,
+# `stok`, and precomputed rolling means. The current dataset keeps the same
+# business concepts but uses the gokkusagi/parquet schema instead.
+# New canonical mappings:
+# - sektor code  -> `hier2_kod`
+# - sektor label -> `hier2_ad`
+# - product name -> `urunAdi`
+# - city         -> `il`
+# - stock        -> `acilis_stok`
+# - year         -> derived from `tarih`
+# - roll means   -> calculated in backend from `satismiktari`
+# The active backend logic now computes these compatibility fields in
+# `API/main.py` so the existing REST routes can keep their contracts.
+
+SEKTOR_CODE_COLUMN = "hier2_kod"
+SEKTOR_LABEL_COLUMN = "hier2_ad"
+
+
+def _escape_sql_string(value: object) -> str:
+    return str(value).replace("'", "''")
+
+
+def _quote_sql(values: list[object] | None, *, lower: bool = False) -> str:
+    if not values:
+        return ""
+
+    quoted: list[str] = []
+    for value in values:
+        if value is None:
+            continue
+        token = str(value).strip()
+        if not token:
+            continue
+        if lower:
+            token = token.lower()
+        quoted.append(f"'{_escape_sql_string(token)}'")
+    return ", ".join(quoted)
+
+
+def _compat_table(table_name: str) -> str:
+    return f"""
+    (
+        SELECT
+            toDate(tarih) AS tarih,
+            magazakodu,
+            magazaAdi,
+            il,
+            il AS bulundugusehir,
+            ilce,
+            il AS cografi_bolge,
+            urunkodu,
+            urunAdi,
+            urunAdi AS urunismi,
+            markaAdi,
+            kategoriKodu,
+            hier1_kod,
+            hier1_ad,
+            hier2_kod,
+            hier2_kod AS reyonkodu,
+            hier2_ad,
+            hier3_kod,
+            hier3_ad,
+            satismiktari,
+            satistutarikdvsiz,
+            indirimYuzdesi,
+            indirimVar,
+            if(
+                toUInt8(indirimVar) = 1 OR toString(aktifPromosyonKodu) NOT IN ('', '0'),
+                1,
+                0
+            ) AS promosyonVar,
+            ozel_gun_kodu,
+            tufe,
+            temp,
+            icon,
+            acilis_stok,
+            acilis_stok AS stok,
+            maliyetFiyati,
+            satisFiyati,
+            toString(aktifPromosyonKodu) AS aktifPromosyonKodu,
+            multiIf(
+                toString(aktifPromosyonKodu) IN ('', '0'), 'Promosyon Yok',
+                abs(toFloat64(indirimYuzdesi)) > 0,
+                    concat('Promo ', toString(aktifPromosyonKodu), ' - %', toString(toInt32(round(abs(toFloat64(indirimYuzdesi)))))),
+                concat('Promo ', toString(aktifPromosyonKodu))
+            ) AS aktifPromosyonAdi,
+            multiIf(
+                toString(aktifPromosyonKodu) IN ('', '0'), 'Promosyon Yok',
+                abs(toFloat64(indirimYuzdesi)) >= 25, 'Yuksek Indirim',
+                abs(toFloat64(indirimYuzdesi)) >= 10, 'Indirim Kampanyasi',
+                'Kod Bazli Kampanya'
+            ) AS promo_type,
+            stok_out,
+            avmcadde,
+            sezon,
+            stok_out_gun_sayisi,
+            degerlenmisstok,
+            cluster,
+            toYear(tarih) AS yil,
+            avg(toFloat64(satismiktari)) OVER (
+                PARTITION BY magazakodu, urunkodu
+                ORDER BY toDate(tarih)
+                ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+            ) AS roll_mean_7,
+            avg(toFloat64(satismiktari)) OVER (
+                PARTITION BY magazakodu, urunkodu
+                ORDER BY toDate(tarih)
+                ROWS BETWEEN 13 PRECEDING AND CURRENT ROW
+            ) AS roll_mean_14,
+            avg(toFloat64(satismiktari)) OVER (
+                PARTITION BY magazakodu, urunkodu
+                ORDER BY toDate(tarih)
+                ROWS BETWEEN 20 PRECEDING AND CURRENT ROW
+            ) AS roll_mean_21
+        FROM {table_name}
+    )
+    """
+
+
+def _anchor_date_expr(raw_table_name: str) -> str:
+    return f"(SELECT max(toDate(tarih)) FROM {raw_table_name})"
 
 
 def _normalize_filter_ids(values: list[str] | None) -> list[str]:
@@ -29,7 +154,8 @@ def _normalize_filter_ids(values: list[str] | None) -> list[str]:
         if "_" in token:
             token = token.split("_")[-1]
 
-        if token.isdigit():
+        token = re.sub(r"[^0-9A-Za-z_-]", "", token)
+        if token:
             normalized.append(token)
 
     # Keep order, drop duplicates
@@ -86,11 +212,15 @@ def get_regions_hierarchy(
     client,
     table_name: str = "demoVerileri"
 ) -> dict:
+    raw_table_name = table_name
+    table_name = _compat_table(table_name)
+    anchor_date = _anchor_date_expr(raw_table_name)
 
     # ----- kategori kodları map -----
     
 
     # ----- clickhouse sorgu -----
+    table_name = _compat_table(table_name)
     query = f"""
     SELECT
         lowerUTF8(cografi_bolge) AS region,
@@ -102,7 +232,7 @@ def get_regions_hierarchy(
         any(stok) AS current_stock,
         anyLast(roll_mean_14) AS forecast_demand
     FROM {table_name}
-    WHERE tarih = yesterday()
+    WHERE tarih = {anchor_date}
     GROUP BY
         region,
         store_key,
@@ -127,7 +257,7 @@ def get_regions_hierarchy(
     ) in rows:
 
         # kategori kodunu isim ile değiştir
-        category_name = category_map.get(int(category_code), f"Kategori {category_code}")
+        category_name = str(category_code)
 
         regions.setdefault(region, {
             "value": region,
@@ -187,9 +317,10 @@ def get_stores(
     Optional filter by regionIds (cografi_bolge).
     """
 
+    table_name = _compat_table(table_name)
     where_clause = ""
     if region_ids:
-        region_list = ", ".join(f"'{r.lower()}'" for r in region_ids)
+        region_list = _quote_sql(region_ids, lower=True)
         where_clause = f"WHERE lower(cografi_bolge) IN ({region_list})"
 
     query = f"""
@@ -231,16 +362,15 @@ def get_categories(
     Category value format: {storeValue}_{categoryValue}
     Optional filters: storeIds, regionIds
     """
-
-
+    table_name = _compat_table(table_name)
     where_clauses = ["1=1"]
 
     if store_ids:
-        store_list = ", ".join(f"'{s}'" for s in store_ids)
+        store_list = _quote_sql(store_ids)
         where_clauses.append(f"toString(magazakodu) IN ({store_list})")
 
     if region_ids:
-        region_list = ", ".join(f"'{r.lower()}'" for r in region_ids)
+        region_list = _quote_sql(region_ids, lower=True)
         where_clauses.append(f"lower(cografi_bolge) IN ({region_list})")
 
     where_sql = ""
@@ -248,25 +378,23 @@ def get_categories(
         where_sql = "WHERE " + " AND ".join(where_clauses)
 
     query = f"""
-    SELECT DISTINCT
+    SELECT
         concat(
             toString(magazakodu),
             '_',
             toString(reyonkodu)
         )                               AS value,
         reyonkodu                        AS category_code,
+        any(hier2_ad)                    AS category_label,
         toString(magazakodu)              AS storeValue
     FROM {table_name}
     {where_sql}
-    ORDER BY category_code
+    GROUP BY value, category_code, storeValue
+    ORDER BY category_label, category_code
     """
 
     df = client.query_df(query)
-
-    # ----- category_code -> category_name -----
-    df["label"] = df["category_code"].apply(
-        lambda c: category_map.get(int(c), f"Kategori {c}")
-    )
+    df["label"] = df["category_label"].fillna(df["category_code"]).astype(str)
 
     return {
         "categories": [
@@ -302,14 +430,15 @@ def get_products(
       - categoryIds (store_reyonkodu or reyonkodu)
     """
 
+    table_name = _compat_table(table_name)
     where_clauses = ["1=1"]
 
     if region_ids:
-        region_list = ", ".join(f"'{r.lower()}'" for r in region_ids)
+        region_list = _quote_sql(region_ids, lower=True)
         where_clauses.append(f"lower(cografi_bolge) IN ({region_list})")
 
     if store_ids:
-        store_list = ", ".join(f"'{s}'" for s in store_ids)
+        store_list = _quote_sql(store_ids)
         where_clauses.append(f"toString(magazakodu) IN ({store_list})")
 
     if category_ids:
@@ -399,25 +528,27 @@ def get_reyonlar(
     table_name: str = "demoVerileri"
 ) -> dict:
     """
-    Returns flat reyon (department) list.
+    Returns flat sektor list.
     Independent from region / store hierarchy.
     """
 
     # ----- kategori kodları map -----
 
     query = f"""
-    SELECT DISTINCT
-        reyonkodu AS category_code
+    SELECT
+        reyonkodu AS category_code,
+        any(hier2_ad) AS category_label
     FROM {table_name}
     WHERE reyonkodu IS NOT NULL
-    ORDER BY category_code
+    GROUP BY category_code
+    ORDER BY category_label, category_code
     """
 
     df = client.query_df(query)
 
     # ----- category_code -> category_name -----
     df["value"] = df["category_code"].astype(str)
-    df["label"] = df["category_code"].apply(lambda c: category_map.get(int(c), f"Kategori {c}"))
+    df["label"] = df["category_label"].fillna(df["category_code"]).astype(str)
 
     return {
         "reyonlar": [
@@ -445,18 +576,21 @@ def get_dashboard_metrics(
     YTD based on current year starting Jan 1st.
     """
     from datetime import date
+    raw_table_name = table_name
+    table_name = _compat_table(table_name)
+    anchor_date = _anchor_date_expr(raw_table_name)
     today_dt = date.today()
     start_of_year = date(today_dt.year, 1, 1).isoformat()
 
     common_where = ["1=1"]
     if region_ids:
-        region_list = ", ".join(f"'{r.lower()}'" for r in region_ids)
+        region_list = _quote_sql(region_ids, lower=True)
         common_where.append(f"lower(cografi_bolge) IN ({region_list})")
     if store_ids:
-        store_list = ", ".join(f"'{s}'" for s in store_ids)
+        store_list = _quote_sql(store_ids)
         common_where.append(f"toString(magazakodu) IN ({store_list})")
     if category_ids:
-        category_list = ", ".join(f"'{c}'" for c in category_ids)
+        category_list = _quote_sql(category_ids)
         common_where.append(f"toString(reyonkodu) IN ({category_list})")
 
     where_sql = " AND ".join(common_where)
@@ -472,7 +606,8 @@ def get_dashboard_metrics(
             sum(satistutarikdvsiz) AS actual_revenue
         FROM {table_name}
         WHERE {where_sql}
-          AND tarih >= today() - 13
+          AND tarih >= addDays({anchor_date}, -13)
+          AND tarih <= {anchor_date}
     ),
     prev_forecast AS (
         -- Previous 14 days for growth calculation
@@ -480,7 +615,7 @@ def get_dashboard_metrics(
             sum(roll_mean_14) AS prev_unit
         FROM {table_name}
         WHERE {where_sql}
-          AND tarih BETWEEN today() - 27 AND today() - 14
+          AND tarih BETWEEN addDays({anchor_date}, -27) AND addDays({anchor_date}, -14)
     ),
     ytd_stats AS (
         -- YTD from Jan 1st
@@ -490,7 +625,7 @@ def get_dashboard_metrics(
         FROM {table_name}
         WHERE {where_sql}
           AND tarih >= '{start_of_year}'
-          AND tarih <= today()
+          AND tarih <= {anchor_date}
     ),
     ytd_prev_stats AS (
         -- Previous YTD (approximate for change calculation, e.g., same period last year)
@@ -499,7 +634,7 @@ def get_dashboard_metrics(
         FROM {table_name}
         WHERE {where_sql}
           AND tarih >= addYears(toDate('{start_of_year}'), -1)
-          AND tarih <= addYears(today(), -1)
+          AND tarih <= addYears({anchor_date}, -1)
     )
     SELECT
         -- Accuracy based on units
@@ -561,18 +696,21 @@ def get_dashboard_revenue_chart(
     plan   = avg(roll_mean_14) * 7
     """
 
-    where_clauses = ["tarih >= today() - 60"]
+    raw_table_name = table_name
+    table_name = _compat_table(table_name)
+    anchor_date = _anchor_date_expr(raw_table_name)
+    where_clauses = [f"tarih >= addDays({anchor_date}, -60)", f"tarih <= {anchor_date}"]
 
     if region_ids:
-        region_list = ", ".join(f"'{r.lower()}'" for r in region_ids)
+        region_list = _quote_sql(region_ids, lower=True)
         where_clauses.append(f"lower(cografi_bolge) IN ({region_list})")
 
     if store_ids:
-        store_list = ", ".join(f"'{s}'" for s in store_ids)
+        store_list = _quote_sql(store_ids)
         where_clauses.append(f"toString(magazakodu) IN ({store_list})")
 
     if category_ids:
-        category_list = ", ".join(f"'{c}'" for c in category_ids)
+        category_list = _quote_sql(category_ids)
         where_clauses.append(f"toString(reyonkodu) IN ({category_list})")
 
     where_sql = " AND ".join(where_clauses)
@@ -617,6 +755,7 @@ def get_dashboard_historical_chart(
     Current year stops at the last complete week.
     """
     from datetime import date
+    table_name = _compat_table(table_name)
     today = date.today()
     curr_year = today.year
     curr_week = today.isocalendar()[1]
@@ -626,15 +765,15 @@ def get_dashboard_historical_chart(
     where_clauses = [f"yil IN ({','.join(map(str, years))})"]
 
     if region_ids:
-        region_list = ", ".join(f"'{r.lower()}'" for r in region_ids)
+        region_list = _quote_sql(region_ids, lower=True)
         where_clauses.append(f"lower(cografi_bolge) IN ({region_list})")
 
     if store_ids:
-        store_list = ", ".join(f"'{s}'" for s in store_ids)
+        store_list = _quote_sql(store_ids)
         where_clauses.append(f"toString(magazakodu) IN ({store_list})")
 
     if category_ids:
-        category_list = ", ".join(f"'{c}'" for c in category_ids)
+        category_list = _quote_sql(category_ids)
         where_clauses.append(f"toString(reyonkodu) IN ({category_list})")
 
     where_sql = " AND ".join(where_clauses)
@@ -700,6 +839,9 @@ def get_product_promotions(
     - aktifPromosyonAdi
     - continuous date ranges
     """
+    raw_table_name = table_name
+    table_name = _compat_table(table_name)
+    anchor_date = _anchor_date_expr(raw_table_name)
     where_clauses = [
         "promosyonVar = 1",
         "aktifPromosyonAdi IS NOT NULL",
@@ -707,15 +849,15 @@ def get_product_promotions(
     ]
 
     if region_ids:
-        region_list = ", ".join(f"'{r.lower()}'" for r in region_ids)
+        region_list = _quote_sql(region_ids, lower=True)
         where_clauses.append(f"lower(cografi_bolge) IN ({region_list})")
 
     if store_ids:
-        store_list = ", ".join(f"'{s}'" for s in store_ids)
+        store_list = _quote_sql(store_ids)
         where_clauses.append(f"toString(magazakodu) IN ({store_list})")
 
     if category_ids:
-        category_list = ", ".join(f"'{c}'" for c in category_ids)
+        category_list = _quote_sql(category_ids)
         where_clauses.append(f"toString(reyonkodu) IN ({category_list})")
 
     where_sql = " AND ".join(where_clauses)
@@ -783,8 +925,8 @@ def get_product_promotions(
             discount
         FROM agg
         WHERE
-            end_date >= (today() - 7)
-            AND start_date <= (today() + 7)
+            end_date >= addDays({anchor_date}, -7)
+            AND start_date <= addDays({anchor_date}, 7)
     ),
     deduped AS (
         -- Collapse across stores so Overview doesn't show duplicates per store.
@@ -807,8 +949,8 @@ def get_product_promotions(
         promo_days,
         discount,
         multiIf(
-            end_date < today(), 'Tamamlandi',
-            start_date > today(), 'Beklemede',
+            end_date < {anchor_date}, 'Tamamlandi',
+            start_date > {anchor_date}, 'Beklemede',
             'Aktif'
         ) AS status
     FROM deduped
@@ -840,17 +982,20 @@ def get_alerts_summary(
     store_ids: list[str] | None = None,
     category_ids: list[str] | None = None
 ) -> dict:
+    raw_table_name = table_name
+    table_name = _compat_table(table_name)
+    anchor_date = _anchor_date_expr(raw_table_name)
 
     where_clauses = ["1=1"]
     if region_ids:
-        region_list = ", ".join(f"'{r.lower()}'" for r in region_ids)
+        region_list = _quote_sql(region_ids, lower=True)
         where_clauses.append(f"lower(cografi_bolge) IN ({region_list})")
     if store_ids:
         store_list = ", ".join(str(s) for s in store_ids)
         where_clauses.append(f"magazakodu IN ({store_list})")
     if category_ids:
         category_list = ", ".join(str(c) for c in category_ids)
-        where_clauses.append(f"reyonkodu IN ({category_list})")
+        where_clauses.append(f"toString(reyonkodu) IN ({_quote_sql(category_ids)})")
 
     where_sql = " AND ".join(where_clauses)
 
@@ -860,17 +1005,17 @@ def get_alerts_summary(
     WITH growth_base AS (
         SELECT
             toString(urunkodu) AS sku,
-            sumIf(satismiktari, tarih >= today() - {safe_days} AND tarih < today()) AS current_sales,
+            sumIf(satismiktari, tarih >= addDays({anchor_date}, -{safe_days}) AND tarih <= {anchor_date}) AS current_sales,
             sumIf(
                 satismiktari,
-                tarih >= today() - ({safe_days} * 2)
-                AND tarih < today() - {safe_days}
+                tarih >= addDays({anchor_date}, -({safe_days} * 2))
+                AND tarih < addDays({anchor_date}, -{safe_days})
             ) AS last_sales,
             (current_sales - last_sales) / nullIf(last_sales, 0) * 100 AS growth_pct
         FROM {table_name}
         WHERE {where_sql}
-          AND tarih >= today() - ({safe_days} * 2)
-          AND tarih < today()
+          AND tarih >= addDays({anchor_date}, -({safe_days} * 2))
+          AND tarih <= {anchor_date}
         GROUP BY sku
     )
     SELECT
@@ -883,13 +1028,13 @@ def get_alerts_summary(
     WITH errors_base AS (
         SELECT
             toString(urunkodu) AS sku,
-            sumIf(roll_mean_14, tarih >= today() - {safe_days} AND tarih < today()) AS forecast,
-            sumIf(satismiktari, tarih >= today() - {safe_days} AND tarih < today()) AS actual,
+            sumIf(roll_mean_14, tarih >= addDays({anchor_date}, -{safe_days}) AND tarih <= {anchor_date}) AS forecast,
+            sumIf(satismiktari, tarih >= addDays({anchor_date}, -{safe_days}) AND tarih <= {anchor_date}) AS actual,
             abs(forecast - actual) / nullIf(actual, 0) * 100 AS error_pct
         FROM {table_name}
         WHERE {where_sql}
-          AND tarih >= today() - {safe_days}
-          AND tarih < today()
+          AND tarih >= addDays({anchor_date}, -{safe_days})
+          AND tarih <= {anchor_date}
         GROUP BY sku
     )
     SELECT
@@ -898,25 +1043,28 @@ def get_alerts_summary(
     FROM errors_base
     """
 
+    inventory_query = f"""
+    WITH base AS (
+        SELECT
+            toString(urunkodu) AS sku,
+            magazakodu,
+            toFloat64(argMax(stok, tarih)) AS current_stock,
+            greatest(toFloat64(argMax(roll_mean_7, tarih)), 0) AS forecast_daily
+        FROM {table_name}
+        WHERE {where_sql}
+        GROUP BY urunkodu, magazakodu
+    )
+    SELECT
+        countIf(current_stock <= 0) AS stockout_count,
+        countIf(current_stock > (forecast_daily * {safe_days}) AND forecast_daily > 0) AS overstock_count,
+        countIf(current_stock > 0 AND current_stock <= (forecast_daily * 7) AND forecast_daily > 0) AS reorder_count
+    FROM base
+    """
+
     s_decline, e_growth = client.query(growth_query).first_row
     m_errors, a_errors = client.query(errors_query).first_row
-    inventory_alerts = get_inventory_alerts(
-        client,
-        region_ids=region_ids,
-        store_ids=store_ids,
-        category_ids=category_ids,
-        product_ids=None,
-        search=None,
-        limit=5000,
-        days=safe_days,
-        table_name=table_name,
-    )
-
-    inventory_list = inventory_alerts.get("alerts", [])
-    inventory_total = int(inventory_alerts.get("totalCount", len(inventory_list)))
-    s_out = sum(1 for alert in inventory_list if alert.get("type") == "stockout")
-    e_overstock = sum(1 for alert in inventory_list if alert.get("type") == "overstock")
-    u_reorder = sum(1 for alert in inventory_list if alert.get("type") == "reorder")
+    s_out, e_overstock, u_reorder = client.query(inventory_query).first_row
+    inventory_total = int((s_out or 0) + (e_overstock or 0) + (u_reorder or 0))
 
     # Yardımcı fonksiyon: Sayıya göre severity belirle
     def get_sev(count, high_thresh=1, crit_thresh=10):
@@ -980,6 +1128,7 @@ def get_inventory_alerts(
     Returns: { "alerts": [...] }
     """
     from datetime import date
+    table_name = _compat_table(table_name)
 
     where_clauses = ["1=1"]
 
@@ -1237,6 +1386,16 @@ def get_demand_kpis(
 
     from datetime import date, timedelta
     import calendar
+    raw_table_name = table_name
+    table_name = _compat_table(table_name)
+    anchor_date = _anchor_date_expr(raw_table_name)
+    try:
+        anchor_row = client.query(
+            f"SELECT max(toDate(tarih)) FROM {raw_table_name}"
+        ).first_row
+        anchor_day = anchor_row[0] if anchor_row and anchor_row[0] else date.today()
+    except Exception:
+        anchor_day = date.today()
 
     def add_months(d: date, months: int) -> date:
         y = d.year + (d.month - 1 + months) // 12
@@ -1255,23 +1414,22 @@ def get_demand_kpis(
     if period_unit not in {"gun", "hafta", "ay", "yil"}:
         period_unit = "gun"
 
-    today = date.today()
-    end_date = today
+    end_date = anchor_day + timedelta(days=1)
 
     if period_unit == "gun":
-        start_date = today - timedelta(days=int(period_value))
+        start_date = end_date - timedelta(days=int(period_value))
         prev_start_date = start_date - timedelta(days=int(period_value))
     elif period_unit == "hafta":
         days = int(period_value) * 7
-        start_date = today - timedelta(days=days)
+        start_date = end_date - timedelta(days=days)
         prev_start_date = start_date - timedelta(days=days)
     elif period_unit == "ay":
         months = int(period_value)
-        start_date = add_months(today, -months)
+        start_date = add_months(end_date, -months)
         prev_start_date = add_months(start_date, -months)
     else:  # yil
         years = int(period_value)
-        start_date = add_years(today, -years)
+        start_date = add_years(end_date, -years)
         prev_start_date = add_years(start_date, -years)
 
     prev_end_date = start_date
@@ -1281,12 +1439,12 @@ def get_demand_kpis(
     filters = []
 
     if region_ids:
-        region_list = ", ".join(f"'{r.lower()}'" for r in region_ids)
+        region_list = _quote_sql(region_ids, lower=True)
         filters.append(f"lower(cografi_bolge) IN ({region_list})")
     if store_ids:
         filters.append(f"magazakodu IN ({','.join(map(str, store_ids))})")
     if category_ids:
-        filters.append(f"reyonkodu IN ({','.join(map(str, category_ids))})")
+        filters.append(f"toString(reyonkodu) IN ({_quote_sql(category_ids)})")
     if product_ids:
         filters.append(f"urunkodu IN ({','.join(map(str, product_ids))})")
 
@@ -1334,6 +1492,15 @@ def get_demand_kpis(
         )
 
     SELECT
+        sumIf(roll_mean_14, tarih >= start_date AND tarih < end_date) AS forecast_units_curr,
+        sumIf(
+            roll_mean_14 * if(satismiktari > 0, satistutarikdvsiz / satismiktari, satisFiyati),
+            tarih >= start_date AND tarih < end_date
+        ) AS forecast_revenue_curr,
+        sumIf(
+            roll_mean_14 * if(satismiktari > 0, satistutarikdvsiz / satismiktari, satisFiyati),
+            tarih >= prev_start_date AND tarih < prev_end_date
+        ) AS forecast_revenue_prev,
         sumIf(satistutarikdvsiz, tarih >= start_date AND tarih < end_date) AS revenue_curr,
         sumIf(satismiktari, tarih >= start_date AND tarih < end_date) AS units_curr,
         sumIf(satistutarikdvsiz, tarih >= prev_year_start_date AND tarih < prev_year_end_date) AS revenue_prev_year,
@@ -1357,6 +1524,9 @@ def get_demand_kpis(
 
     try:
         (
+            forecast_units_curr,
+            forecast_revenue_curr,
+            forecast_revenue_prev,
             revenue_curr,
             units_curr,
             revenue_prev_year,
@@ -1378,6 +1548,9 @@ def get_demand_kpis(
             "highGrowthCount": 0,
         }
 
+    forecast_units_curr = float(forecast_units_curr or 0)
+    forecast_revenue_curr = float(forecast_revenue_curr or 0)
+    forecast_revenue_prev = float(forecast_revenue_prev or 0)
     revenue_curr = float(revenue_curr or 0)
     units_curr = float(units_curr or 0)
     revenue_prev_year = float(revenue_prev_year or 0)
@@ -1387,12 +1560,25 @@ def get_demand_kpis(
         if revenue_prev_year
         else 0.0
     )
+    forecast_trend = (
+        (forecast_revenue_curr - forecast_revenue_prev) / forecast_revenue_prev * 100
+        if forecast_revenue_prev
+        else 0.0
+    )
 
-    accuracy_value = max(0.0, min(100.0, 100.0 - float(mape or 0)))
-    accuracy_prev_value = max(0.0, min(100.0, 100.0 - float(prev_mape or 0)))
+    accuracy_value = (
+        max(0.0, min(100.0, 100.0 - float(mape or 0)))
+        if units_curr > 0
+        else 0.0
+    )
+    accuracy_prev_value = (
+        max(0.0, min(100.0, 100.0 - float(prev_mape or 0)))
+        if prev_mape is not None
+        else 0.0
+    )
     accuracy_trend = accuracy_value - accuracy_prev_value
 
-    bias_value = float(bias or 0)
+    bias_value = float(bias or 0) if units_curr > 0 else 0.0
     prev_bias_value = float(prev_bias or 0)
     bias_abs = abs(bias_value)
     prev_bias_abs = abs(prev_bias_value)
@@ -1405,9 +1591,9 @@ def get_demand_kpis(
 
     return {
         "totalForecast": {
-            "value": int(revenue_curr),
-            "units": int(units_curr),
-            "trend": round(yoy_growth, 1),
+            "value": int(forecast_revenue_curr),
+            "units": int(forecast_units_curr),
+            "trend": round(forecast_trend, 1),
         },
         "accuracy": {
             "value": round(accuracy_value, 1),
@@ -1434,6 +1620,7 @@ def get_demand_year_comparison(
     category_ids: list[int] | None = None,
     table_name: str = "demoVerileri"
 ) -> dict:
+    table_name = _compat_table(table_name)
 
     today = date.today()
     current_year = today.year
@@ -1446,7 +1633,7 @@ def get_demand_year_comparison(
     if store_ids:
         filters.append(f"magazakodu IN ({','.join(map(str, store_ids))})")
     if category_ids:
-        filters.append(f"reyonkodu IN ({','.join(map(str, category_ids))})")
+        filters.append(f"toString(reyonkodu) IN ({_quote_sql(category_ids)})")
     if product_ids:
         filters.append(f"urunkodu IN ({','.join(map(str, product_ids))})")
 
@@ -1507,12 +1694,13 @@ def get_demand_monthly_bias(
     category_ids: list[int] | None = None,
     table_name: str = "demoVerileri"
 ) -> dict:
+    table_name = _compat_table(table_name)
 
     filters = []
     if store_ids:
         filters.append(f"magazakodu IN ({','.join(map(str, store_ids))})")
     if category_ids:
-        filters.append(f"reyonkodu IN ({','.join(map(str, category_ids))})")
+        filters.append(f"toString(reyonkodu) IN ({_quote_sql(category_ids)})")
     if product_ids:
         filters.append(f"urunkodu IN ({','.join(map(str, product_ids))})")
         
@@ -1642,19 +1830,27 @@ def get_demand_trend_forecast(
     Past window uses actual sales, future window uses model forecast (roll_mean_14).
     """
 
+    raw_table_name = table_name
+    table_name = _compat_table(table_name)
+    try:
+        anchor_row = client.query(
+            f"SELECT max(toDate(tarih)) FROM {raw_table_name}"
+        ).first_row
+        anchor_day = anchor_row[0] if anchor_row and anchor_row[0] else date.today()
+    except Exception:
+        anchor_day = date.today()
     period_value = period if period in {"daily", "weekly", "monthly"} else "daily"
     safe_days_past = max(1, int(days_past))
     safe_days_future = max(1, int(days_future))
 
-    today_date = date.today()
-    start_date = today_date - timedelta(days=safe_days_past)
-    end_date = today_date + timedelta(days=safe_days_future - 1)
+    start_date = anchor_day - timedelta(days=safe_days_past)
+    end_date = anchor_day + timedelta(days=safe_days_future)
 
     filters = []
     if store_ids:
         filters.append(f"magazakodu IN ({','.join(map(str, store_ids))})")
     if category_ids:
-        filters.append(f"reyonkodu IN ({','.join(map(str, category_ids))})")
+        filters.append(f"toString(reyonkodu) IN ({_quote_sql(category_ids)})")
     if product_ids:
         filters.append(f"urunkodu IN ({','.join(map(str, product_ids))})")
 
@@ -1695,7 +1891,7 @@ def get_demand_trend_forecast(
     weekday_totals = {i: 0.0 for i in range(7)}
     weekday_counts = {i: 0 for i in range(7)}
     for d in sorted_dates:
-        if d >= today_date:
+        if d > anchor_day:
             continue
         actual_val = by_date[d]["actual"]
         forecast_val = by_date[d]["forecast"]
@@ -1744,7 +1940,7 @@ def get_demand_trend_forecast(
     recent_history_values = [
         float(by_date[d]["actual"])
         for d in sorted_dates
-        if d < today_date and by_date[d]["actual"] > 0
+        if d <= anchor_day and by_date[d]["actual"] > 0
     ][-max(7, min(28, safe_days_past)):]
     if len(recent_history_values) >= 2:
         recent_mean = float(np.mean(recent_history_values))
@@ -1761,7 +1957,7 @@ def get_demand_trend_forecast(
 
     weekday_actual_samples = {i: [] for i in range(7)}
     for d in sorted_dates:
-        if d >= today_date:
+        if d > anchor_day:
             continue
         val = by_date[d]["actual"]
         if val > 0:
@@ -1769,7 +1965,7 @@ def get_demand_trend_forecast(
 
     last_history_anchor = 0
     for d in reversed(sorted_dates):
-        if d >= today_date:
+        if d > anchor_day:
             continue
         actual_val = int(by_date[d]["actual"] or 0)
         forecast_val = int(by_date[d]["forecast"] or 0)
@@ -1781,9 +1977,6 @@ def get_demand_trend_forecast(
             break
     if last_history_anchor <= 0 and recent_history_values:
         last_history_anchor = int(round(float(np.mean(recent_history_values))))
-    if last_history_anchor <= 0:
-        last_history_anchor = 1
-
     daily_points = []
     trend_source = []
     cursor = start_date
@@ -1792,15 +1985,9 @@ def get_demand_trend_forecast(
         entry = by_date.get(cursor)
         weekday = cursor.weekday()
 
-        if cursor < today_date:
-            if entry is None or int(entry["actual"]) <= 0:
-                # No row at all for this historical date: impute from learned pattern.
-                actual_val = projected_value(day_idx, weekday)
-                weekday_values = weekday_actual_samples.get(weekday) or []
-                if weekday_values:
-                    weekday_mean = sum(weekday_values) / len(weekday_values)
-                    actual_val = int(round((actual_val * 0.6) + (weekday_mean * 0.4)))
-                actual_val = max(1, actual_val)
+        if cursor <= anchor_day:
+            if entry is None:
+                actual_val = None
             else:
                 actual_val = max(0, int(entry["actual"]))
             forecast_val = None
@@ -1817,7 +2004,7 @@ def get_demand_trend_forecast(
                 forecast_val = projected_forecast
 
             # Apply forward-looking +5% acceleration across the selected future horizon.
-            day_ahead = (cursor - today_date).days + 1
+            day_ahead = (cursor - anchor_day).days
             horizon = max(1, safe_days_future)
             phase = day_ahead / horizon
             # Stronger upward momentum with late-horizon acceleration.
@@ -1836,7 +2023,7 @@ def get_demand_trend_forecast(
             blended_base = (forecast_val * 0.30) + (upward_baseline * 0.70)
             forecast_val = int(round(blended_base * wave_multiplier))
             forecast_floor = int(round(upward_baseline * 0.95))
-            forecast_val = max(1, max(forecast_floor, forecast_val))
+            forecast_val = max(0, max(forecast_floor, forecast_val))
 
         base_for_trend = (
             actual_val if actual_val is not None else (forecast_val or 0)
@@ -1855,7 +2042,7 @@ def get_demand_trend_forecast(
     for idx in range(1, len(daily_points) - 1):
         point = daily_points[idx]
         point_date = date.fromisoformat(point["date"])
-        if point_date >= today_date or (today_date - point_date).days > 7:
+        if point_date > anchor_day or (anchor_day - point_date).days > 7:
             continue
         current_val = point["actual"]
         prev_val = daily_points[idx - 1]["actual"]
@@ -1866,7 +2053,7 @@ def get_demand_trend_forecast(
         if baseline <= 0:
             continue
         if current_val <= max(1, int(round(baseline * 0.08))):
-            point["actual"] = max(1, int(round(baseline * 0.92)))
+            point["actual"] = max(0, int(round(baseline * 0.92)))
 
     def compute_trendline(values: list[float]) -> list[int]:
         n = len(values)
@@ -1952,13 +2139,16 @@ def get_forecast_errors(
     Identifies products with high forecast errors.
     """
     
+    raw_table_name = table_name
+    table_name = _compat_table(table_name)
+    anchor_date = _anchor_date_expr(raw_table_name)
     where_clauses = ["1=1"]
     if store_ids:
         store_list = ", ".join(f"'{s}'" for s in store_ids)
         where_clauses.append(f"toString(magazakodu) IN ({store_list})")
 
     if category_ids:
-        category_list = ", ".join(f"'{c}'" for c in category_ids)
+        category_list = _quote_sql(category_ids)
         where_clauses.append(f"toString(reyonkodu) IN ({category_list})")
 
     if product_ids:
@@ -1980,8 +2170,8 @@ def get_forecast_errors(
             sumIf(roll_mean_14, satismiktari > 0) AS total_forecast
         FROM {table_name}
         WHERE {where_sql}
-          AND tarih >= today() - {safe_days}
-          AND tarih < today()
+          AND tarih >= addDays({anchor_date}, -{safe_days})
+          AND tarih <= {anchor_date}
         GROUP BY sku
     )
     SELECT
@@ -2043,17 +2233,20 @@ def get_growth_products(
     table_name="demoVerileri",
     growth_threshold=10
 ):
+    raw_table_name = table_name
+    table_name = _compat_table(table_name)
+    anchor_date = _anchor_date_expr(raw_table_name)
     where_clauses = ["1=1"]
     if store_ids:
-        store_list = ", ".join(f"'{s}'" for s in store_ids)
+        store_list = _quote_sql(store_ids)
         where_clauses.append(f"toString(magazakodu) IN ({store_list})")
 
     if category_ids:
-        category_list = ", ".join(f"'{c}'" for c in category_ids)
+        category_list = _quote_sql(category_ids)
         where_clauses.append(f"toString(reyonkodu) IN ({category_list})")
 
     if product_ids:
-        product_list = ", ".join(f"'{p}'" for p in product_ids)
+        product_list = _quote_sql(product_ids)
         where_clauses.append(f"toString(urunkodu) IN ({product_list})")
     
     where_sql = " AND ".join(where_clauses)
@@ -2076,25 +2269,27 @@ def get_growth_products(
         SELECT
             toString(urunkodu) AS sku,
             any(urunismi) AS product_name,
-            any(reyonkodu) AS reyonkodu,
-            sumIf(satismiktari, tarih >= today() - {safe_days} AND tarih < today()) AS current_sales,
+            any(reyonkodu) AS sektor_kodu,
+            any(hier2_ad) AS sektor_adi,
+            sumIf(satismiktari, tarih >= addDays({anchor_date}, -{safe_days}) AND tarih <= {anchor_date}) AS current_sales,
             sumIf(
                 satismiktari,
-                tarih >= today() - ({safe_days} * 2)
-                AND tarih < today() - {safe_days}
+                tarih >= addDays({anchor_date}, -({safe_days} * 2))
+                AND tarih < addDays({anchor_date}, -{safe_days})
             ) AS last_sales,
-            sumIf(roll_mean_14, tarih >= today() - {safe_days} AND tarih < today()) AS forecast_period,
+            sumIf(roll_mean_14, tarih >= addDays({anchor_date}, -{safe_days}) AND tarih <= {anchor_date}) AS forecast_period,
             (current_sales - last_sales) / nullIf(last_sales, 0) * 100 AS growth_pct
         FROM {table_name}
         WHERE {where_sql}
-          AND tarih >= today() - ({safe_days} * 2)
-          AND tarih < today()
+          AND tarih >= addDays({anchor_date}, -({safe_days} * 2))
+          AND tarih <= {anchor_date}
         GROUP BY sku
     )
     SELECT
         sku,
         product_name,
-        reyonkodu,
+        sektor_kodu,
+        sektor_adi,
         current_sales,
         last_sales,
         growth_pct,
@@ -2108,13 +2303,13 @@ def get_growth_products(
     rows = client.query(query).result_rows
     
     products = []
-    for sku, name, reyon, current, last, growth, forecast in rows:
+    for sku, name, sektor_kodu, sektor_adi, current, last, growth, forecast in rows:
         products.append({
             "id": str(sku),
             "name": name,
             "growth": round(growth or 0, 1),
             "type": type_,
-            "category": CATEGORY_MAP.get(int(reyon or 0), "DİĞER"),
+            "category": str(sektor_adi or sektor_kodu or "Diger"),
             "forecast": int(forecast or 0),
             "actualSales": int(current or 0),
             "lastMonthSales": int(last or 0)
@@ -2134,6 +2329,9 @@ def get_inventory_kpis(
     """
     Inventory KPI hesaplama (ClickHouse uyumlu)
     """
+    raw_table_name = table_name
+    table_name = _compat_table(table_name)
+    anchor_date = _anchor_date_expr(raw_table_name)
 
     where = ["1=1"]
 
@@ -2178,7 +2376,10 @@ def get_inventory_kpis(
             toString(urunkodu)                           AS sku,
             toString(reyonkodu)                          AS category,
             toString(magazakodu)                         AS store,
-            sumIf(satismiktari, tarih >= today() - {int(days)} AND tarih < today()) AS sales_period
+            sumIf(
+                satismiktari,
+                tarih >= addDays({anchor_date}, -{int(days)} + 1) AND tarih <= {anchor_date}
+            ) AS sales_period
         FROM {table_name}
         WHERE {where_sql}
         GROUP BY sku, category, store
@@ -2268,25 +2469,15 @@ def get_similar_campaigns(
     """
     GET /api/forecast/similar-campaigns
     """
+    table_name = _compat_table(table_name)
 
     where_clauses = [
-        "aktifPromosyonKodu > 0",
-        "aktifPromosyonAdi != 'Tayin edilmedi'"
+        "toString(aktifPromosyonKodu) NOT IN ('', '0')",
+        "aktifPromosyonAdi != 'Promosyon Yok'"
     ]
 
     if promotion_type:
-        where_clauses.append(
-            f"""
-            multiIf(
-                KATALOG=1, 'KATALOG',
-                LEAFLET=1, 'LEAFLET',
-                `GAZETE ILANI`=1, 'GAZETE ILANI',
-                `Hybris % Kampanya`=1, 'INTERNET_INDIRIMI',
-                HYBR=1, 'HYBR',
-                'DIGER'
-            ) = '{promotion_type}'
-            """
-        )
+        where_clauses.append(f"promo_type = '{_escape_sql_string(promotion_type)}'")
 
     if product_ids:
         where_clauses.append(
@@ -2300,12 +2491,12 @@ def get_similar_campaigns(
 
     if region_ids:
         where_clauses.append(
-            "lowerUTF8(cografi_bolge) IN (" + ",".join([f"'{r.lower()}'" for r in region_ids]) + ")"
+            "lowerUTF8(cografi_bolge) IN (" + _quote_sql(region_ids, lower=True) + ")"
         )
 
     if category_ids:
         where_clauses.append(
-            "toString(reyonkodu) IN (" + ",".join([f"'{c}'" for c in category_ids]) + ")"
+            "toString(reyonkodu) IN (" + _quote_sql(category_ids) + ")"
         )
 
     where_sql = "WHERE " + " AND ".join(where_clauses)
@@ -2318,14 +2509,7 @@ def get_similar_campaigns(
             min(tarih)                                 AS start_date,
             max(tarih)                                 AS end_date,
 
-            multiIf(
-                max(KATALOG)=1, 'KATALOG',
-                max(LEAFLET)=1, 'LEAFLET',
-                max(`GAZETE ILANI`)=1, 'GAZETE ILANI',
-                max(`Hybris % Kampanya`)=1, 'INTERNET_INDIRIMI',
-                max(HYBR)=1, 'HYBR',
-                'DIGER'
-            ) AS type,
+            any(promo_type) AS type,
 
             round(
                 100 * (
@@ -2409,6 +2593,9 @@ def get_forecast_calendar(
     """
     GET /api/forecast/calendar
     """
+    raw_table_name = table_name
+    table_name = _compat_table(table_name)
+    anchor_date = _anchor_date_expr(raw_table_name)
 
     if month is None or year is None:
         raise ValueError("month ve year zorunludur")
@@ -2419,19 +2606,19 @@ def get_forecast_calendar(
 
     # 🔴 FIX: magazakodu UInt → toString + lower
     if store_ids:
-        store_list = ", ".join(f"'{s.lower()}'" for s in store_ids)
+        store_list = _quote_sql(store_ids, lower=True)
         where_clauses.append(
             f"lower(toString(magazakodu)) IN ({store_list})"
         )
 
     if region_ids:
-        region_list = ", ".join(f"'{r.lower()}'" for r in region_ids)
+        region_list = _quote_sql(region_ids, lower=True)
         where_clauses.append(
             f"lowerUTF8(cografi_bolge) IN ({region_list})"
         )
 
     if category_ids:
-        category_list = ", ".join(f"'{c}'" for c in category_ids)
+        category_list = _quote_sql(category_ids)
         where_clauses.append(
             f"toString(reyonkodu) IN ({category_list})"
         )
@@ -2444,23 +2631,15 @@ def get_forecast_calendar(
     query = f"""
         SELECT
             toDate(tarih) AS event_date,
-            aktifPromosyonKodu AS promo_id,
+            toString(aktifPromosyonKodu) AS promo_id,
             any(aktifPromosyonAdi) AS promo_name,
-            multiIf(
-                KATALOG = 1, 'Katalog',
-                LEAFLET = 1, 'Leaflet',
-                `GAZETE ILANI` = 1, 'Gazete İlanı',
-                `Hybris % Kampanya` = 1, 'Hybris % Kampanya',
-                HYBR = 1, 'Hybrid',
-                'Diğer'
-            ) AS promo_type,
+            any(promo_type) AS promo_type,
             round(any(indirimYuzdesi), 0) AS discount
         FROM {table_name}
         WHERE {where_sql}
         GROUP BY
             event_date,
-            promo_id,
-            promo_type
+            promo_id
         ORDER BY event_date ASC
     """
 
@@ -2481,8 +2660,8 @@ def get_forecast_calendar(
     if include_future and future_count > 0:
         future_where = [
             "aktifPromosyonKodu IS NOT NULL",
-            "toDate(tarih) >= today()",
-            f"toDate(tarih) <= addDays(today(), {int(future_count) - 1})",
+            f"toDate(tarih) >= {anchor_date}",
+            f"toDate(tarih) <= addDays({anchor_date}, {int(future_count) - 1})",
         ]
 
         if store_ids:
@@ -2500,23 +2679,15 @@ def get_forecast_calendar(
         future_query = f"""
             SELECT
                 toDate(tarih) AS event_date,
-                aktifPromosyonKodu AS promo_id,
+                toString(aktifPromosyonKodu) AS promo_id,
                 any(aktifPromosyonAdi) AS promo_name,
-                multiIf(
-                    KATALOG = 1, 'Katalog',
-                    LEAFLET = 1, 'Leaflet',
-                    `GAZETE ILANI` = 1, 'Gazete İlanı',
-                    `Hybris % Kampanya` = 1, 'Hybris % Kampanya',
-                    HYBR = 1, 'Hybrid',
-                    'Diğer'
-                ) AS promo_type,
+                any(promo_type) AS promo_type,
                 round(any(indirimYuzdesi), 0) AS discount
             FROM {table_name}
             WHERE {" AND ".join(future_where)}
             GROUP BY
                 event_date,
-                promo_id,
-                promo_type
+                promo_id
             ORDER BY event_date ASC
         """
 
@@ -2535,7 +2706,10 @@ def get_forecast_calendar(
 
         # If real forward data does not exist, synthesize upcoming promotions
         # using recent templates from the same filtered scope (V5-style fallback).
-        today_date = date.today()
+        anchor_row = client.query(
+            f"SELECT max(toDate(tarih)) FROM {raw_table_name}"
+        ).first_row
+        today_date = anchor_row[0] if anchor_row and anchor_row[0] else date.today()
         has_upcoming = any(date.fromisoformat(d) >= today_date for d in calendar_map.keys())
 
         if not has_upcoming:
@@ -2554,19 +2728,12 @@ def get_forecast_calendar(
                 SELECT
                     toString(aktifPromosyonKodu) AS promo_id,
                     any(aktifPromosyonAdi) AS promo_name,
-                    multiIf(
-                        KATALOG = 1, 'Katalog',
-                        LEAFLET = 1, 'Leaflet',
-                        `GAZETE ILANI` = 1, 'Gazete İlanı',
-                        `Hybris % Kampanya` = 1, 'Hybris % Kampanya',
-                        HYBR = 1, 'Hybrid',
-                        'Diğer'
-                    ) AS promo_type,
+                    any(promo_type) AS promo_type,
                     round(avg(indirimYuzdesi), 0) AS avg_discount,
                     count() AS cnt
                 FROM {table_name}
                 WHERE {" AND ".join(template_where)}
-                GROUP BY promo_id, promo_type
+                GROUP BY promo_id
                 ORDER BY cnt DESC
                 LIMIT 12
             """
@@ -2651,6 +2818,9 @@ def get_inventory_items(
     """
     GET /api/inventory/items
     """
+    raw_table_name = table_name
+    table_name = _compat_table(table_name)
+    anchor_date = _anchor_date_expr(raw_table_name)
 
     offset = (page - 1) * limit
     sort_order = "ASC" if sort_order.lower() == "asc" else "DESC"
@@ -2725,7 +2895,7 @@ def get_inventory_items(
                 toString(urunkodu)     AS sku,
                 toString(reyonkodu)    AS category,
                 toString(magazakodu)   AS store,
-                greatest(sumIf(satismiktari, tarih = today()), 0) AS todaysSales,
+                greatest(sumIf(satismiktari, tarih = {anchor_date}), 0) AS todaysSales,
                 maxIf(tarih, stok > 0) AS lastRestockDate
             FROM {table_name}
             WHERE {where_sql}
@@ -2895,9 +3065,13 @@ def get_inventory_stock_trends(
     """
     GET /api/inventory/stock-trends
     """
+    raw_table_name = table_name
+    table_name = _compat_table(table_name)
+    anchor_date = _anchor_date_expr(raw_table_name)
 
     where_clauses = [
-        f"tarih >= today() - {int(days)}"
+        f"tarih >= addDays({anchor_date}, -{int(days)} + 1)",
+        f"tarih <= {anchor_date}",
     ]
 
     if region_ids:
@@ -2955,7 +3129,10 @@ def get_inventory_stock_trends(
                 round(sum(item["forecastDemand"] for item in recent) / max(len(recent), 1))
             )
         else:
-            last_date = date.today()
+            anchor_row = client.query(
+                f"SELECT max(toDate(tarih)) FROM {raw_table_name}"
+            ).first_row
+            last_date = anchor_row[0] if anchor_row and anchor_row[0] else date.today()
             projected_stock = 0
             avg_forecast = 0
 
@@ -2993,6 +3170,9 @@ def get_inventory_store_performance(
     """
     GET /api/inventory/store-performance
     """
+    raw_table_name = table_name
+    table_name = _compat_table(table_name)
+    anchor_date = _anchor_date_expr(raw_table_name)
 
     where_clauses = ["1 = 1"]
 
@@ -3049,10 +3229,16 @@ def get_inventory_store_performance(
             SELECT
                 magazakodu,
                 greatest(
-                    sumIf(satismiktari, tarih >= today() - {int(days)} AND tarih < today()),
+                    sumIf(
+                        satismiktari,
+                        tarih >= addDays({anchor_date}, -{int(days)} + 1) AND tarih <= {anchor_date}
+                    ),
                     0
                 ) AS sales_period,
-                countDistinctIf(toDate(tarih), tarih >= today() - {int(days)} AND tarih < today()) AS days_period
+                countDistinctIf(
+                    toDate(tarih),
+                    tarih >= addDays({anchor_date}, -{int(days)} + 1) AND tarih <= {anchor_date}
+                ) AS days_period
             FROM filtered
             GROUP BY magazakodu
         )

@@ -175,6 +175,7 @@ import {
   useProducts,
   useCategories,
   useStockTrends,
+  useInventoryItems,
 } from '@/services';
 import { forecastingApi } from '@/services/api/forecasting';
 import type {
@@ -184,6 +185,7 @@ import type {
   PredictDemandRequest,
   CampaignDetailSeriesResponse,
 } from '@/services/types/api';
+import { cn } from '@/lib/utils';
 
 // Custom X-Axis Tick Component for Weather
 const CustomizedAxisTick = (props: {
@@ -461,11 +463,11 @@ export function ForecastingSection() {
   const [promosyonIndirimOrani, setPromosyonIndirimOrani] = useState('9');
   const [promosyonMarj, setPromosyonMarj] = useState('');
 
-  // Base values (Component Scope)
-  const baseSatisFiyati = 87.45;
-  const baseHamFiyat = 67.67;
+  // Base values — loaded dynamically from ClickHouse for the selected store+product
+  const [baseSatisFiyati, setBaseSatisFiyati] = useState<number>(87.45);
+  const [baseHamFiyat, setBaseHamFiyat] = useState<number>(67.67);
   const birimKar = baseSatisFiyati - baseHamFiyat;
-  const marj = (birimKar / baseSatisFiyati) * 100;
+  const marj = baseSatisFiyati > 0 ? (birimKar / baseSatisFiyati) * 100 : 0;
 
   // NEW STATES
   const [pricingMode, setPricingMode] = useState<
@@ -675,6 +677,24 @@ export function ForecastingSection() {
     dailyReplenishment: 0,
   });
 
+  // Fetch real sale price (satisFiyati) from the existing inventory/items endpoint
+  const productPriceQuery = useInventoryItems(
+    numericStoreIds[0] && numericProductIds[0]
+      ? {
+          storeIds: [String(numericStoreIds[0])],
+          productIds: [String(numericProductIds[0])],
+          limit: 1,
+          page: 1,
+        }
+      : undefined,
+  );
+  useEffect(() => {
+    const item = productPriceQuery.data?.items?.[0];
+    if (item?.price > 0) {
+      setBaseSatisFiyati(item.price);
+    }
+  }, [productPriceQuery.data]);
+
   const historyParams = useMemo(
     () => ({
       productIds: trackingProductIds,
@@ -744,7 +764,11 @@ export function ForecastingSection() {
           storeCode: numericStoreCode,
           storeIds: numericStoreCodeList,
         });
-        setPromotionOptions(response.promotions || []);
+        const raw = response.promotions || [];
+        const unique = Array.from(
+          new Map(raw.map((p) => [p.code, p])).values(),
+        );
+        setPromotionOptions(unique);
       } catch (error) {
         setPromotionOptions([]);
         toast({
@@ -1222,41 +1246,37 @@ export function ForecastingSection() {
       let selectedMarj: number | null = null;
       let selectedFiyat: number | null = null;
 
-      if (aktifPromosyonKodu !== '17') {
-        if (pricingMode === 'discount') {
-          const discountValue = Number(promosyonIndirimOrani);
-          selectedIndirim =
-            Number.isFinite(discountValue) && discountValue > 0
-              ? discountValue
-              : null;
-        } else if (pricingMode === 'margin') {
-          const marginValue = Number(promosyonMarj);
-          selectedMarj =
-            Number.isFinite(marginValue) && marginValue > 0
-              ? marginValue
-              : null;
-        } else if (pricingMode === 'price') {
-          const priceValue = Number(targetPrice);
-          selectedFiyat =
-            Number.isFinite(priceValue) && priceValue > 0 ? priceValue : null;
-        }
+      if (pricingMode === 'discount') {
+        const discountValue = Number(promosyonIndirimOrani);
+        selectedIndirim =
+          Number.isFinite(discountValue) && discountValue > 0
+            ? discountValue
+            : null;
+      } else if (pricingMode === 'margin') {
+        const marginValue = Number(promosyonMarj);
+        selectedMarj =
+          Number.isFinite(marginValue) && marginValue > 0 ? marginValue : null;
+      } else if (pricingMode === 'price') {
+        const priceValue = Number(targetPrice);
+        selectedFiyat =
+          Number.isFinite(priceValue) && priceValue > 0 ? priceValue : null;
+      }
 
-        const selectedCount = [
-          selectedIndirim,
-          selectedMarj,
-          selectedFiyat,
-        ].filter((value) => value !== null).length;
+      const selectedCount = [
+        selectedIndirim,
+        selectedMarj,
+        selectedFiyat,
+      ].filter((value) => value !== null).length;
 
-        if (selectedCount !== 1) {
-          toast({
-            title: 'Promosyon girişi eksik',
-            description:
-              'Promosyonlu tahminde indirim, marj veya fiyat alanlarından sadece birini doldurun.',
-            variant: 'destructive',
-          });
-          setIsLoading(false);
-          return;
-        }
+      if (selectedCount !== 1) {
+        toast({
+          title: 'Fiyatlandırma girişi eksik',
+          description:
+            'İndirim, marj veya fiyat alanlarından sadece birini doldurun.',
+          variant: 'destructive',
+        });
+        setIsLoading(false);
+        return;
       }
 
       const predictionResults = await Promise.allSettled(
@@ -1268,10 +1288,9 @@ export function ForecastingSection() {
             tarihBitis: format(endDate, 'yyyy-MM-dd'),
             ozelgunsayisi: null,
             aktifPromosyonKodu,
-            istenenIndirim:
-              aktifPromosyonKodu === '17' ? null : selectedIndirim,
-            istenenMarj: aktifPromosyonKodu === '17' ? null : selectedMarj,
-            istenenFiyat: aktifPromosyonKodu === '17' ? null : selectedFiyat,
+            istenenIndirim: selectedIndirim,
+            istenenMarj: selectedMarj,
+            istenenFiyat: selectedFiyat,
           }),
         ),
       );
@@ -1398,12 +1417,7 @@ export function ForecastingSection() {
               0,
               Math.round(toFiniteNumber(row.ciro_adedi, 0)),
             ),
-            benim_promom:
-              aktifPromosyonKodu === '17'
-                ? []
-                : promoArray.length > 0
-                  ? promoArray
-                  : [promosyon],
+            benim_promom: promoArray.length > 0 ? promoArray : [promosyon],
             benim_promom_yuzde: toFiniteNumber(
               row.benim_promom_yuzde ?? row.indirimYuzdesi,
               0,
@@ -1432,10 +1446,7 @@ export function ForecastingSection() {
       setForecastData(mappedData);
       toast({
         title: 'Tahminleme isteği gönderildi',
-        description:
-          aktifPromosyonKodu === '17'
-            ? 'Promosyonsuz senaryo (aktifPromosyonKodu=17) modelden alındı.'
-            : 'Promosyonlu senaryo model sonucuyla güncellendi.',
+        description: 'Senaryo model sonucuyla güncellendi.',
       });
     } catch (error) {
       toast({
@@ -1478,13 +1489,25 @@ export function ForecastingSection() {
     0;
 
   // Calculate Revenue Loss
-  const estimatedRevenueLoss = totalLostSalesUnits * baseSatisFiyati;
+  const estimatedRevenueLoss = promoPeriodData
+    ? promoPeriodData.reduce(
+        (acc, curr) =>
+          acc + (curr.lost_sales || 0) * (curr.satisFiyati || baseSatisFiyati),
+        0,
+      )
+    : 0;
 
-  // Calculate Baseline Revenue (since baseline in chart is now Units)
+  // Calculate Baseline Revenue using per-row prices from the model
   const totalBaselineUnits = promoPeriodData
     ? promoPeriodData.reduce((acc, curr) => acc + (curr.baseline || 0), 0)
     : 0;
-  const totalBaselineRevenue = totalBaselineUnits * baseSatisFiyati;
+  const totalBaselineRevenue = promoPeriodData
+    ? promoPeriodData.reduce(
+        (acc, curr) =>
+          acc + (curr.baseline || 0) * (curr.satisFiyati || baseSatisFiyati),
+        0,
+      )
+    : 0;
 
   // 1. Lift Calculation
   const liftAmount = totalRevenue - totalBaselineRevenue;
@@ -1525,11 +1548,17 @@ export function ForecastingSection() {
     historicalAverageLift !== null
       ? liftPercentage - historicalAverageLift
       : null;
+  const plannerSurfaceClass =
+    'border-slate-200/80 bg-white/95 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.35)] backdrop-blur supports-[backdrop-filter]:bg-white/90';
+  const plannerSoftClass =
+    'border-slate-200/80 bg-gradient-to-br from-slate-50 via-white to-slate-100/70 shadow-[0_18px_40px_-28px_rgba(15,23,42,0.28)]';
+  const selectedStoreCount = numericStoreIds.length || magazaKodu.length;
+  const selectedProductCount = numericProductIds.length || urunKodu.length;
 
   const promoKpiCards = (
     <>
       {canSeeKpi('promo-total-forecast') && (
-        <Card>
+        <Card className={plannerSurfaceClass}>
           <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
             <div className='flex items-center gap-2'>
               <CardTitle className='text-xs 2xl:text-sm font-semibold'>
@@ -1560,7 +1589,7 @@ export function ForecastingSection() {
       )}
 
       {canSeeKpi('promo-expected-revenue') && (
-        <Card>
+        <Card className={plannerSurfaceClass}>
           <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
             <div className='flex items-center gap-2'>
               <CardTitle className='text-xs 2xl:text-sm font-semibold'>
@@ -1591,7 +1620,7 @@ export function ForecastingSection() {
         </Card>
       )}
 
-      <Card>
+      <Card className={plannerSurfaceClass}>
         <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
           <div className='flex items-center gap-2'>
             <CardTitle className='text-xs 2xl:text-sm font-semibold'>
@@ -1625,7 +1654,7 @@ export function ForecastingSection() {
         </CardContent>
       </Card>
 
-      <Card>
+      <Card className={plannerSurfaceClass}>
         <CardHeader className='flex flex-row items-center justify-between space-y-0 pb-1 py-2 2xl:py-3'>
           <div className='flex items-center gap-2'>
             <CardTitle className='text-xs 2xl:text-sm font-semibold'>
@@ -1652,7 +1681,7 @@ export function ForecastingSection() {
           </div>
           <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
             {totalLostSalesUnits > 0
-              ? `-${totalLostSalesUnits} OOS`
+              ? `-${totalLostSalesUnits.toLocaleString()} OOS`
               : 'Yeterli Stok'}
           </p>
         </CardContent>
@@ -1661,10 +1690,86 @@ export function ForecastingSection() {
   );
 
   return (
-    <div className='space-y-2 2xl:space-y-4'>
-      <div className='flex flex-col gap-1'>
-        <div className='flex items-center justify-between'>
-          <div>
+    <div className='space-y-4 2xl:space-y-6'>
+      <div className='overflow-hidden rounded-3xl border border-slate-200/70 bg-[radial-gradient(circle_at_top_left,rgba(255,184,64,0.22),transparent_28%),linear-gradient(135deg,#0f172a_0%,#172554_100%,#1d4ed8_100%)] text-white shadow-[0_30px_80px_-36px_rgba(15,23,42,0.72)]'>
+        <div className='flex flex-col gap-5 px-5 py-5 sm:px-6 xl:flex-row xl:items-end xl:justify-between xl:px-8 xl:py-7'>
+          <div className='space-y-4'>
+            <div className='space-y-2'>
+              <h2 className='text-2xl font-semibold tracking-tight text-white 2xl:text-3xl'>
+                Fiyatlandirma ve Promosyon Analizi
+              </h2>
+              <p className='max-w-2xl text-sm leading-6 text-slate-200/88 2xl:text-[15px]'>
+                Senaryoyu kurun, promosyon etkisini okuyun ve gecmis performans
+                ile karsilastirarak daha guvenli kampanya kararlari alin.
+              </p>
+            </div>
+            <div className='flex flex-wrap gap-2 text-xs text-slate-100/90'>
+              <div className='rounded-full border border-white/12 bg-white/10 px-3 py-1.5'>
+                {selectedStoreCount > 0
+                  ? `${selectedStoreCount} magaza secili`
+                  : 'Tum magazalar'}
+              </div>
+              <div className='rounded-full border border-white/12 bg-white/10 px-3 py-1.5'>
+                {selectedProductCount > 0
+                  ? `${selectedProductCount} urun secili`
+                  : 'Urun secimi bekleniyor'}
+              </div>
+              <div className='rounded-full border border-emerald-300/20 bg-emerald-400/10 px-3 py-1.5 text-emerald-100'>
+                {selectedPromoLabel}
+              </div>
+              <div className='rounded-full border border-white/12 bg-white/10 px-3 py-1.5'>
+                {selectedPeriodLabel}
+              </div>
+            </div>
+          </div>
+
+          <div className='flex flex-col gap-3 xl:min-w-[300px] xl:items-end'>
+            <div className='grid w-full grid-cols-2 gap-3 xl:max-w-[320px]'>
+              <div className='rounded-2xl border border-white/12 bg-white/10 px-4 py-3'>
+                <div className='text-[11px] uppercase tracking-[0.18em] text-slate-300'>
+                  Simule Ciro
+                </div>
+                <div className='mt-1 text-xl font-semibold text-white'>
+                  {isLoading ? '-' : `₺${(totalRevenue / 1000).toFixed(1)}k`}
+                </div>
+              </div>
+              <div className='rounded-2xl border border-white/12 bg-white/10 px-4 py-3'>
+                <div className='text-[11px] uppercase tracking-[0.18em] text-slate-300'>
+                  Lift
+                </div>
+                <div className='mt-1 text-xl font-semibold text-emerald-300'>
+                  {liftPercentage >= 0 ? '+' : ''}
+                  {liftPercentage.toFixed(1)}%
+                </div>
+              </div>
+            </div>
+            <div className='flex items-center gap-2'>
+              <Button
+                disabled={!forecastData}
+                className={`h-10 rounded-xl px-4 text-sm shadow-sm transition-all ${forecastData ? 'bg-white text-slate-950 hover:bg-slate-100' : 'bg-white/10 text-slate-300 hover:bg-white/10'}`}
+                onClick={() => setIsPlanningModalOpen(true)}
+              >
+                <Plus className='mr-1.5 h-4 w-4' />
+                Kampanyayi Olustur
+              </Button>
+
+              <Button
+                variant='outline'
+                size='icon'
+                onClick={() => setIsExportModalOpen(true)}
+                className='h-10 w-10 rounded-xl border-white/15 bg-white/10 text-white hover:bg-white/20 hover:text-white'
+                title='Verileri Disa Aktar'
+              >
+                <HardDriveDownload className='h-4 w-4 2xl:h-5 2xl:w-5' />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className={cn(plannerSoftClass, 'hidden')}>
+        <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
+          <div className='space-y-2'>
             <h2 className='text-xl 2xl:text-2xl font-bold tracking-tight'>
               Fiyatlandırma ve Promosyon Analizi
             </h2>
@@ -1697,13 +1802,18 @@ export function ForecastingSection() {
         </div>
       </div>
 
-      <div className='grid gap-2 2xl:gap-3 lg:grid-cols-12'>
+      <div className='grid gap-4 2xl:gap-5 xl:grid-cols-[minmax(360px,420px)_minmax(0,1fr)]'>
         {/* Left Column: Inputs & Special Days */}
-        <div className='lg:col-span-4 space-y-2 2xl:space-y-3'>
-          <div className='flex flex-col gap-2 lg:flex-row lg:items-stretch'>
+        <div className='space-y-4 2xl:space-y-5'>
+          <div className='flex flex-col gap-4'>
             {/* Configuration Card */}
-            <Card className='h-fit max-w-[210px] md:max-w-[220px] lg:max-w-[360px] 2xl:max-w-[380px]'>
-              <CardHeader className='py-1.5 2xl:py-2.5'>
+            <Card
+              className={cn(
+                plannerSurfaceClass,
+                'h-fit rounded-3xl xl:sticky xl:top-4',
+              )}
+            >
+              <CardHeader className='border-b border-slate-200/70 py-4 2xl:py-5'>
                 <CardTitle className='text-base 2xl:text-lg'>
                   Konfigürasyon
                 </CardTitle>
@@ -1711,7 +1821,7 @@ export function ForecastingSection() {
                   Analiz parametrelerini giriniz
                 </CardDescription>
               </CardHeader>
-              <CardContent className='space-y-1.5 2xl:space-y-2.5 pb-2 2xl:pb-2.5'>
+              <CardContent className='space-y-3 pb-4 pt-4 2xl:space-y-4 2xl:pb-5'>
                 {hasRegionOptions && (
                   <div className='space-y-0.5'>
                     <div className='flex items-center gap-1'>
@@ -1875,7 +1985,7 @@ export function ForecastingSection() {
                       </UITooltip>
                     </div>
                     <span className='text-xs text-muted-foreground'>
-                      Ref Fiyat: 87.45 TL
+                      Ref Fiyat: {baseSatisFiyati.toFixed(2)} TL
                     </span>
                   </div>
 
@@ -1941,82 +2051,72 @@ export function ForecastingSection() {
                       </TabsTrigger>
                     </TabsList>
 
-                    {aktifPromosyonKodu !== '17' && (
-                      <div className='mt-1.5'>
-                        <TabsContent
-                          value='discount'
-                          className='mt-0 space-y-0.5'
-                        >
-                          <Label className='text-xs 2xl:text-sm text-muted-foreground'>
-                            İndirim (%)
-                          </Label>
-                          <div className='relative'>
-                            <Input
-                              type='number'
-                              className='h-6 2xl:h-7 text-xs pr-6'
-                              value={promosyonIndirimOrani}
-                              onChange={(e) => {
-                                setPromosyonIndirimOrani(e.target.value);
-                                // Auto-calc target price for reference
-                                const val = parseFloat(e.target.value);
-                                if (!isNaN(val)) {
-                                  const price = 87.45 * (1 - val / 100);
-                                  setTargetPrice(price.toFixed(2));
-                                }
-                              }}
-                            />
-                            <span className='absolute right-2 top-1.5 text-xs text-muted-foreground'>
-                              %
-                            </span>
-                          </div>
-                        </TabsContent>
-
-                        <TabsContent
-                          value='margin'
-                          className='mt-0 space-y-0.5'
-                        >
-                          <Label className='text-xs 2xl:text-sm text-muted-foreground'>
-                            İstenen Marj (%)
-                          </Label>
+                    <div className='mt-1.5'>
+                      <TabsContent
+                        value='discount'
+                        className='mt-0 space-y-0.5'
+                      >
+                        <Label className='text-xs 2xl:text-sm text-muted-foreground'>
+                          İndirim (%)
+                        </Label>
+                        <div className='relative'>
                           <Input
                             type='number'
-                            className='h-6 2xl:h-7 text-xs'
-                            value={promosyonMarj}
-                            onChange={(e) => setPromosyonMarj(e.target.value)}
-                          />
-                        </TabsContent>
-
-                        <TabsContent value='price' className='mt-0 space-y-0.5'>
-                          <Label className='text-xs 2xl:text-sm text-muted-foreground'>
-                            Hedef Fiyat (TL)
-                          </Label>
-                          <Input
-                            type='number'
-                            className='h-6 2xl:h-7 text-xs'
-                            value={targetPrice}
+                            className='h-6 2xl:h-7 text-xs pr-6'
+                            value={promosyonIndirimOrani}
                             onChange={(e) => {
-                              setTargetPrice(e.target.value);
-                              // Auto-calc discount % for reference
+                              setPromosyonIndirimOrani(e.target.value);
                               const val = parseFloat(e.target.value);
                               if (!isNaN(val)) {
-                                const disc = ((87.45 - val) / 87.45) * 100;
-                                setPromosyonIndirimOrani(disc.toFixed(1));
+                                const price = baseSatisFiyati * (1 - val / 100);
+                                setTargetPrice(price.toFixed(2));
                               }
                             }}
                           />
-                        </TabsContent>
-                      </div>
-                    )}
+                          <span className='absolute right-2 top-1.5 text-xs text-muted-foreground'>
+                            %
+                          </span>
+                        </div>
+                      </TabsContent>
+
+                      <TabsContent value='margin' className='mt-0 space-y-0.5'>
+                        <Label className='text-xs 2xl:text-sm text-muted-foreground'>
+                          İstenen Marj (%)
+                        </Label>
+                        <Input
+                          type='number'
+                          className='h-6 2xl:h-7 text-xs'
+                          value={promosyonMarj}
+                          onChange={(e) => setPromosyonMarj(e.target.value)}
+                        />
+                      </TabsContent>
+
+                      <TabsContent value='price' className='mt-0 space-y-0.5'>
+                        <Label className='text-xs 2xl:text-sm text-muted-foreground'>
+                          Hedef Fiyat (TL)
+                        </Label>
+                        <Input
+                          type='number'
+                          className='h-6 2xl:h-7 text-xs'
+                          value={targetPrice}
+                          onChange={(e) => {
+                            setTargetPrice(e.target.value);
+                            const val = parseFloat(e.target.value);
+                            if (!isNaN(val)) {
+                              const disc =
+                                ((baseSatisFiyati - val) / baseSatisFiyati) *
+                                100;
+                              setPromosyonIndirimOrani(disc.toFixed(1));
+                            }
+                          }}
+                        />
+                      </TabsContent>
+                    </div>
                   </Tabs>
 
                   {/* Info Display for the other value */}
                   <div className='text-xs text-muted-foreground text-center bg-background/50 py-0.5 rounded border'>
-                    {aktifPromosyonKodu === '17' ? (
-                      <>
-                        Promosyonsuz senaryo: aktifPromosyonKodu=17,
-                        indirim/marj/fiyat alanları otomatik null gönderilir.
-                      </>
-                    ) : pricingMode === 'discount' ? (
+                    {pricingMode === 'discount' ? (
                       <>
                         Satış Fiyatı:{' '}
                         <span className='font-medium text-foreground'>
@@ -2131,7 +2231,12 @@ export function ForecastingSection() {
               </CardContent>
             </Card>
 
-            <Card className='hidden lg:flex lg:flex-1 self-stretch h-full min-h-0 flex-col'>
+            <Card
+              className={cn(
+                plannerSurfaceClass,
+                'hidden h-full min-h-0 self-stretch rounded-3xl lg:flex lg:flex-1 lg:flex-col',
+              )}
+            >
               <CardHeader className='py-3 pb-2 2xl:py-4'>
                 <div className='flex items-center gap-1'>
                   <CardTitle className='text-base 2xl:text-lg'>
@@ -2220,7 +2325,7 @@ export function ForecastingSection() {
           </div>
 
           {/* Similar Campaigns Module */}
-          <Card className='h-fit border-indigo-100 bg-indigo-50/20'>
+          <Card className={cn(plannerSurfaceClass, 'h-fit rounded-3xl')}>
             <CardHeader className='py-2 pb-1 2xl:py-3'>
               <div className='flex items-center gap-2'>
                 <div className='bg-indigo-100 p-1 rounded-md text-indigo-600'>
@@ -2357,7 +2462,9 @@ export function ForecastingSection() {
           </Card>
 
           {/* Upcoming Special Days (Moved to Left Column) */}
-          <Card className='h-fit lg:hidden'>
+          <Card
+            className={cn(plannerSurfaceClass, 'h-fit rounded-3xl lg:hidden')}
+          >
             <CardHeader className='py-3 pb-2 2xl:py-4'>
               <div className='flex items-center gap-1'>
                 <CardTitle className='text-base 2xl:text-lg'>
@@ -2446,14 +2553,16 @@ export function ForecastingSection() {
         </div>
 
         {/* Right Column: Charts & KPIs */}
-        <div className='lg:col-span-8 space-y-2 2xl:space-y-3'>
+        <div className='space-y-4 2xl:space-y-5'>
           {/* KPIs */}
-          <div className='grid grid-cols-2 lg:grid-cols-4 gap-2 2xl:gap-3'>
+          <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:gap-4'>
             {promoKpiCards}
           </div>
           {/* Main Chart or Calendar */}
 
-          <div className='bg-white rounded-lg border shadow-sm p-1 min-h-[400px]'>
+          <div
+            className={cn(plannerSurfaceClass, 'min-h-[400px] rounded-3xl p-2')}
+          >
             {viewMode === 'chart' ? (
               <div className='relative'>
                 <div className='px-3 py-2 border-b space-y-2'>
@@ -2768,11 +2877,11 @@ export function ForecastingSection() {
           </div>
 
           {/* Advanced Analytics Module (Decision Support) */}
-          <div className='flex flex-col gap-2 2xl:gap-3'>
+          <div className='flex flex-col gap-4 2xl:gap-5'>
             {/* 1. Strategic Summary Cards */}
             <div className='grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 2xl:gap-4'>
               {/* Best Performing Promo Card */}
-              <Card className='h-full bg-emerald-50/50 border-emerald-100'>
+              <Card className='h-full rounded-3xl border-emerald-100 bg-emerald-50/70 shadow-[0_16px_36px_-28px_rgba(22,163,74,0.5)]'>
                 <CardContent className='h-full p-4 2xl:p-5'>
                   <div className='flex items-center justify-between mb-2'>
                     <div className='flex items-center gap-2'>
@@ -2831,7 +2940,7 @@ export function ForecastingSection() {
               </Card>
 
               {/* Stock Risk Alert Card */}
-              <Card className='h-full bg-red-50/50 border-red-100'>
+              <Card className='h-full rounded-3xl border-red-100 bg-red-50/70 shadow-[0_16px_36px_-28px_rgba(220,38,38,0.45)]'>
                 <CardContent className='h-full p-4 2xl:p-5'>
                   <div className='flex items-center justify-between mb-2'>
                     <div className='flex items-center gap-2'>
@@ -2906,7 +3015,7 @@ export function ForecastingSection() {
               </Card>
 
               {/* Benchmarking Card */}
-              <Card className='h-full bg-blue-50/50 border-blue-100'>
+              <Card className='h-full rounded-3xl border-blue-100 bg-blue-50/70 shadow-[0_16px_36px_-28px_rgba(37,99,235,0.42)]'>
                 <CardContent className='h-full p-4 2xl:p-5'>
                   <div className='flex items-center justify-between mb-2'>
                     <div className='flex items-center gap-2'>
@@ -2961,9 +3070,9 @@ export function ForecastingSection() {
           </div>
 
           {/* 2. Middle Section: Performance Visualization */}
-          <div className='grid grid-cols-1 md:grid-cols-2 gap-2 2xl:gap-3'>
+          <div className='grid grid-cols-1 gap-4 md:grid-cols-2 2xl:gap-5'>
             {/* Promo Effectiveness Chart */}
-            <Card className='h-full'>
+            <Card className={cn(plannerSurfaceClass, 'h-full rounded-3xl')}>
               <CardHeader className='py-2 pb-1 2xl:py-3'>
                 <div className='flex items-center gap-1'>
                   <CardTitle className='text-xs 2xl:text-sm font-semibold'>
@@ -3034,7 +3143,7 @@ export function ForecastingSection() {
             </Card>
 
             {/* Seasonality / Smart Insights List */}
-            <Card className='h-full'>
+            <Card className={cn(plannerSurfaceClass, 'h-full rounded-3xl')}>
               <CardHeader className='py-2 pb-1 2xl:py-3'>
                 <CardTitle className='text-xs 2xl:text-sm font-semibold'>
                   Akıllı İçgörüler & Sezonsallık
@@ -3085,8 +3194,10 @@ export function ForecastingSection() {
 
           {/* 3. Detailed History Table with Advanced Metrics */}
           {/* 3. Detailed History Table with Advanced Metrics */}
-          <Card>
-            <CardHeader className='py-2 pb-1 2xl:py-3 flex flex-row items-center justify-between'>
+          <Card
+            className={cn(plannerSurfaceClass, 'overflow-hidden rounded-3xl')}
+          >
+            <CardHeader className='flex flex-row items-center justify-between gap-3 border-b border-slate-200/70 py-3 2xl:py-4'>
               <div className='space-y-0.5'>
                 <CardTitle className='text-sm 2xl:text-base font-semibold'>
                   Promosyon Planla ve Takip Listesi
@@ -3098,13 +3209,15 @@ export function ForecastingSection() {
               <div className='flex items-center gap-2 flex-wrap justify-end'>
                 <Input
                   value={trackingSearch}
-                  onChange={(e) => setTrackingSearch(e.target.value)}
+                  onChange={(e) => {
+                    setTrackingSearch(e.target.value);
+                  }}
                   placeholder='Ara: kampanya, tip, tarih'
                   className='h-8 w-[190px] text-xs'
                 />
                 <Select
                   value={trackingStatusFilter}
-                  onValueChange={(value) =>
+                  onValueChange={(value) => {
                     setTrackingStatusFilter(
                       value as
                         | 'all'
@@ -3112,8 +3225,8 @@ export function ForecastingSection() {
                         | 'pending'
                         | 'approved'
                         | 'completed',
-                    )
-                  }
+                    );
+                  }}
                 >
                   <SelectTrigger className='h-8 w-[130px] text-xs'>
                     <SelectValue placeholder='Durum' />
@@ -3156,10 +3269,10 @@ export function ForecastingSection() {
                 </Button>
               </div>
             </CardHeader>
-            <CardContent className='p-0 2xl:p-1'>
-              <div className='border-t'>
-                <table className='w-full text-[10px] 2xl:text-xs text-left'>
-                  <thead className='bg-muted/50 text-muted-foreground font-medium uppercase'>
+            <CardContent className='p-0'>
+              <div className='overflow-x-auto'>
+                <table className='w-full text-left text-[10px] 2xl:text-xs'>
+                  <thead className='bg-slate-50 text-muted-foreground font-medium uppercase'>
                     <tr>
                       <th className='p-2 2xl:p-3 w-[100px]'>Tarih</th>
                       <th className='p-2 2xl:p-3'>Kampanya / Tip</th>

@@ -225,6 +225,7 @@ export function OverviewSection() {
 
   return showLoading ? (
     <PageLoading
+      variant='overview'
       title='Genel Bakış yükleniyor…'
       description='KPI, grafik ve uyarılar getiriliyor.'
     />

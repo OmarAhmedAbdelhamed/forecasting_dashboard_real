@@ -618,6 +618,7 @@ export function DemandForecastingSection() {
 
   return showLoading ? (
     <PageLoading
+      variant='demand'
       title='Talep Tahminleme yükleniyor…'
       description='KPI, tablolar ve grafikler getiriliyor.'
     />

@@ -11,7 +11,9 @@ import { InventoryPlanningSection } from '@/components/dashboard/sections/invent
 import { SeasonalPlanningSection } from '@/components/dashboard/sections/seasonal-planning';
 import { AdministrationSection } from '@/components/dashboard/sections/administration';
 import { CategoryManagementSection } from '@/components/dashboard/sections/category-management';
+import { PageLoading } from '@/components/ui/shared/page-loading';
 import type { Section } from '@/types/types';
+import type { DashboardSection } from '@/types/permissions';
 import { usePermissions } from '@/hooks/use-permissions';
 import { useAuth } from '@/hooks/use-auth';
 import { DashboardProvider } from '@/contexts/dashboard-context';
@@ -26,7 +28,10 @@ const SECTION_TO_PERMISSION_MAP: Record<Section, DashboardSection> = {
   alert_center: 'alert-center',
   user_management: 'user-management',
   administration: 'administration',
+  product_management: 'administration',
   category_management: 'category-management',
+  financial_overview: 'financial-overview',
+  operational_overview: 'operational-overview',
 };
 
 const PERMISSION_TO_SECTION_MAP: Record<DashboardSection, Section> = {
@@ -39,17 +44,34 @@ const PERMISSION_TO_SECTION_MAP: Record<DashboardSection, Section> = {
   'user-management': 'user_management',
   administration: 'administration',
   'category-management': 'category_management',
+  'financial-overview': 'financial_overview',
+  'operational-overview': 'operational_overview',
 };
 
 export default function Dashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { canViewSection } = usePermissions();
+  const { canViewSection, allowedSections } = usePermissions();
   const { user, userRole, isLoading, profileError } = useAuth();
   const [activeSection, setActiveSection] = useState<Section>(
     (searchParams.get('section') as Section) || 'overview',
   );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+
+  const getLoadingVariant = (section: Section) => {
+    switch (section) {
+      case 'overview':
+        return 'overview' as const;
+      case 'demand_forecasting':
+        return 'demand' as const;
+      case 'inventory_planning':
+        return 'inventory' as const;
+      case 'pricing_promotion':
+        return 'forecasting' as const;
+      default:
+        return 'default' as const;
+    }
+  };
 
   const handleSectionChange = (section: Section) => {
     if (section === 'alert_center') {
@@ -76,12 +98,11 @@ export default function Dashboard() {
 
     if (isLoading) {
       return (
-        <div className='flex items-center justify-center h-full'>
-          <div className='text-center'>
-            <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4'></div>
-            <p className='text-muted-foreground'>Loading dashboard...</p>
-          </div>
-        </div>
+        <PageLoading
+          variant={getLoadingVariant(activeSection)}
+          title='Dashboard loading...'
+          description='Layout, permissions, and page data are being prepared.'
+        />
       );
     }
 

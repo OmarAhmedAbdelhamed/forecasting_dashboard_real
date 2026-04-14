@@ -580,6 +580,7 @@ export function InventoryPlanningSection() {
   if (isInitialLoading && !hasInitialData) {
     return (
       <PageLoading
+        variant='inventory'
         title='Envanter Planlama yükleniyor…'
         description='Stok KPI, ürün listeleri ve uyarılar getiriliyor.'
       />
