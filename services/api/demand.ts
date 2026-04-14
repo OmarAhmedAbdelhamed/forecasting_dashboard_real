@@ -17,8 +17,9 @@ export const demandApi = {
   /**
    * Get demand forecasting KPIs
    */
-  getKPIs: (params?: FilterParams & { periodValue?: number; periodUnit?: string }) =>
-    apiClient.get<DemandKPIs>('/api/demand/kpis', params),
+  getKPIs: (
+    params?: FilterParams & { periodValue?: number; periodUnit?: string },
+  ) => apiClient.get<DemandKPIs>('/api/demand/kpis', params),
 
   /**
    * Get demand trend and forecast data
