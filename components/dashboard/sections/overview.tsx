@@ -156,7 +156,7 @@ export function OverviewSection() {
     promotionsResponse !== undefined;
 
   const showLoading = isInitialLoading && !hasInitialData;
-/*
+  /*
     return (
       <PageLoading
         title='Genel Bakış yükleniyor…'
