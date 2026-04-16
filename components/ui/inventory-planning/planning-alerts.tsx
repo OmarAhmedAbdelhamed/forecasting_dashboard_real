@@ -28,10 +28,16 @@ import {
   Box,
   Zap,
   ArrowRightLeft,
+  Info,
 } from 'lucide-react';
 import { InventoryAlert } from '@/types/inventory';
 import { cn } from '@/lib/utils';
 import { maxSafeTransferForSender, toDailyDemand } from './transfer-safety';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/shared/tooltip';
 
 export interface TransferAdviceClickPayload {
   sku: string;
@@ -320,6 +326,14 @@ interface AlertItemProps {
 }
 
 function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
+  const forecastDailyDemand =
+    alert.metrics?.forecastedDemand !== undefined
+      ? Math.max(
+          0,
+          Math.round(toDailyDemand(Number(alert.metrics.forecastedDemand), period)),
+        )
+      : undefined;
+
   const getIcon = (type: string) => {
     switch (type) {
       case 'stockout':
@@ -414,21 +428,37 @@ function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
           </div>
           {alert.metrics.threshold !== undefined && (
             <div className='flex flex-col items-center justify-center p-2 rounded bg-slate-50'>
-              <span className='text-[10px] text-slate-400 uppercase font-semibold'>
+              <span className='text-[10px] text-slate-400 uppercase font-semibold flex items-center gap-1'>
                 Hedef/Min
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type='button'
+                      className='inline-flex text-slate-400 hover:text-slate-600'
+                      aria-label='Hedef/Min aciklamasi'
+                    >
+                      <Info className='h-3 w-3' />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side='top' className='max-w-[240px] text-xs'>
+                    {alert.type === 'overstock'
+                      ? `Fazla stok durumunda hedef, secili donem (${period} gun) talebine gore hesaplanir.`
+                      : 'Kritik stok/stockout durumunda hedef minimum 7 gunluk talebe gore hesaplanir.'}
+                  </TooltipContent>
+                </Tooltip>
               </span>
               <span className='text-sm font-bold text-slate-700'>
                 {alert.metrics.threshold}
               </span>
             </div>
           )}
-          {alert.metrics.forecastedDemand !== undefined && (
+          {forecastDailyDemand !== undefined && (
             <div className='flex flex-col items-center justify-center p-2 rounded bg-slate-50'>
               <span className='text-[10px] text-slate-400 uppercase font-semibold'>
-                Tahmin ({period}G)
+                Gunluk Talep Tahmini
               </span>
               <span className='text-sm font-bold text-blue-600'>
-                {alert.metrics.forecastedDemand}
+                {forecastDailyDemand}
               </span>
             </div>
           )}

@@ -8,6 +8,8 @@ export interface FilterParams {
   storeIds?: string[];
   categoryIds?: string[];
   productIds?: string[];
+  search?: string;
+  performance?: string;
 }
 
 // Hierarchy types
@@ -312,6 +314,7 @@ export interface PredictDemandRequest {
 export interface MarketSearchRequest {
   query: string;
   storeId: string;
+  storeLabel?: string;
   page?: number;
   size?: number;
   distance?: number;

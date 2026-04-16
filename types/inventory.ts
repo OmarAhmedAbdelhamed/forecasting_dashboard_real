@@ -25,6 +25,7 @@ export interface InventoryItem {
   quantityOnOrder: number;
   todaysSales: number;
   price: number;
+  performanceCategory?: 'fast' | 'slow' | 'none' | 'average';
 }
 
 export interface InventoryKPIs {

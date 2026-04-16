@@ -159,6 +159,12 @@ STORE_COORDINATES: dict[str, tuple[float, float]] = {
     "1054": (38.3951, 27.0477),
 }
 
+GENERAL_ISTANBUL_COORDINATES: tuple[float, float] = (41.0082, 28.9784)
+GENERAL_SILIVRI_COORDINATES: tuple[float, float] = (41.0736, 28.2478)
+SILIVRI_KEYWORDS = ("silivri", "gumusyaka", "gümüşyaka")
+ISTANBUL_KEYWORDS = ("istanbul", "i̇stanbul")
+SILIVRI_FALLBACK_STORE_IDS = {"13", "18"}
+
 
 class PredictDemandRequest(BaseModel):
     magazaKodu: int
@@ -175,9 +181,87 @@ class PredictDemandRequest(BaseModel):
 class MarketSearchRequest(BaseModel):
     query: str
     storeId: str
+    storeLabel: Optional[str] = None
     page: int = 0
     size: int = 24
     distance: int = 10
+
+
+def _normalize_text_for_location(value: Optional[str]) -> str:
+    if value is None:
+        return ""
+    text = str(value).strip().lower()
+    return (
+        text.replace("ı", "i")
+        .replace("İ", "i")
+        .replace("ü", "u")
+        .replace("Ü", "u")
+        .replace("ş", "s")
+        .replace("Ş", "s")
+        .replace("ğ", "g")
+        .replace("Ğ", "g")
+        .replace("ö", "o")
+        .replace("Ö", "o")
+        .replace("ç", "c")
+        .replace("Ç", "c")
+    )
+
+
+def _is_silivri_text(value: Optional[str]) -> bool:
+    normalized = _normalize_text_for_location(value)
+    return any(keyword in normalized for keyword in SILIVRI_KEYWORDS)
+
+
+def _is_istanbul_text(value: Optional[str]) -> bool:
+    normalized = _normalize_text_for_location(value)
+    return any(keyword in normalized for keyword in ISTANBUL_KEYWORDS)
+
+
+def _resolve_market_coordinates(
+    store_id: str,
+    store_label: Optional[str] = None,
+) -> tuple[float, float]:
+    sid = str(store_id).strip()
+    if sid in STORE_COORDINATES:
+        return STORE_COORDINATES[sid]
+
+    # Prefer explicit frontend label when available.
+    if _is_silivri_text(store_label):
+        return GENERAL_SILIVRI_COORDINATES
+    if _is_istanbul_text(store_label):
+        return GENERAL_ISTANBUL_COORDINATES
+
+    # Try best-effort lookup from ClickHouse by magaza code.
+    if sid.isdigit():
+        try:
+            client = get_client()
+            query = f"""
+                SELECT
+                    argMax(il, tarih) AS city,
+                    argMax(ilce, tarih) AS district,
+                    argMax(magazaAdi, tarih) AS store_name
+                FROM {TABLE_NAME}
+                WHERE toString(magazakodu) = '{sid}'
+            """
+            row = client.query(query).first_row
+            if row:
+                city, district, store_name = row
+                combined = " ".join(
+                    str(part or "") for part in (city, district, store_name)
+                )
+                if _is_silivri_text(combined):
+                    return GENERAL_SILIVRI_COORDINATES
+                if _is_istanbul_text(combined):
+                    return GENERAL_ISTANBUL_COORDINATES
+        except Exception:
+            pass
+
+    # Explicit fallback IDs for known Silivri stores in non-ClickHouse ID space.
+    if sid in SILIVRI_FALLBACK_STORE_IDS:
+        return GENERAL_SILIVRI_COORDINATES
+
+    # Safe default.
+    return GENERAL_ISTANBUL_COORDINATES
 
 
 def _parse_prediction_date(value: object) -> Optional[date]:
@@ -1262,12 +1346,7 @@ def api_predict_demand(payload: PredictDemandRequest):
 @app.post("/api/market/search")
 def api_market_search(payload: MarketSearchRequest):
     """Proxy request to market comparison API using store-based coordinates."""
-    coords = STORE_COORDINATES.get(str(payload.storeId))
-    if not coords:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown storeId '{payload.storeId}'. No coordinates configured.",
-        )
+    coords = _resolve_market_coordinates(payload.storeId, payload.storeLabel)
 
     latitude, longitude = coords
     request_data = {
@@ -1334,10 +1413,12 @@ def api_get_inventory_items(
     storeIds: Optional[List[str]] = Query(None),
     categoryIds: Optional[List[str]] = Query(None),
     productIds: Optional[List[str]] = Query(None),
+    search: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
+    performance: Optional[str] = Query(None),
     days: int = Query(30, ge=1, le=3650),
     page: int = 1,
-    limit: int = 50,
+    limit: int = 25,
     sortBy: str = "stockValue",
     sortOrder: str = "desc"
 ):
@@ -1351,7 +1432,9 @@ def api_get_inventory_items(
             store_ids=storeIds,
             category_ids=categoryIds,
             product_ids=productIds,
+            search=search,
             status=status,
+            performance=performance,
             days=days,
             page=page,
             limit=limit,

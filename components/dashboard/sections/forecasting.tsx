@@ -455,7 +455,7 @@ export function ForecastingSection() {
   );
 
   const [promosyon, setPromosyon] = useState('Promosyonsuz');
-  const [aktifPromosyonKodu, setAktifPromosyonKodu] = useState('17');
+  const [aktifPromosyonKodu, setAktifPromosyonKodu] = useState('1');
   const [promotionOptions, setPromotionOptions] = useState<
     ProductPromotionOption[]
   >([]);
@@ -743,7 +743,7 @@ export function ForecastingSection() {
 
       if (!productCode) {
         setPromotionOptions([]);
-        setAktifPromosyonKodu('17');
+        setAktifPromosyonKodu('1');
         setPromosyon('Promosyonsuz');
         return;
       }
@@ -788,7 +788,7 @@ export function ForecastingSection() {
   }, [numericStoreIds, numericProductIds, toast]);
 
   useEffect(() => {
-    if (aktifPromosyonKodu === '17') {
+    if (aktifPromosyonKodu === '1') {
       return;
     }
 
@@ -796,7 +796,7 @@ export function ForecastingSection() {
       (option) => option.code === aktifPromosyonKodu,
     );
     if (!exists) {
-      setAktifPromosyonKodu('17');
+      setAktifPromosyonKodu('1');
       setPromosyon('Promosyonsuz');
     }
   }, [promotionOptions, aktifPromosyonKodu]);
@@ -1997,7 +1997,7 @@ export function ForecastingSection() {
                       value={aktifPromosyonKodu}
                       onValueChange={(code) => {
                         setAktifPromosyonKodu(code);
-                        if (code === '17') {
+                        if (code === '1') {
                           setPromosyon('Promosyonsuz');
                         } else {
                           const selected = promotionOptions.find(
@@ -2011,8 +2011,8 @@ export function ForecastingSection() {
                         <SelectValue placeholder='Promosyon seçiniz' />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value='17' className='text-xs'>
-                          Promosyonsuz (Kod: 17)
+                        <SelectItem value='1' className='text-xs'>
+                          Promosyonsuz (Kod: 1)
                         </SelectItem>
                         {promotionOptions.map((option) => (
                           <SelectItem

@@ -193,10 +193,18 @@ export function ProductDetailSheet({
     searchParams.storeId.length > 0 &&
     searchParams.query.trim().length > 0;
 
+  const selectedComparisonStoreLabel = useMemo(() => {
+    return (
+      storeOptions.find((store) => store.value === searchParams.storeId)?.label ||
+      ''
+    );
+  }, [storeOptions, searchParams.storeId]);
+
   const marketSearch = useMarketProductSearch(
     {
       query: searchParams.query,
       storeId: searchParams.storeId,
+      storeLabel: selectedComparisonStoreLabel,
       page: 0,
       size: 24,
       distance: 10,

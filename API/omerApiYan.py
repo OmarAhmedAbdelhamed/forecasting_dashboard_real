@@ -1004,6 +1004,7 @@ def get_alerts_summary(
     growth_query = f"""
     WITH growth_base AS (
         SELECT
+            toString(magazakodu) AS store_code,
             toString(urunkodu) AS sku,
             sumIf(satismiktari, tarih >= addDays({anchor_date}, -{safe_days}) AND tarih <= {anchor_date}) AS current_sales,
             sumIf(
@@ -1016,7 +1017,7 @@ def get_alerts_summary(
         WHERE {where_sql}
           AND tarih >= addDays({anchor_date}, -({safe_days} * 2))
           AND tarih <= {anchor_date}
-        GROUP BY sku
+        GROUP BY store_code, sku
     )
     SELECT
         countIf(last_sales > 0 AND growth_pct <= -10) AS low_growth,
@@ -1027,6 +1028,7 @@ def get_alerts_summary(
     errors_query = f"""
     WITH errors_base AS (
         SELECT
+            toString(magazakodu) AS store_code,
             toString(urunkodu) AS sku,
             sumIf(roll_mean_14, tarih >= addDays({anchor_date}, -{safe_days}) AND tarih <= {anchor_date}) AS forecast,
             sumIf(satismiktari, tarih >= addDays({anchor_date}, -{safe_days}) AND tarih <= {anchor_date}) AS actual,
@@ -1035,10 +1037,10 @@ def get_alerts_summary(
         WHERE {where_sql}
           AND tarih >= addDays({anchor_date}, -{safe_days})
           AND tarih <= {anchor_date}
-        GROUP BY sku
+        GROUP BY store_code, sku
     )
     SELECT
-        countIf(actual > 0 AND error_pct >= 5) AS major_errors,
+        countIf(actual > 0 AND error_pct >= 5) AS forecast_error_total,
         countIf(actual > 0 AND error_pct >= 10) AS critical_errors
     FROM errors_base
     """
@@ -1062,7 +1064,7 @@ def get_alerts_summary(
     """
 
     s_decline, e_growth = client.query(growth_query).first_row
-    m_errors, a_errors = client.query(errors_query).first_row
+    forecast_error_total, a_errors = client.query(errors_query).first_row
     s_out, e_overstock, u_reorder = client.query(inventory_query).first_row
     inventory_total = int((s_out or 0) + (e_overstock or 0) + (u_reorder or 0))
 
@@ -1082,8 +1084,8 @@ def get_alerts_summary(
             "severity": "info" if e_growth > 0 else "low"
         },
         "major_forecast_errors": {
-            "count": int(m_errors),
-            "severity": "medium" if m_errors > 0 else "low"
+            "count": int(forecast_error_total),
+            "severity": "medium" if forecast_error_total > 0 else "low"
         },
         "anomaly_errors": {
             "count": int(a_errors),
@@ -1104,8 +1106,7 @@ def get_alerts_summary(
         "total_alerts": int(
             (s_decline or 0)
             + (e_growth or 0)
-            + (m_errors or 0)
-            + (a_errors or 0)
+            + (forecast_error_total or 0)
             + inventory_total
         )
     }
@@ -2361,6 +2362,7 @@ def get_inventory_kpis(
         -- Match `/api/inventory/items` snapshot logic exactly (ORDER BY tarih DESC LIMIT 1 BY ...).
         SELECT
             toString(urunkodu)                           AS sku,
+            toString(urunismi)                           AS product_name,
             if(length(trim(toString(hier2_ad))) > 0, toString(hier2_ad), toString(reyonkodu)) AS category,
             toString(magazakodu)                         AS store,
             greatest(toFloat64(stok), 0)                 AS stock_level,
@@ -2387,6 +2389,7 @@ def get_inventory_kpis(
     product_base AS (
         SELECT
             l.sku                                         AS sku,
+            any(l.product_name)                           AS product_name,
             sum(l.stock_level)                            AS stock_level,
             sum(l.stock_value)                            AS stock_value,
             sum(greatest(l.forecast_daily, 0))            AS forecast_daily,
@@ -2395,6 +2398,22 @@ def get_inventory_kpis(
         LEFT JOIN sales_period s
             ON l.sku = s.sku AND l.category = s.category AND l.store = s.store
         GROUP BY l.sku
+    ),
+    product_status AS (
+        SELECT
+            sku,
+            product_name,
+            stock_level,
+            stock_value,
+            forecast_daily,
+            sales_period,
+            multiIf(
+                stock_level = 0, 'Out of Stock',
+                stock_level < forecast_daily * 3, 'Low Stock',
+                stock_level > forecast_daily * {int(days)}, 'Overstock',
+                'In Stock'
+            ) AS inventory_status
+        FROM product_base
     )
     SELECT
         sum(stock_value)                                                       AS totalStockValue,
@@ -2406,25 +2425,25 @@ def get_inventory_kpis(
             0
         )                                                                       AS stockCoverageDays,
 
-        countIf(stock_level > forecast_daily * {int(days)} AND forecast_daily > 0)      AS excessInventoryItems,
-        sumIf(stock_value, stock_level > forecast_daily * {int(days)} AND forecast_daily > 0)
+        countIf(inventory_status = 'Overstock')                                AS excessInventoryItems,
+        sumIf(stock_value, inventory_status = 'Overstock')
                                                                                 AS excessInventoryValue,
 
-        countIf(stock_level <= forecast_daily * {int(days)} AND forecast_daily > 0)      AS stockOutRiskItems,
-        sumIf(stock_value, stock_level <= forecast_daily * {int(days)} AND forecast_daily > 0)
+        countIf(inventory_status IN ('Out of Stock', 'Low Stock'))             AS stockOutRiskItems,
+        sumIf(stock_value, inventory_status IN ('Out of Stock', 'Low Stock'))
                                                                                 AS stockOutRiskValue,
 
         countIf(sales_period = 0)                                              AS neverSoldItems,
         sumIf(stock_value, sales_period = 0)                                   AS neverSoldValue,
 
         round(
-            countIf(stock_level > forecast_daily * {int(days)} AND forecast_daily > 0)
+            countIf(inventory_status = 'Overstock')
             / nullIf(count(), 0) * 100,
             1
         )                                                                       AS overstockPercentage,
 
-        countIf(stock_level <= forecast_daily * 14 AND forecast_daily > 0)     AS reorderNeededItems
-    FROM product_base
+        countIf(inventory_status = 'Low Stock')                                AS reorderNeededItems
+    FROM product_status
     """
 
     (
@@ -2440,6 +2459,96 @@ def get_inventory_kpis(
         overstockPercentage,
         reorderNeededItems
     ) = client.query(query).result_set[0]
+
+    debug_risk_query = f"""
+    WITH latest_store_product AS (
+        SELECT
+            toString(urunkodu)                           AS sku,
+            toString(urunismi)                           AS product_name,
+            if(length(trim(toString(hier2_ad))) > 0, toString(hier2_ad), toString(reyonkodu)) AS category,
+            toString(magazakodu)                         AS store,
+            greatest(toFloat64(stok), 0)                 AS stock_level,
+            greatest(toFloat64(degerlenmisstok), 0)      AS stock_value,
+            greatest(toFloat64(roll_mean_7), 0)          AS forecast_daily
+        FROM {table_name}
+        WHERE {where_sql}
+        ORDER BY tarih DESC
+        LIMIT 1 BY urunkodu, reyonkodu, magazakodu
+    ),
+    sales_period AS (
+        SELECT
+            toString(urunkodu)                           AS sku,
+            if(length(trim(toString(hier2_ad))) > 0, toString(hier2_ad), toString(reyonkodu)) AS category,
+            toString(magazakodu)                         AS store,
+            sumIf(
+                satismiktari,
+                tarih >= addDays({anchor_date}, -{int(days)} + 1) AND tarih <= {anchor_date}
+            ) AS sales_period
+        FROM {table_name}
+        WHERE {where_sql}
+        GROUP BY sku, category, store
+    ),
+    product_base AS (
+        SELECT
+            l.sku                                         AS sku,
+            any(l.product_name)                           AS product_name,
+            sum(l.stock_level)                            AS stock_level,
+            sum(l.stock_value)                            AS stock_value,
+            sum(greatest(l.forecast_daily, 0))            AS forecast_daily,
+            sum(coalesce(s.sales_period, 0))              AS sales_period
+        FROM latest_store_product l
+        LEFT JOIN sales_period s
+            ON l.sku = s.sku AND l.category = s.category AND l.store = s.store
+        GROUP BY l.sku
+    ),
+    product_status AS (
+        SELECT
+            sku,
+            product_name,
+            stock_level,
+            stock_value,
+            forecast_daily,
+            sales_period,
+            multiIf(
+                stock_level = 0, 'Out of Stock',
+                stock_level < forecast_daily * 3, 'Low Stock',
+                stock_level > forecast_daily * {int(days)}, 'Overstock',
+                'In Stock'
+            ) AS inventory_status
+        FROM product_base
+    )
+    SELECT
+        sku,
+        product_name,
+        stock_level,
+        forecast_daily,
+        sales_period,
+        inventory_status
+    FROM product_status
+    WHERE inventory_status IN ('Out of Stock', 'Low Stock')
+    ORDER BY inventory_status ASC, stock_level ASC, sku ASC
+    LIMIT 50
+    """
+
+    try:
+        risk_rows = client.query(debug_risk_query).result_rows
+        print(
+            f"[inventory-kpis] stockOutRiskItems={int(stockOutRiskItems or 0)} "
+            f"stockOutRiskValue={int(stockOutRiskValue or 0)} "
+            f"riskRows={len(risk_rows)}"
+        )
+        for sku, product_name, stock_level, forecast_daily, sales_period, inventory_status in risk_rows:
+            print(
+                "[inventory-kpis] risk_item "
+                f"sku={sku} "
+                f"product={product_name} "
+                f"stock={int(stock_level or 0)} "
+                f"forecast_daily={float(forecast_daily or 0):.2f} "
+                f"sales_period={int(sales_period or 0)} "
+                f"status={inventory_status}"
+            )
+    except Exception as debug_exc:
+        print(f"[inventory-kpis] risk debug query failed: {debug_exc}")
 
     return {
         "totalStockValue": int(totalStockValue or 0),
@@ -2808,10 +2917,12 @@ def get_inventory_items(
     store_ids: Optional[List[str]] = None,
     category_ids: Optional[List[str]] = None,
     product_ids: Optional[List[str]] = None,
+    search: Optional[str] = None,
     status: Optional[str] = None,   # In Stock | Low Stock | Out of Stock | Overstock
+    performance: Optional[str] = None,  # fast | slow
     days: int = 30,
     page: int = 1,
-    limit: int = 50,
+    limit: int = 25,
     sort_by: str = "stockValue",
     sort_order: str = "desc",
 ) -> dict:
@@ -2856,10 +2967,24 @@ def get_inventory_items(
         prods = ", ".join(f"'{p}'" for p in normalized_product_ids)
         where_clauses.append(f"toString(urunkodu) IN ({prods})")
 
+    if search:
+        safe_search = str(search).lower().replace("'", "''")
+        where_clauses.append(
+            f"(lowerUTF8(toString(urunismi)) LIKE '%{safe_search}%' OR lowerUTF8(toString(urunkodu)) LIKE '%{safe_search}%')"
+        )
+
     where_sql = " AND ".join(where_clauses)
     status_filter_sql = ""
     if status in {"Out of Stock", "Low Stock", "Overstock", "In Stock"}:
         status_filter_sql = f"HAVING status = '{status}'"
+
+    performance_filter_sql = ""
+    if performance == "fast":
+        performance_filter_sql = "HAVING performanceCategory = 'fast'"
+    elif performance == "slow":
+        performance_filter_sql = "HAVING performanceCategory = 'slow'"
+    elif performance == "none":
+        performance_filter_sql = "HAVING performanceCategory = 'none'"
 
     aggregate_by_store = bool(normalized_product_ids) and normalized_store_ids and len(normalized_store_ids) == 1
 
@@ -2875,6 +3000,7 @@ def get_inventory_items(
             l.price                   AS price,
             l.productName             AS productName,
             a.todaysSales             AS todaysSales,
+            a.salesPeriod             AS salesPeriod,
             a.lastRestockDate         AS lastRestockDate
         FROM (
             SELECT
@@ -2898,6 +3024,7 @@ def get_inventory_items(
                 toString(reyonkodu)    AS categoryCode,
                 toString(magazakodu)   AS store,
                 greatest(sumIf(satismiktari, tarih = {anchor_date}), 0) AS todaysSales,
+                greatest(sumIf(satismiktari, tarih >= addDays({anchor_date}, -{int(days)} + 1) AND tarih <= {anchor_date}), 0) AS salesPeriod,
                 maxIf(tarih, stok > 0) AS lastRestockDate
             FROM {table_name}
             WHERE {where_sql}
@@ -2907,7 +3034,7 @@ def get_inventory_items(
     """
 
     if aggregate_by_store:
-        query = f"""
+        filtered_query = f"""
             SELECT
                 sku                                                   AS id,
                 sku                                                   AS sku,
@@ -2932,24 +3059,35 @@ def get_inventory_items(
                 )                                                     AS status,
 
                 round(
-                    todaysSales / nullIf(stockLevel, 0),
-                    2
+                    (salesPeriod / {max(int(days), 1)}) / nullIf(stockLevel, 0),
+                    4
                 )                                                     AS turnoverRate,
 
                 lastRestockDate                                       AS lastRestockDate,
                 5                                                     AS leadTimeDays,
                 0                                                     AS quantityOnOrder,
                 todaysSales                                           AS todaysSales,
-                round(price, 2)                                       AS price
+                round(price, 2)                                       AS price,
+                
+                multiIf(
+                    salesPeriod = 0, 'none',
+                    (salesPeriod / {max(int(days), 1)}) >= 5 OR ((salesPeriod / {max(int(days), 1)}) / nullIf(stockLevel, 0)) >= 0.15, 'fast',
+                    (salesPeriod / {max(int(days), 1)}) <= 1.5 AND ((salesPeriod / {max(int(days), 1)}) / nullIf(stockLevel, 0)) <= 0.03, 'slow',
+                    'average'
+                )                                                     AS performanceCategory
             FROM (
                 {base_snapshot}
             )
             {status_filter_sql}
+            {performance_filter_sql}
+        """
+        query = f"""
+            {filtered_query}
             ORDER BY {sort_by} {sort_order}
             LIMIT {limit} OFFSET {offset}
         """
     else:
-        query = f"""
+        filtered_query = f"""
             SELECT
                 sku                                                   AS id,
                 sku                                                   AS sku,
@@ -2974,15 +3112,22 @@ def get_inventory_items(
                 )                                                     AS status,
 
                 round(
-                    todaysSalesSum / nullIf(stockLevelSum, 0),
-                    2
+                    (salesPeriodSum / {max(int(days), 1)}) / nullIf(stockLevelSum, 0),
+                    4
                 )                                                     AS turnoverRate,
 
                 lastRestockDateMax                                    AS lastRestockDate,
                 5                                                     AS leadTimeDays,
                 0                                                     AS quantityOnOrder,
                 todaysSalesSum                                        AS todaysSales,
-                round(priceAvg, 2)                                    AS price
+                round(priceAvg, 2)                                    AS price,
+                
+                multiIf(
+                    salesPeriodSum = 0, 'none',
+                    (salesPeriodSum / {max(int(days), 1)}) >= 5 OR ((salesPeriodSum / {max(int(days), 1)}) / nullIf(stockLevelSum, 0)) >= 0.15, 'fast',
+                    (salesPeriodSum / {max(int(days), 1)}) <= 1.5 AND ((salesPeriodSum / {max(int(days), 1)}) / nullIf(stockLevelSum, 0)) <= 0.03, 'slow',
+                    'average'
+                )                                                     AS performanceCategory
             FROM (
                 SELECT
                     sku,
@@ -2991,6 +3136,7 @@ def get_inventory_items(
                     sum(stockLevel)                                   AS stockLevelSum,
                     sum(stockValue)                                   AS stockValueSum,
                     sum(todaysSales)                                  AS todaysSalesSum,
+                    sum(salesPeriod)                                  AS salesPeriodSum,
                     max(lastRestockDate)                              AS lastRestockDateMax,
                     avg(price)                                        AS priceAvg,
                     sum(toFloat64(forecastDaily))                     AS fdDailySum
@@ -3000,6 +3146,10 @@ def get_inventory_items(
                 GROUP BY sku
             )
             {status_filter_sql}
+            {performance_filter_sql}
+        """
+        query = f"""
+            {filtered_query}
             ORDER BY {sort_by} {sort_order}
             LIMIT {limit} OFFSET {offset}
         """
@@ -3009,7 +3159,7 @@ def get_inventory_items(
     count_query = f"""
         SELECT countDistinct(sku)
         FROM (
-            {base_snapshot}
+            {filtered_query}
         )
     """
     total = client.query(count_query).result_rows[0][0]
@@ -3037,6 +3187,7 @@ def get_inventory_items(
                 "quantityOnOrder": r[16],
                 "todaysSales": max(0, int(r[17] or 0)),
                 "price": max(0.0, float(r[18] or 0)),
+                "performanceCategory": r[19] if len(r) > 19 else "average",
             }
             for r in items
         ],

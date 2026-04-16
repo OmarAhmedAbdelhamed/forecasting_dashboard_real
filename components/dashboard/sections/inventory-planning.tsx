@@ -24,8 +24,7 @@ import { SaleRateChart } from '@/components/ui/inventory-planning/sale-rate-char
 import { FastestMovingTable } from '@/components/ui/inventory-planning/fastest-moving-table';
 import { getInventoryKPIs } from '@/data/mock-data';
 import { InventoryItem } from '@/types/inventory';
-import type { CustomProductList, InventoryAlert } from '@/types/inventory';
-import { useCustomLists } from '@/contexts/custom-lists-context';
+import type { InventoryAlert } from '@/types/inventory';
 
 import { usePermissions } from '@/hooks/use-permissions';
 import {
@@ -58,43 +57,11 @@ function parseStoreLabelForDistance(storeName?: string) {
   }
   // Fallback for labels without code.
   const withoutCode = storeName.replace(/-\s*\d+\s*$/, '').trim();
-  const parts = withoutCode.split('-').map((p) => p.trim()).filter(Boolean);
+  const parts = withoutCode
+    .split('-')
+    .map((p) => p.trim())
+    .filter(Boolean);
   return parts.length > 0 ? parts[parts.length - 1] : withoutCode;
-}
-
-function buildRandomProductLists(
-  productOptions: { value: string; label: string }[],
-): CustomProductList[] {
-  if (productOptions.length === 0) {
-    return [];
-  }
-
-  const shuffled = [...productOptions].sort(() => Math.random() - 0.5);
-  const bucketSize = Math.max(1, Math.floor(shuffled.length / 3));
-  const groups = [
-    shuffled.slice(0, bucketSize),
-    shuffled.slice(bucketSize, bucketSize * 2),
-    shuffled.slice(bucketSize * 2, bucketSize * 3),
-  ];
-
-  const fallback = shuffled.slice(0, Math.min(8, shuffled.length));
-  const today = new Date().toISOString().slice(0, 10);
-  const names = [
-    'Kampanya Adaylari',
-    'Stok Takip Grubu',
-    'Odak Urunler',
-  ];
-
-  return groups.map((group, index) => {
-    const selected = group.length > 0 ? group : fallback;
-    return {
-      id: `AUTO_LIST_${index + 1}`,
-      name: names[index],
-      itemCount: selected.length,
-      lastModified: today,
-      skus: selected.map((item) => item.value),
-    };
-  });
 }
 
 export function InventoryPlanningSection() {
@@ -113,6 +80,9 @@ export function InventoryPlanningSection() {
   const [selectedAlertMarket, setSelectedAlertMarket] = useState<string>('all');
   const [tablePerformanceFilter, setTablePerformanceFilter] =
     useState<string>('all');
+  const [tableStatusFilter, setTableStatusFilter] = useState<string>('all');
+  const [inventorySearchTerm, setInventorySearchTerm] = useState('');
+  const [inventoryPage, setInventoryPage] = useState(1);
 
   // Period Selection State
   const [selectedPeriod, setSelectedPeriod] = useState<string>('30');
@@ -120,11 +90,14 @@ export function InventoryPlanningSection() {
   const periodDays = Number.isNaN(parsedPeriodDays) ? 30 : parsedPeriodDays;
 
   const tableRef = useRef<HTMLDivElement>(null);
+  const lastRiskLogKeyRef = useRef<string>('');
 
   // Product detail sheet state for planning alerts
   const [alertSelectedItem, setAlertSelectedItem] =
     useState<InventoryItem | null>(null);
-  const [selectedAlert, setSelectedAlert] = useState<InventoryAlert | null>(null);
+  const [selectedAlert, setSelectedAlert] = useState<InventoryAlert | null>(
+    null,
+  );
   const [alertSheetOpen, setAlertSheetOpen] = useState(false);
   const [sheetInitialForm, setSheetInitialForm] = useState<
     'none' | 'purchase' | 'transfer' | 'safety'
@@ -137,8 +110,6 @@ export function InventoryPlanningSection() {
     reason?: string;
     notes?: string;
   } | null>(null);
-  const { replaceAutoLists } = useCustomLists();
-
   // Get filter options from API
   const {
     regionOptions,
@@ -151,10 +122,6 @@ export function InventoryPlanningSection() {
     selectedStores,
     selectedCategories,
   });
-
-  useEffect(() => {
-    replaceAutoLists(buildRandomProductLists(productOptions));
-  }, [productOptions, replaceAutoLists]);
 
   // Filter region options based on user permissions
   const filteredRegionOptions = useMemo(() => {
@@ -242,16 +209,22 @@ export function InventoryPlanningSection() {
   const displayKpis = kpis || fallbackKpis;
 
   // 2. Period-Aware Data (Lists & Charts)
-  // Fetch real data from API
-  const { data: inventoryItemsData, isLoading: itemsLoading } =
-    useInventoryItems({
+  // Base items for non-table widgets (must stay independent from table-only filters)
+  const baseItemsParams = {
     regionIds: selectedRegions,
     storeIds: effectiveSelectedStores,
     categoryIds: effectiveSelectedCategories,
     productIds: effectiveSelectedProducts,
-    limit: 100,
     days: periodDays,
-  });
+  };
+
+  const { data: inventoryItemsData, isLoading: itemsLoading } =
+    useInventoryItems({
+      ...baseItemsParams,
+      limit: 1000,
+      page: 1,
+    });
+
 
   const { data: stockTrendsData, isLoading: trendsLoading } = useStockTrends({
     regionIds: selectedRegions,
@@ -265,15 +238,20 @@ export function InventoryPlanningSection() {
 
   const { data: storePerformanceData, isLoading: storePerformanceLoading } =
     useStorePerformance({
-    regionIds: selectedRegions,
-    storeIds: effectiveSelectedStores,
-    categoryIds: effectiveSelectedCategories,
-    productIds: effectiveSelectedProducts,
-    days: periodDays,
-  });
+      regionIds: selectedRegions,
+      storeIds: effectiveSelectedStores,
+      categoryIds: effectiveSelectedCategories,
+      productIds: effectiveSelectedProducts,
+      days: periodDays,
+    });
 
   // Use API data or fallback to empty arrays
   const periodItems = inventoryItemsData?.items ?? [];
+  const inventoryPagination = {
+    page: inventoryPage,
+    totalPages: Math.max(1, Math.ceil((periodItems.length || 0) / 25)),
+    total: periodItems.length || 0,
+  };
   const stockTrends = stockTrendsData?.trends ?? [];
   const storePerformance = (storePerformanceData?.stores ?? []).map(
     (store) => ({
@@ -282,15 +260,42 @@ export function InventoryPlanningSection() {
     }),
   );
 
+  const stockRiskItems = useMemo(
+    () =>
+      periodItems.filter(
+        (item) => item.status === 'Low Stock' || item.status === 'Out of Stock',
+      ),
+    [periodItems],
+  );
+
+  useEffect(() => {
+    setInventoryPage(1);
+  }, [
+    selectedRegions,
+    effectiveSelectedStores,
+    effectiveSelectedCategories,
+    effectiveSelectedProducts,
+    tableStatusFilter,
+    tablePerformanceFilter,
+    periodDays,
+  ]);
+
+  useEffect(() => {
+    const totalPages = inventoryPagination?.totalPages ?? 1;
+    if (inventoryPage > totalPages) {
+      setInventoryPage(totalPages);
+    }
+  }, [inventoryPage, inventoryPagination?.totalPages]);
+
   const { data: inventoryAlerts = [], isLoading: alertsLoading } =
     useInventoryAlerts({
-    regionIds: selectedRegions,
-    storeIds: effectiveSelectedStores,
-    categoryIds: effectiveSelectedCategories,
-    productIds: effectiveSelectedProducts,
-    limit: 5000,
-    days: periodDays,
-  });
+      regionIds: selectedRegions,
+      storeIds: effectiveSelectedStores,
+      categoryIds: effectiveSelectedCategories,
+      productIds: effectiveSelectedProducts,
+      limit: 5000,
+      days: periodDays,
+    });
 
   const enhancedAlerts = useMemo(() => {
     const safePeriodDays = Math.max(1, periodDays);
@@ -302,7 +307,10 @@ export function InventoryPlanningSection() {
 
     return inventoryAlerts.map((alert) => {
       const transferSourceStore = alert.metrics?.transferSourceStore;
-      const requestedTransferQty = Math.max(0, alert.metrics?.transferQuantity ?? 0);
+      const requestedTransferQty = Math.max(
+        0,
+        alert.metrics?.transferQuantity ?? 0,
+      );
 
       const getSafeTransferQty = (): number => {
         if (!transferSourceStore || requestedTransferQty <= 0) {
@@ -316,13 +324,19 @@ export function InventoryPlanningSection() {
         }
 
         const sourceStock = Math.max(0, sourceAlert.metrics?.currentStock ?? 0);
-        const sourceForecastPeriod = Math.max(0, sourceAlert.metrics?.forecastedDemand ?? 0);
+        const sourceForecastPeriod = Math.max(
+          0,
+          sourceAlert.metrics?.forecastedDemand ?? 0,
+        );
         const senderTransferableSurplus = maxSafeTransferForSender(
           sourceStock,
           sourceForecastPeriod,
           safePeriodDays,
         );
-        return Math.max(0, Math.min(requestedTransferQty, senderTransferableSurplus));
+        return Math.max(
+          0,
+          Math.min(requestedTransferQty, senderTransferableSurplus),
+        );
       };
 
       const safeTransferQty = getSafeTransferQty();
@@ -406,6 +420,61 @@ export function InventoryPlanningSection() {
     effectiveSelectedStores.length > 0 ||
     effectiveSelectedCategories.length > 0 ||
     !!chartSelectedProductId;
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+    if (itemsLoading || !inventoryItemsData) {
+      return;
+    }
+
+    const logKey = [
+      selectedRegions.join(','),
+      effectiveSelectedStores.join(','),
+      effectiveSelectedCategories.join(','),
+      effectiveSelectedProducts.join(','),
+      periodDays,
+      stockRiskItems.length,
+    ].join('|');
+
+    if (lastRiskLogKeyRef.current === logKey) {
+      return;
+    }
+
+    lastRiskLogKeyRef.current = logKey;
+
+    console.groupCollapsed(
+      `[inventory-planning] stock risk items (${stockRiskItems.length})`,
+    );
+    console.log('filters', {
+      regions: selectedRegions,
+      stores: effectiveSelectedStores,
+      categories: effectiveSelectedCategories,
+      products: effectiveSelectedProducts,
+      periodDays,
+    });
+    console.table(
+      stockRiskItems.map((item) => ({
+        sku: item.sku,
+        productName: item.productName,
+        stockLevel: item.stockLevel,
+        forecastedDemand: item.forecastedDemand,
+        daysOfCoverage: item.daysOfCoverage,
+        status: item.status,
+      })),
+    );
+    console.groupEnd();
+  }, [
+    effectiveSelectedCategories,
+    effectiveSelectedProducts,
+    effectiveSelectedStores,
+    inventoryItemsData,
+    itemsLoading,
+    periodDays,
+    selectedRegions,
+    stockRiskItems,
+  ]);
 
   const handleSeeAllPerformance = (filterType: 'fast' | 'slow') => {
     setTablePerformanceFilter(filterType);
@@ -492,14 +561,18 @@ export function InventoryPlanningSection() {
 
   const handleTransferAdviceClick = useCallback(
     (payload: TransferAdviceClickPayload) => {
-      const sourceStoreId = parseStoreCodeFromAlert(payload.fromStore) ?? undefined;
-      const destinationStoreId = parseStoreCodeFromAlert(payload.toStore) ?? undefined;
+      const sourceStoreId =
+        parseStoreCodeFromAlert(payload.fromStore) ?? undefined;
+      const destinationStoreId =
+        parseStoreCodeFromAlert(payload.toStore) ?? undefined;
 
       const sourceAlert = enhancedAlerts.find(
-        (alert) => alert.sku === payload.sku && alert.storeName === payload.fromStore,
+        (alert) =>
+          alert.sku === payload.sku && alert.storeName === payload.fromStore,
       );
       const targetAlert = enhancedAlerts.find(
-        (alert) => alert.sku === payload.sku && alert.storeName === payload.toStore,
+        (alert) =>
+          alert.sku === payload.sku && alert.storeName === payload.toStore,
       );
       const fallbackAlert = targetAlert ?? sourceAlert;
       if (!fallbackAlert) {
@@ -522,11 +595,11 @@ export function InventoryPlanningSection() {
         destinationStoreId,
         transferQuantity: payload.transferQty,
         reason: 'stock_balancing',
-        notes: `${payload.toStore} mağazasında 20 günlük stok hedefine ulaşmak için öneri transfer.`,
+        notes: `${payload.toStore} magazasinda ${periodDays} gunluk stok hedefine ulasmak icin transfer onerisi.`,
       });
       setAlertSheetOpen(true);
     },
-    [buildItemFromAlert, enhancedAlerts, findMatchingItem],
+    [buildItemFromAlert, enhancedAlerts, findMatchingItem, periodDays],
   );
 
   // Sync with Dashboard Context
@@ -543,11 +616,11 @@ export function InventoryPlanningSection() {
 
     if (displayKpis && inventoryAlerts) {
       setMetrics({
-        'Toplam Stok Değeri': `${(displayKpis.totalStockValue / 1000000).toFixed(1)}M TL`,
-        'Stok Kapsam Süresi': `${displayKpis.stockCoverageDays.toFixed(1)} Gün`,
-        'Stoksuz Kalma Riski': `${displayKpis.stockOutRiskItems} Ürün`,
-        'Fazla Stok': `${displayKpis.excessInventoryItems} Ürün`,
-        'Aktif Uyarılar': inventoryAlertCount,
+        'Toplam Stok Degeri': `${(displayKpis.totalStockValue / 1000000).toFixed(1)}M TL`,
+        'Stok Kapsam Suresi': `${displayKpis.stockCoverageDays.toFixed(1)} Gun`,
+        'Stoksuz Kalma Riski': `${displayKpis.stockOutRiskItems} Urun`,
+        'Fazla Stok': `${displayKpis.excessInventoryItems} Urun`,
+        'Aktif Uyarilar': inventoryAlertCount,
       });
     }
   }, [
@@ -581,8 +654,8 @@ export function InventoryPlanningSection() {
     return (
       <PageLoading
         variant='inventory'
-        title='Envanter Planlama yükleniyor…'
-        description='Stok KPI, ürün listeleri ve uyarılar getiriliyor.'
+        title='Envanter Planlama yukleniyor...'
+        description='Stok KPI, urun listeleri ve uyarilar getiriliyor.'
       />
     );
   }
@@ -591,7 +664,7 @@ export function InventoryPlanningSection() {
     <div className='flex flex-col space-y-6 pb-6'>
       <FilterBar
         title='Envanter Planlama'
-        titleTooltip='Bölge, mağaza ve ürün bazında filtreleme yaparak envanter verilerini özelleştirin.'
+        titleTooltip='Bolge, magaza ve urun bazinda filtreleme yaparak envanter verilerini ozellestirin.'
         regionOptions={filteredRegionOptions}
         selectedRegions={selectedRegions}
         onRegionChange={(regions) => {
@@ -619,16 +692,17 @@ export function InventoryPlanningSection() {
       >
         {canUseFilter('filter-period') && (
           <div className='w-full md:w-auto min-w-32'>
-          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-            <SelectTrigger>
-              <SelectValue placeholder='Periyot' />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value='30'>30 Gün</SelectItem>
-              <SelectItem value='60'>60 Gün</SelectItem>
-              <SelectItem value='180'>180 Gün</SelectItem>
-            </SelectContent>
-          </Select>
+            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+              <SelectTrigger>
+                <SelectValue placeholder='Periyot' />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='4'>4 Gun</SelectItem>
+                <SelectItem value='7'>7 Gun</SelectItem>
+                <SelectItem value='14'>2 Hafta</SelectItem>
+                <SelectItem value='30'>1 Ay</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         )}
       </FilterBar>
@@ -656,7 +730,7 @@ export function InventoryPlanningSection() {
         </div>
         <div className='lg:col-span-2'>
           <FastestMovingTable
-            items={periodItems.slice(0, 8)}
+            items={periodItems}
             onSeeAll={handleSeeAllPerformance}
             period={periodDays}
           />
@@ -700,10 +774,28 @@ export function InventoryPlanningSection() {
       <div ref={tableRef}>
         <InventoryTable
           data={periodItems}
+          searchTerm={inventorySearchTerm}
+          onSearchTermChange={(term) => {
+            setInventorySearchTerm(term);
+            setInventoryPage(1);
+          }}
+          statusFilter={tableStatusFilter}
+          onStatusFilterChange={(filter) => {
+            setTableStatusFilter(filter);
+            setInventoryPage(1);
+          }}
           performanceFilter={tablePerformanceFilter}
-          onPerformanceFilterChange={setTablePerformanceFilter}
+          onPerformanceFilterChange={(filter) => {
+            setTablePerformanceFilter(filter);
+            setInventoryPage(1);
+          }}
           period={periodDays}
           storeOptions={alertMarketOptions}
+          currentPage={inventoryPagination?.page ?? inventoryPage}
+          totalPages={inventoryPagination?.totalPages ?? 1}
+          totalItems={inventoryPagination?.total ?? periodItems.length}
+          onPageChange={setInventoryPage}
+          isLoading={itemsLoading}
         />
       </div>
 

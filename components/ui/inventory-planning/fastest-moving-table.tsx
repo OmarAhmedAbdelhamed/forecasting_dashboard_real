@@ -33,7 +33,7 @@ import { CardDescription } from '@/components/ui/shared/card';
 
 interface FastestMovingTableProps {
   items: InventoryItem[];
-  onSeeAll?: (filterType: 'fast' | 'slow') => void;
+  onSeeAll?: (filterType: 'fast' | 'slow' | 'none') => void;
   period?: number;
 }
 
@@ -46,16 +46,25 @@ export function FastestMovingTable({
 
   // Sort logic for tabs
   const fastMovingItems = useMemo(() => {
-    return [...items]
+    return items
+      .filter((item) => item.performanceCategory === 'fast')
       .sort((a, b) => b.forecastedDemand - a.forecastedDemand)
       .slice(0, 10);
-  }, [items]);
+  }, [items, period]);
 
   const slowMovingItems = useMemo(() => {
-    return [...items]
+    return items
+      .filter((item) => item.performanceCategory === 'slow')
       .sort((a, b) => a.forecastedDemand - b.forecastedDemand)
       .slice(0, 10);
-  }, [items]);
+  }, [items, period]);
+
+  const noneMovingItems = useMemo(() => {
+    return items
+      .filter((item) => item.performanceCategory === 'none')
+      .sort((a, b) => a.forecastedDemand - b.forecastedDemand)
+      .slice(0, 10);
+  }, [items, period]);
 
   const renderTable = (data: InventoryItem[]) => (
     <div className='h-full overflow-auto'>
@@ -173,7 +182,7 @@ export function FastestMovingTable({
             variant='ghost'
             className='text-blue-500 hover:text-blue-700 text-sm h-8 px-2'
             onClick={() =>
-              onSeeAll?.(activeTab === 'fastest' ? 'fast' : 'slow')
+              onSeeAll?.(activeTab === 'fastest' ? 'fast' : activeTab === 'none' ? 'none' : 'slow')
             }
           >
             Tümünü Gör
@@ -189,12 +198,15 @@ export function FastestMovingTable({
           className='w-full flex-1 flex flex-col min-h-0'
           onValueChange={setActiveTab}
         >
-          <TabsList className='mb-4 grid grid-cols-2 bg-slate-100/50'>
+          <TabsList className='mb-4 grid grid-cols-3 bg-slate-100/50'>
             <TabsTrigger value='fastest' className='text-xs'>
               En Hızlı Gidenler
             </TabsTrigger>
             <TabsTrigger value='slowest' className='text-xs'>
-              En Yavaş / Satmayan
+              Yavaş Satanlar
+            </TabsTrigger>
+            <TabsTrigger value='none' className='text-xs'>
+              Hiç Satmayanlar
             </TabsTrigger>
           </TabsList>
           <TabsContent value='fastest' className='flex-1 mt-0 overflow-hidden'>
@@ -202,6 +214,9 @@ export function FastestMovingTable({
           </TabsContent>
           <TabsContent value='slowest' className='flex-1 mt-0 overflow-hidden'>
             {renderTable(slowMovingItems)}
+          </TabsContent>
+          <TabsContent value='none' className='flex-1 mt-0 overflow-hidden'>
+            {renderTable(noneMovingItems)}
           </TabsContent>
         </Tabs>
       </CardContent>

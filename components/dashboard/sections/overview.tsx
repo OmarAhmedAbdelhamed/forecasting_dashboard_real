@@ -338,7 +338,7 @@ export function OverviewSection() {
                     </TooltipTrigger>
                     <TooltipContent
                       side='top'
-                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                      className='max-w-[280px] 2xl:max-w-[340px] text-xs 2xl:text-sm'
                     >
                       Düşük büyüme gösteren ürün kategorileri. Pazarlama
                       stratejisi gözden geçirilmeli.
@@ -360,7 +360,7 @@ export function OverviewSection() {
                     </TooltipTrigger>
                     <TooltipContent
                       side='top'
-                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                      className='max-w-[280px] 2xl:max-w-[340px] text-xs 2xl:text-sm'
                     >
                       Yüksek büyüme gösteren ürün kategorileri. Stok ve tedarik
                       planlaması öncelikli.
@@ -382,7 +382,7 @@ export function OverviewSection() {
                     </TooltipTrigger>
                     <TooltipContent
                       side='top'
-                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                      className='max-w-[280px] 2xl:max-w-[340px] text-xs 2xl:text-sm'
                     >
                       Tahmin doğruluğu düşük olan ürünler. Model iyileştirmesi
                       gerekebilir.
@@ -407,7 +407,7 @@ export function OverviewSection() {
                     </TooltipTrigger>
                     <TooltipContent
                       side='top'
-                      className='max-w-[200px] 2xl:max-w-[250px] text-xs 2xl:text-sm'
+                      className='max-w-[280px] 2xl:max-w-[340px] text-xs 2xl:text-sm'
                     >
                       Kritik stok seviyesinde olan ürünler. Acil tedarik
                       aksiyonu gerekli.

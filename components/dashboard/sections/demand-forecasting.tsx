@@ -55,7 +55,6 @@ import { usePermissions } from '@/hooks/use-permissions';
 import { useVisibility } from '@/hooks/use-visibility';
 import { useFilterOptions } from '@/services/hooks/filters/use-filter-options';
 import { demandApi } from '@/services/api/demand';
-import { forecastingApi } from '@/services/api/forecasting';
 import type {
   DemandKPIs,
   DemandTrendData,
@@ -67,81 +66,6 @@ import type {
 import { toast } from 'sonner';
 import { PageLoading } from '@/components/ui/shared/page-loading';
 
-type PredictModelPoint = {
-  tarih?: string;
-  date?: string;
-  tahmin?: number;
-  forecast?: number;
-};
-
-const normalizeDateKey = (value: string): string => {
-  if (!value) return value;
-  return value.includes('T') ? value.split('T')[0] : value.slice(0, 10);
-};
-
-const extractPredictForecastMap = (
-  rawResponse: Record<string, unknown>,
-): Map<string, number> => {
-  const map = new Map<string, number>();
-  const forecastRaw = rawResponse.forecast;
-  if (!Array.isArray(forecastRaw)) return map;
-
-  for (const row of forecastRaw) {
-    if (!row || typeof row !== 'object') continue;
-    const point = row as PredictModelPoint;
-    const rawDate = point.tarih || point.date;
-    const rawValue = point.tahmin ?? point.forecast;
-    if (
-      !rawDate ||
-      typeof rawValue !== 'number' ||
-      !Number.isFinite(rawValue)
-    ) {
-      continue;
-    }
-    map.set(normalizeDateKey(rawDate), rawValue);
-  }
-
-  return map;
-};
-
-const applyTrendlineFromSeries = (
-  rows: DemandTrendData[],
-): DemandTrendData[] => {
-  if (rows.length === 0) return rows;
-
-  const points: Array<{ x: number; y: number }> = [];
-  rows.forEach((row, idx) => {
-    const value =
-      typeof row.actual === 'number'
-        ? row.actual
-        : typeof row.forecast === 'number'
-          ? row.forecast
-          : null;
-    if (typeof value === 'number' && Number.isFinite(value)) {
-      points.push({ x: idx, y: value });
-    }
-  });
-
-  if (points.length < 2) {
-    return rows.map((row) => ({ ...row, trendline: row.trendline ?? 0 }));
-  }
-
-  const n = points.length;
-  const sumX = points.reduce((acc, p) => acc + p.x, 0);
-  const sumY = points.reduce((acc, p) => acc + p.y, 0);
-  const sumXY = points.reduce((acc, p) => acc + p.x * p.y, 0);
-  const sumX2 = points.reduce((acc, p) => acc + p.x * p.x, 0);
-
-  const denominator = n * sumX2 - sumX * sumX;
-  const slope = denominator === 0 ? 0 : (n * sumXY - sumX * sumY) / denominator;
-  const intercept = (sumY - slope * sumX) / n;
-
-  return rows.map((row, idx) => ({
-    ...row,
-    trendline: Math.max(0, slope * idx + intercept),
-  }));
-};
-
 // Responsive chart config for different screen sizes
 const getChartConfig = (is2xl: boolean) => ({
   axisFontSize: is2xl ? 14 : 11,
@@ -152,6 +76,32 @@ const getChartConfig = (is2xl: boolean) => ({
   strokeWidth: is2xl ? 3 : 2,
   yAxisWidth: is2xl ? 50 : 40,
 });
+
+const formatCompact = (
+  value: number,
+  type: 'currency' | 'units' = 'currency',
+) => {
+  const abs = Math.abs(value);
+  const suffix = type === 'currency' ? 'TL' : 'ünite';
+
+  if (abs >= 1_000_000_000) {
+    return `${(value / 1_000_000_000).toLocaleString('tr-TR', {
+      maximumFractionDigits: 1,
+    })}B ${suffix}`;
+  }
+  if (abs >= 1_000_000) {
+    return `${(value / 1_000_000).toLocaleString('tr-TR', {
+      maximumFractionDigits: 1,
+    })}M ${suffix}`;
+  }
+  if (abs >= 1_000) {
+    return `${(value / 1_000).toLocaleString('tr-TR', {
+      maximumFractionDigits: 1,
+    })}K ${suffix}`;
+  }
+
+  return `${value.toLocaleString('tr-TR')} ${suffix}`;
+};
 
 // ============ MAIN COMPONENT ============
 
@@ -238,7 +188,7 @@ export function DemandForecastingSection() {
   /*
     return (
       <PageLoading
-        title='Talep Tahminleme yükleniyor…'
+        title='Talep Tahminleme yÃ¼kleniyorâ€¦'
         description='KPI, tablolar ve grafikler getiriliyor.'
       />
     );
@@ -256,17 +206,17 @@ export function DemandForecastingSection() {
   const monthNames = useMemo(
     () => [
       'ocak',
-      'subat',
+      'şubat',
       'mart',
       'nisan',
-      'mayis',
+      'mayıs',
       'haziran',
       'temmuz',
-      'agustos',
-      'eylul',
+      'ağustos',
+      'eylül',
       'ekim',
-      'kasim',
-      'aralik',
+      'kasım',
+      'aralık',
     ],
     [],
   );
@@ -341,14 +291,10 @@ export function DemandForecastingSection() {
 
       const getErrorMessage = (error: unknown) => {
         if (error instanceof Error) return error.message;
-        return 'Bilinmeyen bir hata oluştu.';
+        return 'Bilinmeyen bir hata olustu.';
       };
 
       try {
-        // Tables are defined as "month over month" style insights; keep them stable at 30 days
-        // even when the main period selector is 180/365+.
-        const tableWindowDays = 30;
-
         const filterParams = {
           storeIds: selectedStores.length > 0 ? selectedStores : undefined,
           productIds:
@@ -381,7 +327,7 @@ export function DemandForecastingSection() {
             storeIds: filterParams.storeIds,
             categoryIds: filterParams.categoryIds,
             productIds: filterParams.productIds,
-            days: tableWindowDays,
+            days: periodDays,
             type: growthFilter as 'all' | 'high' | 'low',
           }),
           demandApi.getForecastErrors({
@@ -389,7 +335,7 @@ export function DemandForecastingSection() {
             categoryIds: filterParams.categoryIds,
             productIds: filterParams.productIds,
             severityFilter: errorFilter,
-            days: tableWindowDays,
+            days: periodDays,
           }),
         ]);
 
@@ -397,7 +343,7 @@ export function DemandForecastingSection() {
           setGrowthProductsState(growthRes.value.products);
         } else if (growthRes.status === 'rejected') {
           errorMessages.push(
-            `Büyüme Tablosu: ${getErrorMessage(growthRes.reason)}`,
+            `Buyume Tablosu: ${getErrorMessage(growthRes.reason)}`,
           );
         }
         if (errorRes.status === 'fulfilled' && errorRes.value?.products) {
@@ -415,21 +361,6 @@ export function DemandForecastingSection() {
           categoryIds: filterParams.categoryIds,
         };
 
-        const selectedStoreCode =
-          selectedStores.length === 1 && /^\d+$/.test(selectedStores[0])
-            ? Number(selectedStores[0])
-            : null;
-        const selectedProductCode =
-          selectedProducts.length === 1 && /^\d+$/.test(selectedProducts[0])
-            ? Number(selectedProducts[0])
-            : null;
-        const today = new Date();
-        const futureStart = new Date(today);
-        futureStart.setDate(futureStart.getDate() + 1);
-        const futureEnd = new Date(today);
-        futureEnd.setDate(futureEnd.getDate() + periodDays);
-        const toIsoDate = (d: Date) => d.toISOString().slice(0, 10);
-
         const [trendRes, biasRes, yearRes] = await Promise.allSettled([
           demandApi.getTrendForecast({
             ...detailParams,
@@ -442,46 +373,17 @@ export function DemandForecastingSection() {
         ]);
 
         if (trendRes.status === 'fulfilled' && trendRes.value?.data) {
-          if (selectedStoreCode !== null && selectedProductCode !== null) {
-            try {
-              // Keep loading until AI model responds; do not render backend-only trend first.
-              const predictResponse = (await forecastingApi.predictDemand({
-                magazaKodu: selectedStoreCode,
-                urunKodu: selectedProductCode,
-                tarihBaslangic: toIsoDate(futureStart),
-                tarihBitis: toIsoDate(futureEnd),
-                ozelgunsayisi: null,
-                aktifPromosyonKodu: '17',
-                istenenIndirim: null,
-                istenenMarj: null,
-                istenenFiyat: null,
-              })) as Record<string, unknown>;
-
-              const predictMap = extractPredictForecastMap(predictResponse);
-              const mergedTrend = trendRes.value.data.map((row) => {
-                const key = normalizeDateKey(row.date);
-                const fromModel = predictMap.get(key);
-                if (typeof fromModel !== 'number') return row;
-                return { ...row, forecast: fromModel };
-              });
-              setTrendDataState(applyTrendlineFromSeries(mergedTrend));
-            } catch (error) {
-              errorMessages.push(`AI Tahmin Modeli: ${getErrorMessage(error)}`);
-              setTrendDataState([]);
-            }
-          } else {
-            setTrendDataState(trendRes.value.data);
-          }
+          setTrendDataState(trendRes.value.data);
         } else if (trendRes.status === 'rejected') {
           errorMessages.push(
-            `Trend Grafiği: ${getErrorMessage(trendRes.reason)}`,
+            `Trend Grafigi: ${getErrorMessage(trendRes.reason)}`,
           );
         }
         if (biasRes.status === 'fulfilled' && biasRes.value?.data) {
           setBiasDataState(biasRes.value.data);
         } else if (biasRes.status === 'rejected') {
           errorMessages.push(
-            `Bias Grafiği: ${getErrorMessage(biasRes.reason)}`,
+            `Bias Grafigi: ${getErrorMessage(biasRes.reason)}`,
           );
         }
         if (yearRes.status === 'fulfilled' && yearRes.value?.data) {
@@ -493,7 +395,7 @@ export function DemandForecastingSection() {
           );
         } else if (yearRes.status === 'rejected') {
           errorMessages.push(
-            `Yıllık Karşılaştırma: ${getErrorMessage(yearRes.reason)}`,
+            `Yillik Karsilastirma: ${getErrorMessage(yearRes.reason)}`,
           );
         }
 
@@ -502,11 +404,11 @@ export function DemandForecastingSection() {
             'Demand Forecasting partial fetch errors:',
             errorMessages,
           );
-          toast.error('Bazı veriler yüklenemedi. Lütfen tekrar deneyin.');
+          toast.error('Bazi veriler yuklenemedi. Lutfen tekrar deneyin.');
         }
       } catch (error) {
         console.error('Demand Forecasting fetch error:', error);
-        toast.error('Veriler yüklenirken bir hata oluştu.');
+        toast.error('Veriler yuklenirken bir hata olustu.');
       } finally {
         setIsLoading(false);
       }
@@ -572,8 +474,8 @@ export function DemandForecastingSection() {
 
   const kpiValues = useMemo(() => {
     return {
-      totalForecast: `${(kpis.totalForecast.value / 1000).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}TL`,
-      totalUnits: `${(kpis.totalForecast.units / 1000).toLocaleString('tr-TR', { maximumFractionDigits: 1 })} Ünite`,
+      totalForecast: formatCompact(kpis.totalForecast.value, 'currency'),
+      totalUnits: formatCompact(kpis.totalForecast.units, 'units'),
       accuracy: `${kpis.accuracy.value}%`,
       yoyGrowth: `${kpis.yoyGrowth.value > 0 ? '+' : ''}${
         kpis.yoyGrowth.value
@@ -667,10 +569,10 @@ export function DemandForecastingSection() {
                 <SelectValue placeholder='Periyot' />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value='30'>30 Gün</SelectItem>
-                <SelectItem value='60'>60 Gün</SelectItem>
-                <SelectItem value='180'>180 Gün</SelectItem>
-                <SelectItem value='365'>1 Yıl</SelectItem>
+                <SelectItem value='4'>4 Gün</SelectItem>
+                <SelectItem value='7'>7 Gün</SelectItem>
+                <SelectItem value='14'>2 Hafta</SelectItem>
+                <SelectItem value='30'>1 Ay</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -711,7 +613,7 @@ export function DemandForecastingSection() {
             <KPICard
               title='Doğruluk Oranı'
               value={kpiValues.accuracy}
-              subValue='Geçen Ay'
+              subValue='Önceki Dönem'
               trend={
                 accuracyTrend !== 0 ? formatSignedPercent(accuracyTrend) : ''
               }
@@ -729,7 +631,7 @@ export function DemandForecastingSection() {
               trend=''
               trendUp={kpis.yoyGrowth.value >= 0}
               icon={Calendar}
-              tooltip='Geçen yılın aynı dönemine kıyasla satışlardaki büyüme oranı (YoY).'
+              tooltip='Geçen yılın aynen dönemine kıyasla satışlardaki büyüme oranı (YoY).'
             />
           )}
 
@@ -786,7 +688,7 @@ export function DemandForecastingSection() {
                   Geçmiş satışlar, AI tahmini ve trend çizgisi
                 </CardDescription>
               </CardHeader>
-              <CardContent className='h-[250px] 2xl:h-[350px]'>
+              <CardContent className='h-[320px] 2xl:h-[420px]'>
                 <ResponsiveContainer
                   width='100%'
                   height={is2xl ? 400 : 260}
@@ -794,7 +696,7 @@ export function DemandForecastingSection() {
                 >
                   <ComposedChart
                     data={trendData}
-                    margin={{ top: 10, right: 10, left: 10, bottom: 0 }}
+                    margin={{ top: 10, right: 10, left: 10, bottom: 28 }}
                   >
                     <CartesianGrid
                       strokeDasharray='3 3'
@@ -842,14 +744,16 @@ export function DemandForecastingSection() {
                         fontSize: chartConfig.tooltipFontSize,
                       }}
                       formatter={(value: number, name: string) => [
-                        value?.toLocaleString() || '—',
+                        value?.toLocaleString() || '?',
                         name,
                       ]}
                     />
                     <Legend
+                      verticalAlign='bottom'
+                      align='center'
                       wrapperStyle={{
                         fontSize: chartConfig.legendFontSize,
-                        paddingTop: '10px',
+                        paddingTop: '6px',
                       }}
                     />
                     <Area
@@ -907,7 +811,7 @@ export function DemandForecastingSection() {
                 <ResponsiveContainer width='100%' height='100%'>
                   <LineChart
                     data={yearData}
-                    margin={{ top: 0, right: 10, left: 0, bottom: 20 }}
+                    margin={{ top: 26, right: 10, left: 0, bottom: 24 }}
                   >
                     <CartesianGrid
                       strokeDasharray='3 3'
@@ -923,7 +827,7 @@ export function DemandForecastingSection() {
                       tickFormatter={formatWeekTick}
                       angle={-45}
                       textAnchor='end'
-                      height={60}
+                      height={72}
                     />
                     <YAxis
                       fontSize={chartConfig.axisFontSize}
@@ -935,7 +839,7 @@ export function DemandForecastingSection() {
                     <Tooltip
                       formatter={(value: number, name: string) => {
                         if (typeof value !== 'number') {
-                          return ['—', ''];
+                          return ['?', ''];
                         }
                         const year =
                           name === 'y2024'
@@ -952,6 +856,9 @@ export function DemandForecastingSection() {
                       }}
                     />
                     <Legend
+                      verticalAlign='top'
+                      align='center'
+                      height={24}
                       formatter={(value) =>
                         value === 'y2024'
                           ? '2024'
@@ -961,8 +868,7 @@ export function DemandForecastingSection() {
                       }
                       wrapperStyle={{
                         fontSize: chartConfig.legendFontSize,
-                        paddingTop: '10px',
-                        marginBottom: '-50px',
+                        paddingTop: '0px',
                       }}
                     />
                     <Line
@@ -1131,7 +1037,7 @@ export function DemandForecastingSection() {
                       <strong>Satış:</strong> Gerçekleşen satış adedi
                     </p>
                     <p>
-                      <strong>Büyüme:</strong> Geçen aya göre % değişim
+                      <strong>Büyüme:</strong> Önceki döneme göre % değişim
                     </p>
                   </TooltipContent>
                 </UITooltip>
@@ -1153,7 +1059,7 @@ export function DemandForecastingSection() {
                     <SelectValue placeholder='Filtre' />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='all'>Tümü</SelectItem>
+                    <SelectItem value='all'>Tümünü</SelectItem>
                     <SelectItem value='high'>Yüksek</SelectItem>
                     <SelectItem value='low'>Düşük</SelectItem>
                   </SelectContent>
@@ -1168,13 +1074,9 @@ export function DemandForecastingSection() {
                       <th className='text-left p-2 font-medium text-muted-foreground'>
                         SKU
                       </th>
-                      <th className='text-left p-2 font-medium text-muted-foreground'>
-                        Ürün
-                      </th>
+                      <th className='text-left p-2 font-medium text-muted-foreground'>Ürün</th>
                       <th className='text-right p-2 font-medium text-muted-foreground'>
-                        <span className='inline-flex items-center justify-end gap-1 w-full'>
-                          Büyüme
-                          <UITooltip>
+                        <span className='inline-flex items-center justify-end gap-1 w-full'>Büyüme<UITooltip>
                             <TooltipTrigger asChild>
                               <Info className='h-3.5 w-3.5 text-muted-foreground cursor-help' />
                             </TooltipTrigger>
@@ -1182,11 +1084,11 @@ export function DemandForecastingSection() {
                               <p>
                                 Formül:{' '}
                                 <strong>(Satış - Önceki dönem satış)</strong> /
-                                Önceki dönem satış × 100
+                                Önceki dönem satış * 100
                               </p>
                               <p className='mt-1'>
-                                Satış: son <strong>30</strong> gün, önceki
-                                dönem: bir önceki <strong>30</strong> gün.
+                                Satış: son <strong>{periodDays}</strong> gün,
+                                önceki dönem: bir önceki <strong>{periodDays}</strong> gün.
                               </p>
                             </TooltipContent>
                           </UITooltip>
@@ -1278,7 +1180,7 @@ export function DemandForecastingSection() {
                     <SelectValue placeholder='Filtre' />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value='all'>Tümü</SelectItem>
+                    <SelectItem value='all'>Tümünü</SelectItem>
                     <SelectItem value='high'>&gt;10%</SelectItem>
                     <SelectItem value='medium'>5-10%</SelectItem>
                     <SelectItem value='low'>&lt;5%</SelectItem>
@@ -1294,9 +1196,7 @@ export function DemandForecastingSection() {
                       <th className='text-left p-2 font-medium text-muted-foreground'>
                         SKU
                       </th>
-                      <th className='text-left p-2 font-medium text-muted-foreground'>
-                        Ürün
-                      </th>
+                      <th className='text-left p-2 font-medium text-muted-foreground'>Ürün</th>
                       <th className='text-right p-2 font-medium text-muted-foreground'>
                         <span className='inline-flex items-center justify-end gap-1 w-full'>
                           Hata
@@ -1310,7 +1210,7 @@ export function DemandForecastingSection() {
                                 <strong>|Tahmin - Satış| / Satış × 100</strong>
                               </p>
                               <p className='mt-1'>
-                                Hesaplama son <strong>30</strong> gün üzerinden
+                                Hesaplama son <strong>{periodDays}</strong> gün üzerinden
                                 yapılır.
                               </p>
                             </TooltipContent>
@@ -1464,3 +1364,4 @@ function KPICard({
     </div>
   );
 }
+

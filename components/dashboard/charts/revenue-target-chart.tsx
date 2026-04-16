@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import {
   ResponsiveContainer,
@@ -25,15 +25,29 @@ interface RevenueTargetChartProps {
   data: RevenueChartItem[];
 }
 
+function formatCompactNumber(value: number): string {
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(0)}K`;
+  }
+  return value.toLocaleString('tr-TR');
+}
+
+function formatCurrencyAdaptive(value: number): string {
+  return `TL ${formatCompactNumber(value)}`;
+}
+
 export function RevenueTargetChart({ data }: RevenueTargetChartProps) {
   return (
     <Card className='col-span-2'>
       <CardHeader className='pb-0 pt-3 px-4'>
         <CardTitle className='text-base md:text-lg lg:text-xl font-semibold text-gray-800'>
-          Ciro ve Hedef Karşılaştırması (Haftalık)
+          Ciro ve Hedef Karsilastirmasi (Haftalik)
         </CardTitle>
         <CardDescription className='text-xs md:text-sm lg:text-base text-gray-500'>
-          Haftalık gerçekleşen ciro ile hedeflenen cironun karşılaştırması.
+          Haftalik gerceklesen ciro ile hedeflenen cironun karsilastirmasi.
         </CardDescription>
       </CardHeader>
       <CardContent className='pt-2'>
@@ -64,9 +78,13 @@ export function RevenueTargetChart({ data }: RevenueTargetChartProps) {
               fontSize={13}
               tickLine={false}
               axisLine={false}
-              tickFormatter={(value) => `${(value / 1000000).toFixed(0)}M`}
+              tickFormatter={(value) =>
+                formatCompactNumber(
+                  typeof value === 'number' ? value : Number(value),
+                )
+              }
               domain={[0, 'auto']}
-              width={45}
+              width={55}
             />
             <Tooltip
               contentStyle={{
@@ -82,11 +100,12 @@ export function RevenueTargetChart({ data }: RevenueTargetChartProps) {
                 marginBottom: '4px',
                 color: '#374151',
               }}
-              formatter={(value, name) => {
+              formatter={(value, _name, entry) => {
                 const numValue =
                   typeof value === 'number' ? value : Number(value);
-                const label = name === 'actualCiro' ? 'Gerçekleşen' : 'Hedef';
-                return [`₺${(numValue / 1000000).toFixed(2)}M`, label];
+                const dataKey = String(entry?.dataKey ?? '');
+                const label = dataKey === 'actualCiro' ? 'Gerceklesen' : 'Hedef';
+                return [formatCurrencyAdaptive(numValue), label];
               }}
             />
             <Legend
@@ -97,7 +116,7 @@ export function RevenueTargetChart({ data }: RevenueTargetChartProps) {
             />
             <Bar
               dataKey='actualCiro'
-              name='Gerçekleşen Ciro'
+              name='Gerceklesen Ciro'
               fill='#3b82f6'
               radius={[0, 0, 0, 0]}
               barSize={24}

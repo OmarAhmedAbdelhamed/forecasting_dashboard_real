@@ -29,7 +29,9 @@ export const inventoryApi = {
     params?: FilterParams &
       PaginationParams & {
         status?: 'In Stock' | 'Low Stock' | 'Out of Stock' | 'Overstock';
+        performance?: 'fast' | 'slow';
         days?: number;
+        search?: string;
       },
   ) =>
     apiClient.get<PaginatedResponse<InventoryItem>>(

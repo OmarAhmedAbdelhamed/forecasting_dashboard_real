@@ -31,8 +31,10 @@ export function MultiSelect({
 }: MultiSelectProps) {
   const containerRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
+  const dropdownRef = React.useRef<HTMLDivElement>(null);
   const [isOpen, setIsOpen] = React.useState(false);
   const [searchValue, setSearchValue] = React.useState('');
+  const [alignRight, setAlignRight] = React.useState(false);
   const uniqueOptions = React.useMemo(() => {
     const seen = new Set<string>();
     return options.filter((option) => {
@@ -72,6 +74,25 @@ export function MultiSelect({
     document.addEventListener('mousedown', handleClickOutside);
     return () => { document.removeEventListener('mousedown', handleClickOutside); };
   }, []);
+
+  // Keep dropdown inside viewport horizontally
+  React.useLayoutEffect(() => {
+    if (!isOpen || !dropdownRef.current) {
+      return;
+    }
+
+    const rect = dropdownRef.current.getBoundingClientRect();
+    const overflowRight = rect.right > window.innerWidth - 8;
+    const overflowLeft = rect.left < 8;
+
+    if (overflowRight && !alignRight) {
+      setAlignRight(true);
+      return;
+    }
+    if (overflowLeft && alignRight) {
+      setAlignRight(false);
+    }
+  }, [isOpen, alignRight, filteredOptions.length, normalizedDisplaySelected.length]);
 
   // Toggle selection
   const toggleOption = (value: string) => {
@@ -138,7 +159,13 @@ export function MultiSelect({
 
       {/* Dropdown */}
       {isOpen && (
-        <div className='absolute z-9999 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95'>
+        <div
+          ref={dropdownRef}
+          className={cn(
+            'absolute z-9999 mt-1 w-max min-w-full max-w-[calc(100vw-2rem)] rounded-md border bg-popover text-popover-foreground shadow-lg animate-in fade-in-0 zoom-in-95',
+            alignRight ? 'right-0' : 'left-0',
+          )}
+        >
           {/* Search Input */}
           <div className='p-2 border-b'>
             <input
@@ -156,13 +183,13 @@ export function MultiSelect({
           <div className='max-h-60 overflow-auto'>
             {/* Selected Badges */}
             {normalizedDisplaySelected.length > 0 && (
-              <div className='flex flex-wrap gap-1.5 p-2 border-b shrink-0'>
+              <div className='flex flex-wrap items-start gap-1.5 p-2 border-b shrink-0 max-w-[min(24rem,calc(100vw-3rem))]'>
                 {normalizedDisplaySelected.map((value) => {
                   const option = uniqueOptions.find((o) => o.value === value);
                   return (
                     <span
                       key={value}
-                      className='inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground'
+                      className='inline-flex items-center gap-1 rounded-md bg-secondary px-2 py-1 text-xs font-medium text-secondary-foreground max-w-full whitespace-normal break-words'
                     >
                       {option?.label}
                       <button
@@ -204,7 +231,7 @@ export function MultiSelect({
                     }
                   }}
                   className={cn(
-                    'flex items-center justify-between px-2 py-2 text-sm rounded-sm cursor-pointer font-semibold border-b mb-1',
+                    'flex items-center justify-between px-2 py-2 text-sm rounded-sm cursor-pointer font-semibold border-b mb-1 whitespace-nowrap',
                     filteredOptions.every((option) =>
                       normalizedSelected.includes(option.value),
                     )
@@ -234,7 +261,7 @@ export function MultiSelect({
                       key={option.value}
                       onClick={() => { toggleOption(option.value); }}
                       className={cn(
-                        'flex items-center justify-between px-2 py-2 text-sm rounded-sm cursor-pointer',
+                        'flex items-center justify-between px-2 py-2 text-sm rounded-sm cursor-pointer whitespace-nowrap',
                         isSelected
                           ? 'bg-accent text-accent-foreground'
                           : 'hover:bg-muted',
