@@ -179,11 +179,39 @@ export interface PromotionItem {
   endDate: string;
   durationDays: number;
   discount: string;
+  productCount?: number;
   status: string;
 }
 
 export interface PromotionsResponse {
   promotions: PromotionItem[];
+}
+
+export interface PromotionDetailSummary {
+  name: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  durationDays: number;
+  productCount: number;
+  affectedStoreCount: number;
+  averageDiscount: number;
+}
+
+export interface PromotionDetailItem {
+  productCode: string;
+  productName: string;
+  brand: string;
+  beforePrice: number | null;
+  afterPrice: number | null;
+  averageDiscount: number;
+  priceChangePct: number | null;
+  storeCount: number;
+}
+
+export interface PromotionDetailResponse {
+  summary: PromotionDetailSummary;
+  items: PromotionDetailItem[];
 }
 
 // Alerts types

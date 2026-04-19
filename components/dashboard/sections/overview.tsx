@@ -254,6 +254,7 @@ export function OverviewSection() {
               title='Genel Model Doğruluğu'
               value={`${(metrics.accuracy || 0).toFixed(1)}%`}
               subtext='Ortalama Başarı'
+              tooltip='Formül: 100 - |(gelecek 30 gün tahmini - son 30 gün gerçek satış)| / son 30 gün gerçek satış * 100. Seçili filtrelere göre hesaplanır.'
               icon={Target}
               change={`${(metrics.accuracyChange || 0) > 0 ? '+' : ''}${(metrics.accuracyChange || 0).toFixed(1)}%`}
               changeType={
@@ -447,7 +448,7 @@ export function OverviewSection() {
         {/* Upcoming Promotions Table */}
         {canSeeTable('overview-upcoming-promotions') && (
           <div className='lg:col-span-12'>
-            <UpcomingPromotions promotions={promotions} />
+            <UpcomingPromotions promotions={promotions} filters={filterParams} />
           </div>
         )}
       </div>

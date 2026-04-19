@@ -7,6 +7,7 @@ import type {
   HistoricalChartResponse,
   RevenueChartResponse,
   PromotionsResponse,
+  PromotionDetailResponse,
   AlertsSummary,
   DashboardMetrics,
   FilterParams,
@@ -36,6 +37,17 @@ export const dashboardApi = {
    */
   getPromotions: (params?: FilterParams) =>
     apiClient.get<PromotionsResponse>('/api/dashboard/promotions', params),
+
+  /**
+   * Get details for a selected promotion row
+   */
+  getPromotionDetails: (
+    params: FilterParams & {
+      promotionName: string;
+      startDate: string;
+      endDate: string;
+    },
+  ) => apiClient.get<PromotionDetailResponse>('/api/dashboard/promotions/details', params),
 
   /**
    * Get alerts summary

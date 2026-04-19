@@ -1,8 +1,13 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Info } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/shared/tooltip';
 
 interface MetricCardProps {
   title: string;
@@ -11,6 +16,7 @@ interface MetricCardProps {
   change?: string;
   changeType?: 'positive' | 'negative' | 'neutral';
   subtext?: string;
+  tooltip?: string;
   icon: LucideIcon;
   delay?: number;
 }
@@ -22,22 +28,44 @@ export function MetricCard({
   change,
   changeType,
   subtext,
+  tooltip,
   icon: Icon,
   delay = 0,
 }: MetricCardProps) {
   return (
     <div
       className='group relative rounded-lg border bg-card text-card-foreground shadow-sm overflow-hidden border-border p-0 hover:border-accent/50 transition-all duration-300 animate-in fade-in slide-in-from-bottom-4 h-full max-w-125'
-      style={{ animationDelay: `${delay * 100}ms`, animationFillMode: 'both' }}
+      style={{ animationDelay: `${String(delay * 100)}ms`, animationFillMode: 'both' }}
     >
       {/* Subtle gradient on hover */}
       <div className='absolute inset-0 bg-linear-to-br from-accent/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500' />
 
       <div className='relative flex flex-col justify-between h-full'>
         <div className='flex flex-row items-center justify-between pb-0 pt-2 2xl:pt-3 px-3 2xl:px-3'>
-          <span className='text-xs 2xl:text-sm font-medium text-muted-foreground truncate'>
-            {title}
-          </span>
+          <div className='flex items-center gap-1 min-w-0'>
+            <span className='text-xs 2xl:text-sm font-medium text-muted-foreground truncate'>
+              {title}
+            </span>
+            {tooltip !== undefined && tooltip !== '' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type='button'
+                    className='text-muted-foreground hover:text-foreground shrink-0'
+                    aria-label={`${title} hesaplama aciklamasi`}
+                  >
+                    <Info className='w-3 h-3 2xl:w-3.5 2xl:h-3.5' />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent
+                  side='top'
+                  className='max-w-[320px] text-xs leading-relaxed'
+                >
+                  {tooltip}
+                </TooltipContent>
+              </Tooltip>
+            )}
+          </div>
           <div className='w-6 h-6 2xl:w-8 2xl:h-8 rounded-md bg-accent/10 flex items-center justify-center shrink-0 transition-colors duration-300'>
             <Icon className='w-3.5 h-3.5 2xl:w-5 2xl:h-5 text-accent transition-colors duration-300' />
           </div>
@@ -48,7 +76,7 @@ export function MetricCard({
             <span className='text-lg md:text-xl 2xl:text-2xl font-bold text-foreground tracking-tight'>
               {value}
             </span>
-            {change && (
+            {change !== undefined && change !== '' && (
               <div
                 className={cn(
                   'flex items-center gap-0.5 text-xs 2xl:text-sm font-medium mb-0.5',
@@ -67,12 +95,12 @@ export function MetricCard({
               </div>
             )}
           </div>
-          {secondaryValue && (
+          {secondaryValue !== undefined && secondaryValue !== '' && (
             <p className='text-xs md:text-sm 2xl:text-base font-semibold text-muted-foreground mt-0.5'>
               {secondaryValue}
             </p>
           )}
-          {subtext && (
+          {subtext !== undefined && subtext !== '' && (
             <p className='text-xs md:text-sm 2xl:text-base text-muted-foreground mt-0.5'>
               {subtext}
             </p>

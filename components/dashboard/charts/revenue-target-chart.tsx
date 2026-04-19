@@ -18,6 +18,12 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/shared/card';
+import {
+  Tooltip as UITooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/shared/tooltip';
+import { Info } from 'lucide-react';
 
 import { RevenueChartItem } from '@/services/types/api';
 
@@ -43,9 +49,27 @@ export function RevenueTargetChart({ data }: RevenueTargetChartProps) {
   return (
     <Card className='col-span-2'>
       <CardHeader className='pb-0 pt-3 px-4'>
-        <CardTitle className='text-base md:text-lg lg:text-xl font-semibold text-gray-800'>
-          Ciro ve Hedef Karsilastirmasi (Haftalik)
-        </CardTitle>
+        <div className='flex items-center gap-2'>
+          <CardTitle className='text-base md:text-lg lg:text-xl font-semibold text-gray-800'>
+            Ciro ve Hedef Karsilastirmasi (Haftalik)
+          </CardTitle>
+          <UITooltip>
+            <TooltipTrigger asChild>
+              <button
+                type='button'
+                className='text-muted-foreground hover:text-foreground'
+                aria-label='Hesaplama aciklamasi'
+              >
+                <Info className='h-4 w-4' />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side='top' className='max-w-[340px] text-xs leading-relaxed'>
+              Gerceklesen Ciro: Haftalik toplam satistutarikdvsiz. Hedef Ciro:
+              Magaza-urun bazinda 14 gunluk hareketli ortalama ciro (rolling revenue)
+              gunluk hesaplanir ve haftalik toplanir.
+            </TooltipContent>
+          </UITooltip>
+        </div>
         <CardDescription className='text-xs md:text-sm lg:text-base text-gray-500'>
           Haftalik gerceklesen ciro ile hedeflenen cironun karsilastirmasi.
         </CardDescription>
@@ -103,7 +127,7 @@ export function RevenueTargetChart({ data }: RevenueTargetChartProps) {
               formatter={(value, _name, entry) => {
                 const numValue =
                   typeof value === 'number' ? value : Number(value);
-                const dataKey = String(entry?.dataKey ?? '');
+                const dataKey = String(entry.dataKey);
                 const label = dataKey === 'actualCiro' ? 'Gerceklesen' : 'Hedef';
                 return [formatCurrencyAdaptive(numValue), label];
               }}

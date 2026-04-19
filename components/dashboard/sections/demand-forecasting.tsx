@@ -619,7 +619,7 @@ export function DemandForecastingSection() {
               }
               trendUp={accuracyTrend >= 0}
               icon={Target}
-              tooltip='Model doğruluğu. Tahmin ile gerçekleşen arasındaki tutarlılık.'
+              tooltip='Formül: 100 - |(gelecek secili dönem tahmini - son ayni uzunluktaki gercek satis)| / son ayni dönem gercek satis * 100. Secili filtre ve dönem bazinda hesaplanir.'
             />
           )}
 
@@ -681,8 +681,30 @@ export function DemandForecastingSection() {
           <div className='lg:col-span-8'>
             <Card className='h-full'>
               <CardHeader className='pb-2 2xl:pb-3'>
-                <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-xl'>
+                <CardTitle className='text-sm md:text-base lg:text-lg 2xl:text-xl flex items-center gap-2'>
                   Talep Tahmin ve Trend
+                  <UITooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type='button'
+                        className='text-muted-foreground hover:text-foreground'
+                        aria-label='Trend tahmin grafik aciklamasi'
+                      >
+                        <Info className='h-3.5 w-3.5 2xl:h-4 2xl:w-4' />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent className='max-w-[360px] text-xs 2xl:text-sm leading-relaxed'>
+                      <p>
+                        Grafik, secilen donemdeki gecmis satislari (Gecmis) ve
+                        gelecek donem tahminini (Tahmin) birlikte gosterir.
+                      </p>
+                      <p className='mt-2'>
+                        Trend cizgisi, grafikteki tum noktalar (gecmiste actual,
+                        gelecekte forecast) uzerinden lineer regresyon ile
+                        hesaplanan genel yonu temsil eder.
+                      </p>
+                    </TooltipContent>
+                  </UITooltip>
                 </CardTitle>
                 <CardDescription className='text-xs md:text-xs 2xl:text-sm'>
                   Geçmiş satışlar, AI tahmini ve trend çizgisi

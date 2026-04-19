@@ -16,6 +16,7 @@ import math
 import urllib.request
 import urllib.error
 import time
+import re
 from dotenv import load_dotenv
 import traceback
 import logging
@@ -32,6 +33,7 @@ from omerApiYan import (
     get_dashboard_revenue_chart,
     get_dashboard_historical_chart,
     get_product_promotions,
+    get_promotion_products_detail,
     get_demand_kpis,
     get_demand_trend_forecast,
     get_demand_year_comparison,
@@ -148,22 +150,6 @@ TABLE_NAME = os.getenv("CLICKHOUSE_TABLE_NAME", "demoVerileri")
 PREDICTION_API_URL = os.getenv("PREDICTION_API_URL", "http://13.53.45.133:8890/predict")
 MARKET_SEARCH_API_URL = os.getenv("MARKET_SEARCH_API_URL", "http://13.53.139.80:8891/search")
 
-STORE_COORDINATES: dict[str, tuple[float, float]] = {
-    "1012": (40.9988, 29.0316),
-    "1013": (40.9206939612, 29.1640854818),
-    "1014": (40.99643167, 28.885045),
-    "1016": (41.11894, 29.049255),
-    "1053": (41.04712, 28.89906),
-    "1017": (39.77983833, 30.476605),
-    "1051": (37.01767333, 35.24059667),
-    "1054": (38.3951, 27.0477),
-}
-
-GENERAL_ISTANBUL_COORDINATES: tuple[float, float] = (41.0082, 28.9784)
-GENERAL_SILIVRI_COORDINATES: tuple[float, float] = (41.0736, 28.2478)
-SILIVRI_KEYWORDS = ("silivri", "gumusyaka", "gümüşyaka")
-ISTANBUL_KEYWORDS = ("istanbul", "i̇stanbul")
-SILIVRI_FALLBACK_STORE_IDS = {"13", "18"}
 
 
 class PredictDemandRequest(BaseModel):
@@ -187,82 +173,57 @@ class MarketSearchRequest(BaseModel):
     distance: int = 10
 
 
-def _normalize_text_for_location(value: Optional[str]) -> str:
-    if value is None:
-        return ""
-    text = str(value).strip().lower()
-    return (
-        text.replace("ı", "i")
-        .replace("İ", "i")
-        .replace("ü", "u")
-        .replace("Ü", "u")
-        .replace("ş", "s")
-        .replace("Ş", "s")
-        .replace("ğ", "g")
-        .replace("Ğ", "g")
-        .replace("ö", "o")
-        .replace("Ö", "o")
-        .replace("ç", "c")
-        .replace("Ç", "c")
-    )
+def _extract_store_code(store_id: str) -> Optional[str]:
+    value = str(store_id).strip()
+    if not value:
+        return None
+    if value.isdigit():
+        return value
+    # Accept mixed inputs like "Magaza - 1012" or "store_1012"
+    match = re.search(r"(\d{3,})", value)
+    return match.group(1) if match else None
 
 
-def _is_silivri_text(value: Optional[str]) -> bool:
-    normalized = _normalize_text_for_location(value)
-    return any(keyword in normalized for keyword in SILIVRI_KEYWORDS)
-
-
-def _is_istanbul_text(value: Optional[str]) -> bool:
-    normalized = _normalize_text_for_location(value)
-    return any(keyword in normalized for keyword in ISTANBUL_KEYWORDS)
+STORE_COORDINATES_LOCAL: dict[str, tuple[float, float]] = {
+    # Pulled from ClickHouse once (default.gokkusagi, argMax(LAT/LON, tarih)).
+    "1": (41.07396439, 28.90454099),
+    "3": (41.17286789, 29.05198410),
+    "13": (41.08098043, 28.25897165),
+    "18": (41.07653403, 28.90128715),
+    "20": (41.08540218, 28.89373253),
+    "24": (41.09809490, 28.90576702),
+    "27": (41.07249055, 28.91081824),
+    "29": (41.04883086, 28.88287436),
+    "30": (41.15578791, 29.02938320),
+}
 
 
 def _resolve_market_coordinates(
     store_id: str,
     store_label: Optional[str] = None,
 ) -> tuple[float, float]:
-    sid = str(store_id).strip()
-    if sid in STORE_COORDINATES:
-        return STORE_COORDINATES[sid]
+    raw_sid = str(store_id).strip()
+    sid = _extract_store_code(raw_sid)
+    if not sid:
+        raise HTTPException(status_code=400, detail="storeId bos olamaz.")
+    if not str(sid).isdigit():
+        raise HTTPException(
+            status_code=400,
+            detail=f"Gecersiz storeId: {raw_sid}. Sayisal magaza kodu bekleniyor.",
+        )
 
-    # Prefer explicit frontend label when available.
-    if _is_silivri_text(store_label):
-        return GENERAL_SILIVRI_COORDINATES
-    if _is_istanbul_text(store_label):
-        return GENERAL_ISTANBUL_COORDINATES
+    coords = STORE_COORDINATES_LOCAL.get(sid)
+    if coords is not None:
+        return coords
 
-    # Try best-effort lookup from ClickHouse by magaza code.
-    if sid.isdigit():
-        try:
-            client = get_client()
-            query = f"""
-                SELECT
-                    argMax(il, tarih) AS city,
-                    argMax(ilce, tarih) AS district,
-                    argMax(magazaAdi, tarih) AS store_name
-                FROM {TABLE_NAME}
-                WHERE toString(magazakodu) = '{sid}'
-            """
-            row = client.query(query).first_row
-            if row:
-                city, district, store_name = row
-                combined = " ".join(
-                    str(part or "") for part in (city, district, store_name)
-                )
-                if _is_silivri_text(combined):
-                    return GENERAL_SILIVRI_COORDINATES
-                if _is_istanbul_text(combined):
-                    return GENERAL_ISTANBUL_COORDINATES
-        except Exception:
-            pass
-
-    # Explicit fallback IDs for known Silivri stores in non-ClickHouse ID space.
-    if sid in SILIVRI_FALLBACK_STORE_IDS:
-        return GENERAL_SILIVRI_COORDINATES
-
-    # Safe default.
-    return GENERAL_ISTANBUL_COORDINATES
-
+    label_suffix = f" ({store_label})" if store_label else ""
+    raise HTTPException(
+        status_code=404,
+        detail=(
+            f"Magaza koordinati bulunamadi: {sid}{label_suffix}. "
+            "Yerel store coordinate mapping listesine eklenmeli."
+        ),
+    )
 
 def _parse_prediction_date(value: object) -> Optional[date]:
     if value is None:
@@ -534,6 +495,40 @@ def api_get_dashboard_promotions(
         import traceback
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Promotions Error: {str(e)}")
+
+
+@app.get("/api/dashboard/promotions/details")
+def api_get_dashboard_promotion_details(
+    promotionName: str = Query(...),
+    startDate: str = Query(...),
+    endDate: str = Query(...),
+    regionIds: Optional[List[str]] = Query(None),
+    storeIds: Optional[List[str]] = Query(None),
+    categoryIds: Optional[List[str]] = Query(None),
+):
+    """
+    Get selected promotion details with affected products and before/after prices.
+    """
+    try:
+        client = get_client()
+        result = get_promotion_products_detail(
+            client,
+            table_name=TABLE_NAME,
+            promotion_name=promotionName,
+            start_date=startDate,
+            end_date=endDate,
+            region_ids=regionIds,
+            store_ids=storeIds,
+            category_ids=categoryIds,
+        )
+        return result
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Promotion Details Error: {str(e)}",
+        )
 
 
 # =============================================================================
@@ -1351,12 +1346,19 @@ def api_market_search(payload: MarketSearchRequest):
     latitude, longitude = coords
     request_data = {
         "query": payload.query,
-        "latitude": latitude,
-        "longitude": longitude,
+        "latitude": float(latitude),
+        "longitude": float(longitude),
         "page": int(payload.page),
         "size": int(payload.size),
         "distance": int(payload.distance),
     }
+    logger.info(
+        "Market search proxy payload: storeId=%s, lat=%s, lon=%s, query=%s",
+        payload.storeId,
+        request_data["latitude"],
+        request_data["longitude"],
+        payload.query,
+    )
 
     req = urllib.request.Request(
         MARKET_SEARCH_API_URL,

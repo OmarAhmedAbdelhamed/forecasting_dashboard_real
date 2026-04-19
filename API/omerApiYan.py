@@ -162,6 +162,108 @@ def _normalize_filter_ids(values: list[str] | None) -> list[str]:
     return list(dict.fromkeys(normalized))
 
 
+def _get_max_data_date(client, raw_table_name: str) -> date:
+    """
+    Resolve the latest available data date from source table.
+    We intentionally avoid falling back to `date.today()` to prevent
+    generating misleading future windows when data is stale.
+    """
+    row = client.query(f"SELECT max(toDate(tarih)) FROM {raw_table_name}").first_row
+    anchor_day = row[0] if row and row[0] else None
+    if anchor_day is None:
+        raise ValueError(f"Kaynak tabloda tarih bulunamadi: {raw_table_name}")
+    return anchor_day
+
+
+def _estimate_future_forecast_sum(
+    client,
+    table_name: str,
+    where_sql: str,
+    future_start: date,
+    horizon_days: int,
+    history_days: int = 56,
+) -> float:
+    """
+    Estimate future forecast total for a horizon.
+    - Uses existing future daily forecast rows when available.
+    - Fills missing days using weekday average from recent history.
+    """
+    safe_horizon = max(1, int(horizon_days))
+    future_end = future_start + timedelta(days=safe_horizon - 1)
+
+    future_query = f"""
+    SELECT
+        toDate(tarih) AS d,
+        sum(greatest(toFloat64(roll_mean_14), 0)) AS forecast_day
+    FROM {table_name}
+    WHERE {where_sql}
+      AND toDate(tarih) >= toDate('{future_start.isoformat()}')
+      AND toDate(tarih) <= toDate('{future_end.isoformat()}')
+    GROUP BY d
+    """
+    future_rows = client.query(future_query).result_rows
+    future_map: dict[date, float] = {
+        d: max(0.0, float(forecast_day or 0)) for d, forecast_day in future_rows
+    }
+
+    history_start = future_start - timedelta(days=max(7, int(history_days)))
+    history_query = f"""
+    WITH daily AS (
+        SELECT
+            toDate(tarih) AS d,
+            sum(greatest(toFloat64(roll_mean_14), 0)) AS forecast_day
+        FROM {table_name}
+        WHERE {where_sql}
+          AND toDate(tarih) >= toDate('{history_start.isoformat()}')
+          AND toDate(tarih) < toDate('{future_start.isoformat()}')
+        GROUP BY d
+    )
+    SELECT
+        toDayOfWeek(d) AS dow,
+        avg(forecast_day) AS avg_forecast
+    FROM daily
+    GROUP BY dow
+    """
+    weekday_rows = client.query(history_query).result_rows
+    weekday_avg: dict[int, float] = {
+        int(dow): max(0.0, float(avg_forecast or 0)) for dow, avg_forecast in weekday_rows
+    }
+
+    global_avg_query = f"""
+    SELECT avg(forecast_day)
+    FROM (
+        SELECT
+            toDate(tarih) AS d,
+            sum(greatest(toFloat64(roll_mean_14), 0)) AS forecast_day
+        FROM {table_name}
+        WHERE {where_sql}
+          AND toDate(tarih) >= toDate('{history_start.isoformat()}')
+          AND toDate(tarih) < toDate('{future_start.isoformat()}')
+        GROUP BY d
+    )
+    """
+    global_avg_row = client.query(global_avg_query).first_row
+    global_avg = (
+        max(0.0, float(global_avg_row[0] or 0))
+        if global_avg_row is not None
+        else 0.0
+    )
+
+    forecast_sum = 0.0
+    for i in range(safe_horizon):
+        current_day = future_start + timedelta(days=i)
+        current_val = future_map.get(current_day)
+        if current_val is not None and current_val > 0:
+            forecast_sum += current_val
+            continue
+        # ClickHouse toDayOfWeek: Monday=1 ... Sunday=7
+        dow = current_day.weekday() + 1
+        fallback = weekday_avg.get(dow, global_avg)
+        forecast_sum += max(0.0, float(fallback or 0))
+
+    return forecast_sum
+
+
 
 category_map = {
         100: "LIKITLER",
@@ -575,12 +677,11 @@ def get_dashboard_metrics(
     Forecast based on roll_mean_14.
     YTD based on current year starting Jan 1st.
     """
-    from datetime import date
     raw_table_name = table_name
     table_name = _compat_table(table_name)
+    anchor_day = _get_max_data_date(client, raw_table_name)
     anchor_date = _anchor_date_expr(raw_table_name)
-    today_dt = date.today()
-    start_of_year = date(today_dt.year, 1, 1).isoformat()
+    start_of_year = date(anchor_day.year, 1, 1).isoformat()
 
     common_where = ["1=1"]
     if region_ids:
@@ -597,8 +698,7 @@ def get_dashboard_metrics(
 
     query = f"""
     WITH
-    forecast_stats AS (
-        -- Last 14 days (Current)
+    curr_30 AS (
         SELECT
             sum(roll_mean_14) AS forecast_unit,
             sum(roll_mean_14 * (satistutarikdvsiz / nullIf(satismiktari, 0))) AS forecast_revenue,
@@ -606,19 +706,17 @@ def get_dashboard_metrics(
             sum(satistutarikdvsiz) AS actual_revenue
         FROM {table_name}
         WHERE {where_sql}
-          AND tarih >= addDays({anchor_date}, -13)
-          AND tarih <= {anchor_date}
+          AND toDate(tarih) BETWEEN addDays({anchor_date}, -29) AND {anchor_date}
     ),
-    prev_forecast AS (
-        -- Previous 14 days for growth calculation
+    prev_30 AS (
         SELECT
-            sum(roll_mean_14) AS prev_unit
+            sum(roll_mean_14) AS prev_forecast_unit,
+            sum(satismiktari) AS prev_actual_unit
         FROM {table_name}
         WHERE {where_sql}
-          AND tarih BETWEEN addDays({anchor_date}, -27) AND addDays({anchor_date}, -14)
+          AND toDate(tarih) BETWEEN addDays({anchor_date}, -59) AND addDays({anchor_date}, -30)
     ),
     ytd_stats AS (
-        -- YTD from Jan 1st
         SELECT
             sum(satismiktari) AS ytd_unit,
             sum(satistutarikdvsiz) AS ytd_revenue
@@ -628,7 +726,6 @@ def get_dashboard_metrics(
           AND tarih <= {anchor_date}
     ),
     ytd_prev_stats AS (
-        -- Previous YTD (approximate for change calculation, e.g., same period last year)
         SELECT
             sum(satismiktari) AS prev_ytd_unit
         FROM {table_name}
@@ -637,25 +734,15 @@ def get_dashboard_metrics(
           AND tarih <= addYears({anchor_date}, -1)
     )
     SELECT
-        -- Accuracy based on units
-        round((1 - abs(forecast_unit - actual_unit) / nullIf(actual_unit, 0)) * 100, 1) AS accuracy,
-        
-        -- Gap to sales (percentage)
-        round((forecast_unit - actual_unit) / nullIf(actual_unit, 0) * 100, 1) AS gap_to_sales,
-        
-        forecast_unit,
-        forecast_revenue,
-        
-        -- Forecast Unit Growth
-        round((forecast_unit - prev_unit) / nullIf(prev_unit, 0) * 100, 1) AS forecast_change,
-        
-        ytd_unit,
-        ytd_revenue,
-        
-        -- YTD Unit Growth
-        round((ytd_unit - prev_ytd_unit) / nullIf(prev_ytd_unit, 0) * 100, 1) AS ytd_change
-        
-    FROM forecast_stats, prev_forecast, ytd_stats, ytd_prev_stats
+        c.forecast_unit,
+        c.forecast_revenue,
+        c.actual_unit,
+        p.prev_forecast_unit,
+        p.prev_actual_unit,
+        y.ytd_unit,
+        y.ytd_revenue,
+        round((y.ytd_unit - yp.prev_ytd_unit) / nullIf(yp.prev_ytd_unit, 0) * 100, 1) AS ytd_change
+    FROM curr_30 c, prev_30 p, ytd_stats y, ytd_prev_stats yp
     """
 
     res = client.query(query).first_row
@@ -667,20 +754,71 @@ def get_dashboard_metrics(
             "gapToSales": 0.0, "gapToSalesChange": 0.0
         }
 
-    (accuracy, gap_to_sales, f_unit, f_rev, f_change, ytd_unit, ytd_rev, ytd_change) = res
+    (f_unit, f_rev, a_unit, prev_f_unit, prev_a_unit, ytd_unit, ytd_rev, ytd_change) = res
+
+    horizon_days = 30
+    future_forecast_units = _estimate_future_forecast_sum(
+        client=client,
+        table_name=table_name,
+        where_sql=where_sql,
+        future_start=anchor_day + timedelta(days=1),
+        horizon_days=horizon_days,
+    )
+
+    actual_last_30 = float(a_unit or 0)
+    prev_actual_30 = float(prev_a_unit or 0)
+    forecast_curr_30 = float(f_unit or 0)
+    forecast_prev_30 = float(prev_f_unit or 0)
+
+    def _accuracy_from_totals(forecast_total: float, actual_total: float) -> float:
+        if actual_total <= 0:
+            return 0.0
+        return max(
+            0.0,
+            min(
+                100.0,
+                100.0 - (abs(forecast_total - actual_total) / actual_total * 100.0),
+            ),
+        )
+
+    accuracy = _accuracy_from_totals(future_forecast_units, actual_last_30)
+    prev_accuracy = _accuracy_from_totals(forecast_curr_30, prev_actual_30)
+    accuracy_change = accuracy - prev_accuracy
+
+    gap_to_sales = (
+        ((future_forecast_units - actual_last_30) / actual_last_30) * 100.0
+        if actual_last_30 > 0
+        else 0.0
+    )
+    prev_gap = (
+        ((forecast_curr_30 - prev_actual_30) / prev_actual_30) * 100.0
+        if prev_actual_30 > 0
+        else 0.0
+    )
+    gap_change = gap_to_sales - prev_gap
+
+    forecast_change = (
+        ((future_forecast_units - forecast_curr_30) / forecast_curr_30) * 100.0
+        if forecast_curr_30 > 0
+        else 0.0
+    )
+    avg_unit_price_curr = (
+        (float(f_rev or 0) / forecast_curr_30) if forecast_curr_30 > 0 else 0.0
+    )
+    future_forecast_revenue = future_forecast_units * avg_unit_price_curr
 
     return {
-        "accuracy": float(accuracy or 0),
-        "accuracyChange": 1.0, # Placeholder or mock constant
-        "forecastValue": int(f_unit or 0),
-        "forecastUnit": int((f_unit or 0) / 14), # Daily average
-        "forecastRevenue": int(f_rev or 0),
-        "forecastChange": float(f_change or 0),
+        "accuracy": round(float(accuracy or 0), 1),
+        "accuracyChange": round(float(accuracy_change or 0), 1),
+        "forecastValue": int(round(future_forecast_units)),
+        "forecastUnit": int(round(future_forecast_units / max(1, horizon_days))),
+        "forecastRevenue": int(round(future_forecast_revenue)),
+        "forecastChange": round(float(forecast_change or 0), 1),
         "ytdValue": int(ytd_unit or 0),
         "ytdRevenue": int(ytd_rev or 0),
         "ytdChange": float(ytd_change or 0),
-        "gapToSales": float(gap_to_sales or 0),
-        "gapToSalesChange": 0.3 # Placeholder or mock constant
+        "gapToSales": round(float(gap_to_sales or 0), 1),
+        "gapToSalesChange": round(float(gap_change or 0), 1),
     }
 
 def get_dashboard_revenue_chart(
@@ -693,36 +831,52 @@ def get_dashboard_revenue_chart(
     """
     Weekly revenue chart
     actual = weekly sum(satistutarikdvsiz)
-    plan   = avg(roll_mean_14) * 7
+    plan   = weekly sum of 14-day rolling average revenue
+             (computed per store+product, then aggregated)
     """
 
     raw_table_name = table_name
     table_name = _compat_table(table_name)
     anchor_date = _anchor_date_expr(raw_table_name)
-    where_clauses = [f"tarih >= addDays({anchor_date}, -60)", f"tarih <= {anchor_date}"]
+    scope_clauses = ["1=1"]
 
     if region_ids:
         region_list = _quote_sql(region_ids, lower=True)
-        where_clauses.append(f"lower(cografi_bolge) IN ({region_list})")
+        scope_clauses.append(f"lower(cografi_bolge) IN ({region_list})")
 
     if store_ids:
         store_list = _quote_sql(store_ids)
-        where_clauses.append(f"toString(magazakodu) IN ({store_list})")
+        scope_clauses.append(f"toString(magazakodu) IN ({store_list})")
 
     if category_ids:
         category_list = _quote_sql(category_ids)
-        where_clauses.append(f"toString(reyonkodu) IN ({category_list})")
+        scope_clauses.append(f"toString(reyonkodu) IN ({category_list})")
 
-    where_sql = " AND ".join(where_clauses)
+    scope_sql = " AND ".join(scope_clauses)
 
     query = f"""
+    WITH base AS (
+        SELECT
+            toDate(tarih) AS tarih,
+            satistutarikdvsiz,
+            avg(greatest(toFloat64(satistutarikdvsiz), 0)) OVER (
+                PARTITION BY magazakodu, urunkodu
+                ORDER BY toDate(tarih)
+                ROWS BETWEEN 13 PRECEDING AND CURRENT ROW
+            ) AS roll_revenue_14
+        FROM {table_name}
+        WHERE {scope_sql}
+          AND toDate(tarih) >= addDays({anchor_date}, -120)
+          AND toDate(tarih) <= {anchor_date}
+    )
     SELECT
-        toStartOfWeek(tarih)                               AS week_start,
-        formatDateTime(toStartOfWeek(tarih), '%e %b')     AS week_label,
-        sum(satistutarikdvsiz)                             AS actualCiro,
-        sum(roll_mean_14 * (satistutarikdvsiz / nullIf(satismiktari, 0))) AS plan
-    FROM {table_name}
-    WHERE {where_sql}
+        toStartOfWeek(tarih) AS week_start,
+        formatDateTime(toStartOfWeek(tarih), '%e %b') AS week_label,
+        round(sum(greatest(toFloat64(satistutarikdvsiz), 0)), 0) AS actualCiro,
+        round(sum(greatest(toFloat64(roll_revenue_14), 0)), 0) AS plan
+    FROM base
+    WHERE toDate(tarih) >= addDays({anchor_date}, -60)
+      AND toDate(tarih) <= {anchor_date}
     GROUP BY week_start, week_label
     ORDER BY week_start
     """
@@ -750,15 +904,14 @@ def get_dashboard_historical_chart(
     weeks: int = 52
 ) -> dict:
     """
-    Year-over-Year comparison by week number.
-    Ensures exactly 52 weeks are returned via Python-side padding.
-    Current year stops at the last complete week.
+    Year-over-Year comparison by ISO week number.
+    Stops at the last available data week (from source table), not today.
     """
-    from datetime import date
+    raw_table_name = table_name
     table_name = _compat_table(table_name)
-    today = date.today()
-    curr_year = today.year
-    curr_week = today.isocalendar()[1]
+    anchor_day = _get_max_data_date(client, raw_table_name)
+    curr_year = anchor_day.year
+    last_available_week = int(anchor_day.isocalendar()[1])
 
     years = [curr_year - 2, curr_year - 1, curr_year]
     
@@ -798,9 +951,10 @@ def get_dashboard_historical_chart(
             lookup[w_idx] = {}
         lookup[w_idx][year] = int(rev or 0)
 
-    # Build the final 52-week skeleton
+    # Keep full year skeleton; only current year tail should stop.
+    max_week = 52
     data = []
-    for w in range(1, 53):
+    for w in range(1, max_week + 1):
         week_label = f"Hafta {w}"
         row = {"week": week_label}
         
@@ -810,17 +964,17 @@ def get_dashboard_historical_chart(
         row[f"y{years[0]}"] = week_data.get(years[0], 0)
         row[f"y{years[1]}"] = week_data.get(years[1], 0)
         
-        # Current year logic: stop at curr_week
-        if w < curr_week:
+        # Current year value only through last available week.
+        if w <= last_available_week:
             row[f"y{years[2]}"] = week_data.get(years[2], 0)
         else:
             row[f"y{years[2]}"] = None
-            
+             
         data.append(row)
 
     return {
         "data": data,
-        "currentWeek": curr_week - 1
+        "currentWeek": last_available_week
     }
 
 
@@ -847,20 +1001,28 @@ def get_product_promotions(
         "aktifPromosyonAdi IS NOT NULL",
         "aktifPromosyonAdi != 'Tayin edilmedi'"
     ]
+    scope_clauses: list[str] = []
 
     if region_ids:
         region_list = _quote_sql(region_ids, lower=True)
-        where_clauses.append(f"lower(cografi_bolge) IN ({region_list})")
+        region_clause = f"lower(cografi_bolge) IN ({region_list})"
+        where_clauses.append(region_clause)
+        scope_clauses.append(region_clause)
 
     if store_ids:
         store_list = _quote_sql(store_ids)
-        where_clauses.append(f"toString(magazakodu) IN ({store_list})")
+        store_clause = f"toString(magazakodu) IN ({store_list})"
+        where_clauses.append(store_clause)
+        scope_clauses.append(store_clause)
 
     if category_ids:
         category_list = _quote_sql(category_ids)
-        where_clauses.append(f"toString(reyonkodu) IN ({category_list})")
+        category_clause = f"toString(reyonkodu) IN ({category_list})"
+        where_clauses.append(category_clause)
+        scope_clauses.append(category_clause)
 
     where_sql = " AND ".join(where_clauses)
+    scope_sql = " AND ".join(scope_clauses) if scope_clauses else "1 = 1"
 
     query = f"""
     WITH daily AS (
@@ -941,20 +1103,42 @@ def get_product_promotions(
             promo_name,
             start_date,
             end_date
+    ),
+    product_counts AS (
+        SELECT
+            d.promo_name,
+            d.start_date,
+            d.end_date,
+            uniqExact(toString(t.urunkodu)) AS product_count
+        FROM deduped d
+        LEFT JOIN {table_name} t
+            ON t.aktifPromosyonAdi = d.promo_name
+           AND toDate(t.tarih) BETWEEN d.start_date AND d.end_date
+           AND t.promosyonVar = 1
+           AND ({scope_sql})
+        GROUP BY
+            d.promo_name,
+            d.start_date,
+            d.end_date
     )
     SELECT
-        promo_name,
-        start_date,
-        end_date,
-        promo_days,
-        discount,
+        d.promo_name,
+        d.start_date,
+        d.end_date,
+        d.promo_days,
+        d.discount,
+        p.product_count,
         multiIf(
-            end_date < {anchor_date}, 'Tamamlandi',
-            start_date > {anchor_date}, 'Beklemede',
+            d.end_date < {anchor_date}, 'Tamamlandi',
+            d.start_date > {anchor_date}, 'Beklemede',
             'Aktif'
         ) AS status
-    FROM deduped
-    ORDER BY start_date ASC
+    FROM deduped d
+    LEFT JOIN product_counts p
+      ON d.promo_name = p.promo_name
+     AND d.start_date = p.start_date
+     AND d.end_date = p.end_date
+    ORDER BY d.start_date ASC
     """
 
     rows = client.query(query).result_set
@@ -967,10 +1151,314 @@ def get_product_promotions(
                 "endDate": str(end_date),
                 "durationDays": int(promo_days),
                 "discount": f"%{max(0, int(round(discount or 0)))}",
+                "productCount": int(product_count or 0),
                 "status": status
             }
-            for (promo_name, start_date, end_date, promo_days, discount, status) in rows
+            for (promo_name, start_date, end_date, promo_days, discount, product_count, status) in rows
         ]
+    }
+
+
+def get_promotion_products_detail(
+    client,
+    table_name: str = "demoVerileri",
+    promotion_name: str = "",
+    start_date: str = "",
+    end_date: str = "",
+    region_ids: list[str] | None = None,
+    store_ids: list[str] | None = None,
+    category_ids: list[str] | None = None,
+) -> dict:
+    """
+    Return detailed product list for a selected promotion window including
+    estimated before/after prices.
+    """
+    if not promotion_name or not start_date or not end_date:
+        return {"summary": {}, "items": []}
+
+    raw_table_name = table_name
+    table_name = _compat_table(table_name)
+    anchor_date = _anchor_date_expr(raw_table_name)
+
+    where_clauses = [
+        "promosyonVar = 1",
+        "aktifPromosyonAdi = '{0}'".format(_escape_sql_string(promotion_name)),
+        f"toDate(tarih) BETWEEN toDate('{_escape_sql_string(start_date)}') AND toDate('{_escape_sql_string(end_date)}')",
+    ]
+
+    if region_ids:
+        region_list = _quote_sql(region_ids, lower=True)
+        where_clauses.append(f"lower(cografi_bolge) IN ({region_list})")
+
+    if store_ids:
+        store_list = _quote_sql(store_ids)
+        where_clauses.append(f"toString(magazakodu) IN ({store_list})")
+
+    if category_ids:
+        category_list = _quote_sql(category_ids)
+        where_clauses.append(f"toString(reyonkodu) IN ({category_list})")
+
+    where_sql = " AND ".join(where_clauses)
+    esc_start = _escape_sql_string(start_date)
+    esc_end = _escape_sql_string(end_date)
+
+    query = f"""
+    WITH promo_rows AS (
+        SELECT
+            toDate(tarih) AS tarih,
+            magazakodu,
+            urunkodu,
+            anyLast(urunAdi) AS product_name,
+            anyLast(markaAdi) AS brand,
+            anyLast(magazaAdi) AS store_name,
+            anyLast(il) AS city,
+            anyLast(ilce) AS district,
+            round(avg(toFloat64(satisFiyati)), 2) AS promo_price_day,
+            round(avg(abs(toFloat64(indirimYuzdesi))), 1) AS discount_day
+        FROM {table_name}
+        WHERE {where_sql}
+        GROUP BY
+            tarih,
+            magazakodu,
+            urunkodu
+    ),
+    promo_agg AS (
+        SELECT
+            magazakodu,
+            urunkodu,
+            anyLast(product_name) AS product_name,
+            anyLast(brand) AS brand,
+            anyLast(store_name) AS store_name,
+            anyLast(city) AS city,
+            anyLast(district) AS district,
+            round(quantileExact(0.5)(promo_price_day), 2) AS promo_price,
+            round(avg(discount_day), 1) AS avg_discount,
+            count() AS active_days
+        FROM promo_rows
+        GROUP BY
+            magazakodu,
+            urunkodu
+    ),
+    before_prices_exact_day AS (
+        SELECT
+            magazakodu,
+            urunkodu,
+            round(avg(toFloat64(satisFiyati)), 2) AS before_price_exact
+        FROM {table_name}
+        WHERE
+            toDate(tarih) = addDays(toDate('{esc_start}'), -1)
+            AND promosyonVar = 0
+            AND toFloat64(satisFiyati) > 0
+        GROUP BY
+            magazakodu,
+            urunkodu
+    ),
+    before_prices_recent_7d_daily AS (
+        SELECT
+            toDate(tarih) AS tarih,
+            magazakodu,
+            urunkodu,
+            round(avg(toFloat64(satisFiyati)), 2) AS day_price
+        FROM {table_name}
+        WHERE
+            toDate(tarih) >= addDays(toDate('{esc_start}'), -7)
+            AND toDate(tarih) < toDate('{esc_start}')
+            AND promosyonVar = 0
+            AND toFloat64(satisFiyati) > 0
+        GROUP BY
+            tarih,
+            magazakodu,
+            urunkodu
+    ),
+    before_prices_recent_7d AS (
+        SELECT
+            magazakodu,
+            urunkodu,
+            argMax(day_price, tarih) AS before_price_recent_7d
+        FROM before_prices_recent_7d_daily
+        GROUP BY
+            magazakodu,
+            urunkodu
+    ),
+    before_prices_median_7d AS (
+        SELECT
+            magazakodu,
+            urunkodu,
+            round(quantileExact(0.5)(toFloat64(satisFiyati)), 2) AS before_price_median_7d
+        FROM {table_name}
+        WHERE
+            toDate(tarih) >= addDays(toDate('{esc_start}'), -7)
+            AND toDate(tarih) < toDate('{esc_start}')
+            AND promosyonVar = 0
+            AND toFloat64(satisFiyati) > 0
+        GROUP BY
+            magazakodu,
+            urunkodu
+    )
+    SELECT
+        toString(p.urunkodu) AS product_code,
+        p.product_name,
+        p.brand,
+        toString(p.magazakodu) AS store_code,
+        p.store_name,
+        p.city,
+        p.district,
+        ifNull(
+            be.before_price_exact,
+            ifNull(br.before_price_recent_7d, bm.before_price_median_7d)
+        ) AS before_price,
+        p.promo_price,
+        p.avg_discount,
+        p.active_days
+    FROM promo_agg p
+    LEFT JOIN before_prices_exact_day be
+      ON p.magazakodu = be.magazakodu
+     AND p.urunkodu = be.urunkodu
+    LEFT JOIN before_prices_recent_7d br
+      ON p.magazakodu = br.magazakodu
+     AND p.urunkodu = br.urunkodu
+    LEFT JOIN before_prices_median_7d bm
+      ON p.magazakodu = bm.magazakodu
+     AND p.urunkodu = bm.urunkodu
+    ORDER BY
+        p.product_name ASC,
+        p.store_name ASC
+    """
+
+    rows = client.query(query).result_set
+    if not rows:
+        status = "Tamamlandi"
+        return {
+            "summary": {
+                "name": promotion_name,
+                "startDate": start_date,
+                "endDate": end_date,
+                "status": status,
+                "durationDays": 0,
+                "productCount": 0,
+                "affectedStoreCount": 0,
+                "averageDiscount": 0,
+            },
+            "items": [],
+        }
+
+    grouped: dict[str, dict] = {}
+    unique_stores: set[str] = set()
+    discount_values: list[float] = []
+    total_active_days = 0
+
+    for (
+        product_code,
+        product_name,
+        brand,
+        store_code,
+        store_name,
+        city,
+        district,
+        before_price,
+        promo_price,
+        avg_discount,
+        active_days,
+    ) in rows:
+        key = str(product_code)
+        unique_stores.add(str(store_code))
+        total_active_days += int(active_days or 0)
+        if avg_discount is not None:
+            discount_values.append(float(avg_discount))
+
+        if key not in grouped:
+            grouped[key] = {
+                "productCode": key,
+                "productName": str(product_name or ""),
+                "brand": str(brand or ""),
+                "beforePrices": [],
+                "afterPrices": [],
+                "discounts": [],
+                "stores": set(),
+            }
+
+        entry = grouped[key]
+        entry["stores"].add(str(store_code))
+        if before_price is not None:
+            entry["beforePrices"].append(float(before_price))
+        if promo_price is not None:
+            entry["afterPrices"].append(float(promo_price))
+        if avg_discount is not None:
+            entry["discounts"].append(float(avg_discount))
+
+    items = []
+    for _code, entry in grouped.items():
+        before = (
+            round(sum(entry["beforePrices"]) / len(entry["beforePrices"]), 2)
+            if entry["beforePrices"]
+            else None
+        )
+        after = (
+            round(sum(entry["afterPrices"]) / len(entry["afterPrices"]), 2)
+            if entry["afterPrices"]
+            else None
+        )
+        avg_disc = (
+            round(sum(entry["discounts"]) / len(entry["discounts"]), 1)
+            if entry["discounts"]
+            else 0.0
+        )
+
+        # Reliability guard:
+        # If a promotion has positive discount but computed after >= before,
+        # back-calculate a realistic pre-promo baseline from discount.
+        # before ~= after / (1 - discount)
+        if after is not None and avg_disc > 0:
+            implied_before = round(after / max(0.01, (1 - (avg_disc / 100.0))), 2)
+            if before is None:
+                before = implied_before
+            elif after > before:
+                before = max(before, implied_before)
+
+        if before and before > 0 and after is not None:
+            change_pct = round(((after - before) / before) * 100, 1)
+        else:
+            change_pct = None
+
+        items.append(
+            {
+                "productCode": entry["productCode"],
+                "productName": entry["productName"],
+                "brand": entry["brand"],
+                "beforePrice": before,
+                "afterPrice": after,
+                "averageDiscount": avg_disc,
+                "priceChangePct": change_pct,
+                "storeCount": len(entry["stores"]),
+            }
+        )
+
+    items.sort(key=lambda x: (x["productName"], x["productCode"]))
+    avg_discount = round(sum(discount_values) / len(discount_values), 1) if discount_values else 0.0
+    status = "Tamamlandi"
+    query_status = f"""
+    SELECT multiIf(
+        toDate('{esc_end}') < {anchor_date}, 'Tamamlandi',
+        toDate('{esc_start}') > {anchor_date}, 'Beklemede',
+        'Aktif'
+    )
+    """
+    status_row = client.query(query_status).first_row
+    if status_row and status_row[0]:
+        status = str(status_row[0])
+
+    return {
+        "summary": {
+            "name": promotion_name,
+            "startDate": start_date,
+            "endDate": end_date,
+            "status": status,
+            "durationDays": int(round(total_active_days / max(1, len(unique_stores)))),
+            "productCount": len(items),
+            "affectedStoreCount": len(unique_stores),
+            "averageDiscount": avg_discount,
+        },
+        "items": items,
     }
 
 
@@ -1390,13 +1878,7 @@ def get_demand_kpis(
     raw_table_name = table_name
     table_name = _compat_table(table_name)
     anchor_date = _anchor_date_expr(raw_table_name)
-    try:
-        anchor_row = client.query(
-            f"SELECT max(toDate(tarih)) FROM {raw_table_name}"
-        ).first_row
-        anchor_day = anchor_row[0] if anchor_row and anchor_row[0] else date.today()
-    except Exception:
-        anchor_day = date.today()
+    anchor_day = _get_max_data_date(client, raw_table_name)
 
     def add_months(d: date, months: int) -> date:
         y = d.year + (d.month - 1 + months) // 12
@@ -1490,6 +1972,26 @@ def get_demand_kpis(
                 ) AS high_growth
             FROM curr_prod
             LEFT JOIN prev_year_prod USING (urunkodu)
+        ),
+        curr_daily AS (
+            SELECT
+                toDate(tarih) AS d,
+                sum(greatest(toFloat64(satismiktari), 0)) AS actual_day,
+                sum(greatest(toFloat64(roll_mean_14), 0)) AS forecast_day
+            FROM {table_name}
+            WHERE {where_sql}
+              AND tarih >= start_date AND tarih < end_date
+            GROUP BY d
+        ),
+        prev_daily AS (
+            SELECT
+                toDate(tarih) AS d,
+                sum(greatest(toFloat64(satismiktari), 0)) AS actual_day,
+                sum(greatest(toFloat64(roll_mean_14), 0)) AS forecast_day
+            FROM {table_name}
+            WHERE {where_sql}
+              AND tarih >= prev_start_date AND tarih < prev_end_date
+            GROUP BY d
         )
 
     SELECT
@@ -1506,16 +2008,32 @@ def get_demand_kpis(
         sumIf(satismiktari, tarih >= start_date AND tarih < end_date) AS units_curr,
         sumIf(satistutarikdvsiz, tarih >= prev_year_start_date AND tarih < prev_year_end_date) AS revenue_prev_year,
 
-        -- Weighted metrics across all rows/products (more stable than averaging per-row percentages)
-        100 * sumIf(abs(roll_mean_14 - satismiktari), tarih >= start_date AND tarih < end_date AND satismiktari > 0)
-          / nullIf(sumIf(satismiktari, tarih >= start_date AND tarih < end_date AND satismiktari > 0), 0) AS mape_curr,
-        100 * sumIf(abs(roll_mean_14 - satismiktari), tarih >= prev_start_date AND tarih < prev_end_date AND satismiktari > 0)
-          / nullIf(sumIf(satismiktari, tarih >= prev_start_date AND tarih < prev_end_date AND satismiktari > 0), 0) AS mape_prev,
+        -- Accuracy and bias based on daily aggregated totals to avoid noisy row-level distortion.
+        100 * (
+            SELECT sum(abs(forecast_day - actual_day)) FROM curr_daily
+        ) / nullIf(
+            (SELECT sum(actual_day) FROM curr_daily),
+            0
+        ) AS mape_curr,
+        100 * (
+            SELECT sum(abs(forecast_day - actual_day)) FROM prev_daily
+        ) / nullIf(
+            (SELECT sum(actual_day) FROM prev_daily),
+            0
+        ) AS mape_prev,
 
-        100 * sumIf(roll_mean_14 - satismiktari, tarih >= start_date AND tarih < end_date AND satismiktari > 0)
-          / nullIf(sumIf(satismiktari, tarih >= start_date AND tarih < end_date AND satismiktari > 0), 0) AS bias_curr,
-        100 * sumIf(roll_mean_14 - satismiktari, tarih >= prev_start_date AND tarih < prev_end_date AND satismiktari > 0)
-          / nullIf(sumIf(satismiktari, tarih >= prev_start_date AND tarih < prev_end_date AND satismiktari > 0), 0) AS bias_prev,
+        100 * (
+            SELECT sum(forecast_day - actual_day) FROM curr_daily
+        ) / nullIf(
+            (SELECT sum(actual_day) FROM curr_daily),
+            0
+        ) AS bias_curr,
+        100 * (
+            SELECT sum(forecast_day - actual_day) FROM prev_daily
+        ) / nullIf(
+            (SELECT sum(actual_day) FROM prev_daily),
+            0
+        ) AS bias_prev,
 
         (SELECT low_growth FROM growth) AS low_growth,
         (SELECT high_growth FROM growth) AS high_growth
@@ -1531,8 +2049,8 @@ def get_demand_kpis(
             revenue_curr,
             units_curr,
             revenue_prev_year,
-            mape,
-            prev_mape,
+            _mape,
+            _prev_mape,
             bias,
             prev_bias,
             low_growth,
@@ -1556,44 +2074,110 @@ def get_demand_kpis(
     units_curr = float(units_curr or 0)
     revenue_prev_year = float(revenue_prev_year or 0)
 
+    daily_query = f"""
+    WITH
+        toDate('{start_date}') AS start_date,
+        toDate('{end_date}') AS end_date,
+        toDate('{prev_start_date}') AS prev_start_date,
+        toDate('{prev_end_date}') AS prev_end_date
+    SELECT
+        if(d >= start_date AND d < end_date, 'curr', 'prev') AS period_key,
+        d,
+        sum(greatest(toFloat64(satismiktari), 0)) AS actual_day,
+        sum(greatest(toFloat64(roll_mean_14), 0)) AS forecast_day
+    FROM (
+        SELECT toDate(tarih) AS d, satismiktari, roll_mean_14
+        FROM {table_name}
+        WHERE {where_sql}
+          AND (
+            (tarih >= start_date AND tarih < end_date)
+            OR
+            (tarih >= prev_start_date AND tarih < prev_end_date)
+          )
+    )
+    GROUP BY period_key, d
+    ORDER BY d
+    """
+
+    daily_rows = client.query(daily_query).result_rows
+    curr_days: list[tuple[object, object, object]] = []
+    prev_days: list[tuple[object, object, object]] = []
+    for period_key, d, actual_day, forecast_day in daily_rows:
+        row = (d, actual_day, forecast_day)
+        if period_key == "curr":
+            curr_days.append(row)
+        else:
+            prev_days.append(row)
+
+    horizon_days = max(1, (end_date - start_date).days)
+    future_start = end_date
+    future_forecast_units = _estimate_future_forecast_sum(
+        client=client,
+        table_name=table_name,
+        where_sql=where_sql,
+        future_start=future_start,
+        horizon_days=horizon_days,
+    )
+
+    actual_curr_units = sum(float(actual or 0) for _, actual, _ in curr_days)
+    actual_prev_units = sum(float(actual or 0) for _, actual, _ in prev_days)
+    forecast_curr_units = sum(float(forecast or 0) for _, _, forecast in curr_days)
+
+    def _accuracy_from_totals(forecast_total: float, actual_total: float) -> float:
+        if actual_total <= 0:
+            return 0.0
+        return max(
+            0.0,
+            min(
+                100.0,
+                100.0 - (abs(forecast_total - actual_total) / actual_total * 100.0),
+            ),
+        )
+
     yoy_growth = (
         (revenue_curr - revenue_prev_year) / revenue_prev_year * 100
         if revenue_prev_year
         else 0.0
     )
     forecast_trend = (
-        (forecast_revenue_curr - forecast_revenue_prev) / forecast_revenue_prev * 100
-        if forecast_revenue_prev
+        ((future_forecast_units - forecast_curr_units) / forecast_curr_units) * 100.0
+        if forecast_curr_units > 0
         else 0.0
     )
+    avg_unit_price_curr = (
+        (forecast_revenue_curr / forecast_units_curr)
+        if forecast_units_curr > 0
+        else 0.0
+    )
+    future_forecast_revenue = future_forecast_units * avg_unit_price_curr
 
-    accuracy_value = (
-        max(0.0, min(100.0, 100.0 - float(mape or 0)))
-        if units_curr > 0
-        else 0.0
-    )
-    accuracy_prev_value = (
-        max(0.0, min(100.0, 100.0 - float(prev_mape or 0)))
-        if prev_mape is not None
-        else 0.0
-    )
+    accuracy_value = _accuracy_from_totals(future_forecast_units, actual_curr_units)
+    accuracy_prev_value = _accuracy_from_totals(forecast_curr_units, actual_prev_units)
     accuracy_trend = accuracy_value - accuracy_prev_value
 
-    bias_value = float(bias or 0) if units_curr > 0 else 0.0
-    prev_bias_value = float(prev_bias or 0)
+    bias_value = (
+        ((future_forecast_units - actual_curr_units) / actual_curr_units) * 100.0
+        if actual_curr_units > 0
+        else 0.0
+    )
+    prev_bias_value = (
+        ((forecast_curr_units - actual_prev_units) / actual_prev_units) * 100.0
+        if actual_prev_units > 0
+        else 0.0
+    )
     bias_abs = abs(bias_value)
     prev_bias_abs = abs(prev_bias_value)
     if abs(bias_abs - prev_bias_abs) < 1.0:
         bias_trend = "stable"
     elif bias_abs > prev_bias_abs:
-        bias_trend = "Artıyor"
+        bias_trend = "Artiyor"
     else:
-        bias_trend = "Azalıyor"
+        bias_trend = "Azaliyor"
 
     return {
         "totalForecast": {
-            "value": int(forecast_revenue_curr),
-            "units": int(forecast_units_curr),
+            "value": int(round(future_forecast_revenue)),
+            "units": int(round(future_forecast_units)),
             "trend": round(forecast_trend, 1),
         },
         "accuracy": {
@@ -1621,14 +2205,15 @@ def get_demand_year_comparison(
     category_ids: list[int] | None = None,
     table_name: str = "demoVerileri"
 ) -> dict:
+    raw_table_name = table_name
     table_name = _compat_table(table_name)
 
-    today = date.today()
-    current_year = today.year
+    anchor_day = _get_max_data_date(client, raw_table_name)
+    current_year = anchor_day.year
     years = [current_year - 2, current_year - 1, current_year]
 
-    # Last *full* ISO week (exclude the in-progress current week).
-    last_full_week = max(0, today.isocalendar()[1] - 1)
+    # Stop at last available data week.
+    last_available_week = max(1, min(53, int(anchor_day.isocalendar()[1])))
 
     filters = [f"toYear(tarih) IN ({','.join(map(str, years))})"]
     if store_ids:
@@ -1664,7 +2249,7 @@ def get_demand_year_comparison(
             year_int = int(yil)
         except Exception:
             continue
-        if week_int < 1 or week_int > 52:
+        if week_int < 1 or week_int > 53:
             continue
         lookup.setdefault(week_int, {})[year_int] = int(revenue or 0)
 
@@ -1675,16 +2260,14 @@ def get_demand_year_comparison(
 
         row[f"y{years[0]}"] = week_vals.get(years[0], 0)
         row[f"y{years[1]}"] = week_vals.get(years[1], 0)
-
-        if w <= last_full_week:
+        if w <= last_available_week:
             row[f"y{years[2]}"] = week_vals.get(years[2], 0)
         else:
-            # Hide future/incomplete weeks for current year.
             row[f"y{years[2]}"] = None
 
         data.append(row)
 
-    return {"data": data, "currentWeek": last_full_week}
+    return {"data": data, "currentWeek": last_available_week}
 
 
 
@@ -1833,13 +2416,7 @@ def get_demand_trend_forecast(
 
     raw_table_name = table_name
     table_name = _compat_table(table_name)
-    try:
-        anchor_row = client.query(
-            f"SELECT max(toDate(tarih)) FROM {raw_table_name}"
-        ).first_row
-        anchor_day = anchor_row[0] if anchor_row and anchor_row[0] else date.today()
-    except Exception:
-        anchor_day = date.today()
+    anchor_day = _get_max_data_date(client, raw_table_name)
     period_value = period if period in {"daily", "weekly", "monthly"} else "daily"
     safe_days_past = max(1, int(days_past))
     safe_days_future = max(1, int(days_future))
@@ -1864,8 +2441,8 @@ def get_demand_trend_forecast(
     query = f"""
     SELECT
         toDate(tarih) AS d,
-        round(sum(greatest(toFloat64(satismiktari), 0)), 0) AS actual,
-        round(sum(greatest(toFloat64(roll_mean_14), 0)), 0) AS forecast
+        sum(greatest(toFloat64(satismiktari), 0)) AS actual,
+        sum(greatest(toFloat64(roll_mean_14), 0)) AS forecast
     FROM {table_name}
     WHERE {where_sql}
     GROUP BY d
@@ -1881,108 +2458,42 @@ def get_demand_trend_forecast(
     by_date = {}
     for d, actual, forecast in rows:
         by_date[d] = {
-            "actual": max(0, int(actual or 0)),
-            "forecast": max(0, int(forecast or 0)),
+            "actual": max(0.0, float(actual or 0)),
+            "forecast": max(0.0, float(forecast or 0)),
         }
 
     sorted_dates = sorted(by_date.keys())
-
-    # Build regression input from historical window.
-    observed = []
-    weekday_totals = {i: 0.0 for i in range(7)}
-    weekday_counts = {i: 0 for i in range(7)}
-    for d in sorted_dates:
-        if d > anchor_day:
-            continue
-        actual_val = by_date[d]["actual"]
-        forecast_val = by_date[d]["forecast"]
-        base_val = actual_val if actual_val > 0 else (forecast_val if forecast_val > 0 else None)
-        if base_val is None:
-            continue
-        idx = (d - start_date).days
-        observed.append((idx, float(base_val)))
-        wd = d.weekday()
-        weekday_totals[wd] += float(base_val)
-        weekday_counts[wd] += 1
-
-    default_weekday_profile = {
-        0: 1.04,  # Monday
-        1: 1.00,  # Tuesday
-        2: 1.02,  # Wednesday
-        3: 1.00,  # Thursday
-        4: 1.06,  # Friday
-        5: 0.92,  # Saturday
-        6: 0.88,  # Sunday
-    }
-
-    if observed:
-        n = len(observed)
-        sum_x = sum(x for x, _ in observed)
-        sum_y = sum(y for _, y in observed)
-        sum_x2 = sum(x * x for x, _ in observed)
-        sum_xy = sum(x * y for x, y in observed)
-        denom = n * sum_x2 - sum_x * sum_x
-        slope = 0.0 if denom == 0 else (n * sum_xy - sum_x * sum_y) / denom
-        intercept = (sum_y - slope * sum_x) / n
-        base_level = max(0.0, sum_y / n)
-    else:
-        slope = 0.0
-        intercept = 0.0
-        base_level = 0.0
-
-    weekday_profile = dict(default_weekday_profile)
-    if base_level > 0:
-        for wd in range(7):
-            if weekday_counts[wd] > 0:
-                wd_mean = weekday_totals[wd] / weekday_counts[wd]
-                ratio = wd_mean / base_level
-                weekday_profile[wd] = min(1.6, max(0.5, ratio))
-
-    recent_history_values = [
-        float(by_date[d]["actual"])
+    forecast_history = [
+        float(by_date[d]["forecast"])
         for d in sorted_dates
-        if d <= anchor_day and by_date[d]["actual"] > 0
+        if d <= anchor_day and float(by_date[d]["forecast"] or 0) > 0
     ][-max(7, min(28, safe_days_past)):]
-    if len(recent_history_values) >= 2:
-        recent_mean = float(np.mean(recent_history_values))
-        recent_std = float(np.std(recent_history_values))
-        volatility_ratio = recent_std / max(recent_mean, 1.0)
-        volatility_ratio = max(0.05, min(0.25, volatility_ratio))
-    else:
-        volatility_ratio = 0.08
+    forecast_baseline = float(np.mean(forecast_history)) if forecast_history else 0.0
 
-    def projected_value(day_idx: int, wd: int) -> int:
-        trend_base = max(0.0, intercept + slope * day_idx)
-        seasonal = weekday_profile.get(wd, 1.0)
-        return max(0, int(round(trend_base * seasonal)))
-
-    weekday_actual_samples = {i: [] for i in range(7)}
+    weekday_forecast_totals = {i: 0.0 for i in range(7)}
+    weekday_forecast_counts = {i: 0 for i in range(7)}
     for d in sorted_dates:
         if d > anchor_day:
             continue
-        val = by_date[d]["actual"]
-        if val > 0:
-            weekday_actual_samples[d.weekday()].append(val)
-
-    last_history_anchor = 0
-    for d in reversed(sorted_dates):
-        if d > anchor_day:
+        val = float(by_date[d]["forecast"] or 0)
+        if val <= 0:
             continue
-        actual_val = int(by_date[d]["actual"] or 0)
-        forecast_val = int(by_date[d]["forecast"] or 0)
-        if actual_val > 0:
-            last_history_anchor = actual_val
-            break
-        if forecast_val > 0:
-            last_history_anchor = forecast_val
-            break
-    if last_history_anchor <= 0 and recent_history_values:
-        last_history_anchor = int(round(float(np.mean(recent_history_values))))
+        wd = d.weekday()
+        weekday_forecast_totals[wd] += val
+        weekday_forecast_counts[wd] += 1
+
+    weekday_forecast_avg = {
+        wd: (
+            weekday_forecast_totals[wd] / weekday_forecast_counts[wd]
+            if weekday_forecast_counts[wd] > 0
+            else None
+        )
+        for wd in range(7)
+    }
     daily_points = []
     trend_source = []
     cursor = start_date
     while cursor <= end_date:
-        day_idx = (cursor - start_date).days
         entry = by_date.get(cursor)
         weekday = cursor.weekday()
 
@@ -1990,41 +2501,22 @@ def get_demand_trend_forecast(
             if entry is None:
                 actual_val = None
             else:
-                actual_val = max(0, int(entry["actual"]))
+                actual_val = round(max(0.0, float(entry["actual"] or 0)), 2)
             forecast_val = None
         else:
             actual_val = None
-            projected_forecast = projected_value(day_idx, weekday)
-            uses_entry_forecast = bool(entry is not None and entry["forecast"] > 0)
-            if uses_entry_forecast:
-                entry_forecast = max(0, int(entry["forecast"]))
-                # Keep DB model signal but blend with learned pattern for better daily realism.
-                forecast_val = int(round((entry_forecast * 0.7) + (projected_forecast * 0.3)))
+            if entry is not None and float(entry["forecast"] or 0) > 0:
+                forecast_val = round(max(0.0, float(entry["forecast"] or 0)), 2)
             else:
-                # If future row is missing or 0, project using trend + weekday seasonality.
-                forecast_val = projected_forecast
-
-            # Apply forward-looking +5% acceleration across the selected future horizon.
-            day_ahead = (cursor - anchor_day).days
-            horizon = max(1, safe_days_future)
-            phase = day_ahead / horizon
-            # Stronger upward momentum with late-horizon acceleration.
-            growth_multiplier = math.pow(1.14, math.pow(phase, 1.35))
-            if uses_entry_forecast:
-                seasonal_factor = 1 + ((weekday_profile.get(weekday, 1.0) - 1.0) * 0.45)
-                forecast_val = int(round(forecast_val * seasonal_factor))
-            upward_baseline = last_history_anchor * growth_multiplier
-            # Add deterministic weekly/short-cycle oscillation for realistic up/down movement.
-            wave_multiplier = (
-                1
-                + (volatility_ratio * 0.55) * math.sin(2 * math.pi * day_ahead / 7.0)
-                + (volatility_ratio * 0.30) * math.sin((2 * math.pi * day_ahead / 3.5) + 1.3)
-            )
-            wave_multiplier = max(0.93, wave_multiplier)
-            blended_base = (forecast_val * 0.30) + (upward_baseline * 0.70)
-            forecast_val = int(round(blended_base * wave_multiplier))
-            forecast_floor = int(round(upward_baseline * 0.95))
-            forecast_val = max(0, max(forecast_floor, forecast_val))
+                weekday_base = weekday_forecast_avg.get(weekday)
+                fallback_base = (
+                    weekday_base if weekday_base is not None else forecast_baseline
+                )
+                forecast_val = (
+                    round(max(0.0, float(fallback_base or 0)), 2)
+                    if fallback_base > 0
+                    else None
+                )
 
         base_for_trend = (
             actual_val if actual_val is not None else (forecast_val or 0)
@@ -2039,29 +2531,12 @@ def get_demand_trend_forecast(
         trend_source.append(float(base_for_trend))
         cursor += timedelta(days=1)
 
-    # Smooth suspicious isolated zeros in the latest historical week (common ETL latency symptom).
-    for idx in range(1, len(daily_points) - 1):
-        point = daily_points[idx]
-        point_date = date.fromisoformat(point["date"])
-        if point_date > anchor_day or (anchor_day - point_date).days > 7:
-            continue
-        current_val = point["actual"]
-        prev_val = daily_points[idx - 1]["actual"]
-        next_val = daily_points[idx + 1]["actual"]
-        if current_val is None or prev_val is None or next_val is None:
-            continue
-        baseline = (prev_val + next_val) / 2
-        if baseline <= 0:
-            continue
-        if current_val <= max(1, int(round(baseline * 0.08))):
-            point["actual"] = max(0, int(round(baseline * 0.92)))
-
-    def compute_trendline(values: list[float]) -> list[int]:
+    def compute_trendline(values: list[float]) -> list[float]:
         n = len(values)
         if n == 0:
             return []
         if n == 1:
-            return [max(0, int(round(values[0])))]
+            return [round(max(0.0, float(values[0])), 2)]
 
         sum_x = (n - 1) * n / 2
         sum_x2 = (n - 1) * n * (2 * n - 1) / 6
@@ -2070,10 +2545,7 @@ def get_demand_trend_forecast(
         denom = n * sum_x2 - sum_x * sum_x
         slope = 0.0 if denom == 0 else (n * sum_xy - sum_x * sum_y) / denom
         intercept = (sum_y - slope * sum_x) / n
-        return [
-            max(0, int(round(intercept + slope * i)))
-            for i in range(n)
-        ]
+        return [round(max(0.0, float(intercept + slope * i)), 2) for i in range(n)]
 
     daily_trendline = compute_trendline(trend_source)
     for idx, point in enumerate(daily_points):
@@ -2097,10 +2569,10 @@ def get_demand_trend_forecast(
         )
 
         if point["actual"] is not None:
-            bucket["actual"] += int(point["actual"])
+            bucket["actual"] += float(point["actual"])
             bucket["has_actual"] = True
         if point["forecast"] is not None:
-            bucket["forecast"] += int(point["forecast"])
+            bucket["forecast"] += float(point["forecast"])
             bucket["has_forecast"] = True
 
     aggregated = []
@@ -2109,8 +2581,12 @@ def get_demand_trend_forecast(
         aggregated.append(
             {
                 "date": bucket_date.isoformat(),
-                "actual": item["actual"] if item["has_actual"] else None,
-                "forecast": item["forecast"] if item["has_forecast"] else None,
+                "actual": round(float(item["actual"]), 2)
+                if item["has_actual"]
+                else None,
+                "forecast": round(float(item["forecast"]), 2)
+                if item["has_forecast"]
+                else None,
             }
         )
 
