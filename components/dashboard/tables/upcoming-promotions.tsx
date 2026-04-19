@@ -71,6 +71,21 @@ function getDateAsNumber(dateValue: string | null | undefined) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function normalizeText(value: string | null | undefined) {
+  if (!value) {
+    return '';
+  }
+  return value.toLocaleLowerCase('tr-TR').trim();
+}
+
+function shouldHidePromotion(promo: PromotionItem) {
+  const normalizedName = normalizeText(promo.name);
+  const isNoPromotionName =
+    normalizedName === 'promosyon yok' || normalizedName === 'promosiyon yok';
+  const isZeroDiscount = getDiscountAsNumber(promo.discount) === 0;
+  return isNoPromotionName || isZeroDiscount;
+}
+
 function formatCurrency(value: number | null | undefined) {
   if (value === null || value === undefined) {
     return '-';
@@ -168,12 +183,17 @@ export function UpcomingPromotions({
     staleTime: 1000 * 30,
   });
 
+  const visiblePromotions = useMemo(
+    () => promotions.filter((promo) => !shouldHidePromotion(promo)),
+    [promotions],
+  );
+
   const sortedPromotions = useMemo(() => {
     if (!sortBy) {
-      return promotions;
+      return visiblePromotions;
     }
 
-    const sorted = [...promotions].sort((a, b) => {
+    const sorted = [...visiblePromotions].sort((a, b) => {
       let aValue = 0;
       let bValue = 0;
 
@@ -198,7 +218,7 @@ export function UpcomingPromotions({
     });
 
     return sorted;
-  }, [promotions, sortBy, sortDirection]);
+  }, [visiblePromotions, sortBy, sortDirection]);
 
   const totalItems = sortedPromotions.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
@@ -342,7 +362,7 @@ export function UpcomingPromotions({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {promotions.length === 0 ? (
+              {visiblePromotions.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={7}
