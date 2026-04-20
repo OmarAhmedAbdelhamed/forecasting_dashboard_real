@@ -44,7 +44,6 @@ export function FastestMovingTable({
 }: FastestMovingTableProps) {
   const [activeTab, setActiveTab] = useState('fastest');
 
-  // Sort logic for tabs
   const fastMovingItems = useMemo(() => {
     return items
       .filter((item) => item.performanceCategory === 'fast')
@@ -107,6 +106,19 @@ export function FastestMovingTable({
             </TableHead>
             <TableHead className='text-xs text-muted-foreground font-normal text-center'>
               <div className='flex items-center justify-center gap-1'>
+                Son {period} Gun Satis
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className='h-3 w-3 text-muted-foreground hover:text-foreground cursor-help' />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p>Secilen donemde satilan toplam urun adedi</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
+            </TableHead>
+            <TableHead className='text-xs text-muted-foreground font-normal text-center'>
+              <div className='flex items-center justify-center gap-1'>
                 Stok Değeri
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -144,6 +156,9 @@ export function FastestMovingTable({
                 <TableCell className='text-center text-xs py-3 text-emerald-600 font-medium'>
                   {item.forecastedDemand.toLocaleString('tr-TR')}
                 </TableCell>
+                <TableCell className='text-center text-xs py-3 font-medium'>
+                  {(item.periodSales ?? 0).toLocaleString('tr-TR')}
+                </TableCell>
                 <TableCell className='text-center text-xs py-3'>
                   ₺{item.stockValue.toLocaleString('tr-TR')}
                 </TableCell>
@@ -159,7 +174,7 @@ export function FastestMovingTable({
           ) : (
             <TableRow>
               <TableCell
-                colSpan={6}
+                colSpan={7}
                 className='h-24 text-center text-muted-foreground'
               >
                 Veri bulunamadı.
@@ -182,7 +197,13 @@ export function FastestMovingTable({
             variant='ghost'
             className='text-blue-500 hover:text-blue-700 text-sm h-8 px-2'
             onClick={() =>
-              onSeeAll?.(activeTab === 'fastest' ? 'fast' : activeTab === 'none' ? 'none' : 'slow')
+              onSeeAll?.(
+                activeTab === 'fastest'
+                  ? 'fast'
+                  : activeTab === 'none'
+                    ? 'none'
+                    : 'slow',
+              )
             }
           >
             Tümünü Gör

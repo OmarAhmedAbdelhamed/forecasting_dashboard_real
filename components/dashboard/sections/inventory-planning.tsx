@@ -539,6 +539,7 @@ export function InventoryPlanningSection() {
         leadTimeDays: 5,
         quantityOnOrder: 0,
         todaysSales: 0,
+        periodSales: 0,
         price: 0,
       };
     },

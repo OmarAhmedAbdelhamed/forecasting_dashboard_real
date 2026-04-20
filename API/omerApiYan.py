@@ -3567,6 +3567,7 @@ def get_inventory_items(
                 0                                                     AS quantityOnOrder,
                 todaysSales                                           AS todaysSales,
                 round(price, 2)                                       AS price,
+                salesPeriod                                           AS periodSales,
                 
                 multiIf(
                     salesPeriod = 0, 'none',
@@ -3620,6 +3621,7 @@ def get_inventory_items(
                 0                                                     AS quantityOnOrder,
                 todaysSalesSum                                        AS todaysSales,
                 round(priceAvg, 2)                                    AS price,
+                salesPeriodSum                                        AS periodSales,
                 
                 multiIf(
                     salesPeriodSum = 0, 'none',
@@ -3690,7 +3692,8 @@ def get_inventory_items(
                 "quantityOnOrder": r[16],
                 "todaysSales": max(0, int(r[17] or 0)),
                 "price": max(0.0, float(r[18] or 0)),
-                "performanceCategory": r[19] if len(r) > 19 else "average",
+                "periodSales": max(0, int(r[19] or 0)),
+                "performanceCategory": r[20] if len(r) > 20 else "average",
             }
             for r in items
         ],

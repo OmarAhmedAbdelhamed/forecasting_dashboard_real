@@ -24,6 +24,7 @@ export interface InventoryItem {
   leadTimeDays: number;
   quantityOnOrder: number;
   todaysSales: number;
+  periodSales?: number;
   price: number;
   performanceCategory?: 'fast' | 'slow' | 'none' | 'average';
 }

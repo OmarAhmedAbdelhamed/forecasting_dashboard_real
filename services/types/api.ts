@@ -103,6 +103,7 @@ export interface InventoryItem {
   quantityOnOrder: number;
   todaysSales: number;
   price: number;
+  periodSales?: number;
 }
 
 export interface StockTrend {
