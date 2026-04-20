@@ -441,9 +441,7 @@ function AlertItem({ alert, onActionClick, period = 30 }: AlertItemProps) {
                     </button>
                   </TooltipTrigger>
                   <TooltipContent side='top' className='max-w-[240px] text-xs'>
-                    {alert.type === 'overstock'
-                      ? `Fazla stok durumunda hedef, secili donem (${period} gun) talebine gore hesaplanir.`
-                      : 'Kritik stok/stockout durumunda hedef minimum 7 gunluk talebe gore hesaplanir.'}
+                    {`Hedef/Min degeri secili donem (${period} gun) talep tahminine gore hesaplanir.`}
                   </TooltipContent>
                 </Tooltip>
               </span>

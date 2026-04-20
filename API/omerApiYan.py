@@ -1666,7 +1666,7 @@ def get_inventory_alerts(
         countIf(
             current_stock <= 0
             OR current_stock > (forecast_daily * {safe_days})
-            OR current_stock <= (forecast_daily * 7)
+            OR current_stock <= (forecast_daily * {safe_days})
         ) AS total_alerts
     FROM base
     """
@@ -1699,17 +1699,17 @@ def get_inventory_alerts(
         forecast_daily,
         (forecast_daily * {safe_days}) AS forecast_period,
         (forecast_daily * {safe_days}) AS min_stock,
-        (forecast_daily * 7) AS reorder_point,
+        (forecast_daily * {safe_days}) AS reorder_point,
         (forecast_daily * {safe_days}) AS max_stock,
         multiIf(
             current_stock <= 0, 'stockout',
             current_stock > (forecast_daily * {safe_days}), 'overstock',
-            current_stock <= (forecast_daily * 7), 'reorder',
+            current_stock <= (forecast_daily * {safe_days}), 'reorder',
             'ok'
         ) AS alert_type,
         multiIf(
             alert_type = 'overstock', (forecast_daily * {safe_days}),
-            (forecast_daily * 7)
+            (forecast_daily * {safe_days})
         ) AS threshold,
         (forecast_daily * {safe_days}) AS forecasted_demand_metric,
         multiIf(
@@ -1751,7 +1751,7 @@ def get_inventory_alerts(
         current_stock_int = int(current_stock or 0)
         threshold_int = int(round(threshold or 0))
         forecast_metric_int = int(round(forecast_metric or 0))
-        reorder_point_int = max(0, int(round((forecast_daily or 0) * 7)))
+        reorder_point_int = max(0, int(round((forecast_daily or 0) * safe_days)))
         surplus_after_reorder = max(0, current_stock_int - reorder_point_int)
 
         parsed_rows.append(
