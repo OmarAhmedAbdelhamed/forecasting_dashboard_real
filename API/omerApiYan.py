@@ -2810,6 +2810,10 @@ def get_inventory_kpis(
     table_name = _compat_table(table_name)
     anchor_date = _anchor_date_expr(raw_table_name)
 
+    safe_days = max(1, int(days))
+    # Risk horizon follows selected period instead of fixed 3 days.
+    risk_days = max(1, int(round(safe_days / 4)))
+
     where = ["1=1"]
 
     if region_ids:
@@ -2856,7 +2860,7 @@ def get_inventory_kpis(
             toString(magazakodu)                         AS store,
             sumIf(
                 satismiktari,
-                tarih >= addDays({anchor_date}, -{int(days)} + 1) AND tarih <= {anchor_date}
+                tarih >= addDays({anchor_date}, -{safe_days} + 1) AND tarih <= {anchor_date}
             ) AS sales_period
         FROM {table_name}
         WHERE {where_sql}
@@ -2874,8 +2878,8 @@ def get_inventory_kpis(
             multiIf(
                 sum(l.stock_level) = 0, 'Out of Stock',
                 sum(greatest(l.forecast_daily, 0)) = 0, 'In Stock',
-                sum(l.stock_level) < sum(greatest(l.forecast_daily, 0)) * 3, 'Low Stock',
-                sum(l.stock_level) > sum(greatest(l.forecast_daily, 0)) * {int(days)}, 'Overstock',
+                sum(l.stock_level) < sum(greatest(l.forecast_daily, 0)) * {risk_days}, 'Low Stock',
+                sum(l.stock_level) > sum(greatest(l.forecast_daily, 0)) * {safe_days}, 'Overstock',
                 'In Stock'
             ) AS store_inventory_status
         FROM latest_store_product l
@@ -2971,7 +2975,7 @@ def get_inventory_kpis(
             toString(magazakodu)                         AS store,
             sumIf(
                 satismiktari,
-                tarih >= addDays({anchor_date}, -{int(days)} + 1) AND tarih <= {anchor_date}
+                tarih >= addDays({anchor_date}, -{safe_days} + 1) AND tarih <= {anchor_date}
             ) AS sales_period
         FROM {table_name}
         WHERE {where_sql}
@@ -2989,8 +2993,8 @@ def get_inventory_kpis(
             multiIf(
                 sum(l.stock_level) = 0, 'Out of Stock',
                 sum(greatest(l.forecast_daily, 0)) = 0, 'In Stock',
-                sum(l.stock_level) < sum(greatest(l.forecast_daily, 0)) * 3, 'Low Stock',
-                sum(l.stock_level) > sum(greatest(l.forecast_daily, 0)) * {int(days)}, 'Overstock',
+                sum(l.stock_level) < sum(greatest(l.forecast_daily, 0)) * {risk_days}, 'Low Stock',
+                sum(l.stock_level) > sum(greatest(l.forecast_daily, 0)) * {safe_days}, 'Overstock',
                 'In Stock'
             ) AS store_inventory_status
         FROM latest_store_product l
@@ -3430,6 +3434,9 @@ def get_inventory_items(
     raw_table_name = table_name
     table_name = _compat_table(table_name)
     anchor_date = _anchor_date_expr(raw_table_name)
+    safe_days = max(1, int(days))
+    # Risk horizon follows selected period instead of fixed 3 days.
+    risk_days = max(1, int(round(safe_days / 4)))
 
     offset = (page - 1) * limit
     sort_order = "ASC" if sort_order.lower() == "asc" else "DESC"
@@ -3522,7 +3529,7 @@ def get_inventory_items(
                 toString(reyonkodu)    AS categoryCode,
                 toString(magazakodu)   AS store,
                 greatest(sumIf(satismiktari, tarih = {anchor_date}), 0) AS todaysSales,
-                greatest(sumIf(satismiktari, tarih >= addDays({anchor_date}, -{int(days)} + 1) AND tarih <= {anchor_date}), 0) AS salesPeriod,
+                greatest(sumIf(satismiktari, tarih >= addDays({anchor_date}, -{safe_days} + 1) AND tarih <= {anchor_date}), 0) AS salesPeriod,
                 maxIf(tarih, stok > 0) AS lastRestockDate
             FROM {table_name}
             WHERE {where_sql}
@@ -3541,10 +3548,10 @@ def get_inventory_items(
                 concat(store, '_', category, '_', sku)                AS productKey,
 
                 stockLevel                                            AS stockLevel,
-                round(forecastDaily * 3, 0)                           AS minStockLevel,
-                round(forecastDaily * {int(days)}, 0)                 AS maxStockLevel,
+                round(forecastDaily * {risk_days}, 0)                 AS minStockLevel,
+                round(forecastDaily * {safe_days}, 0)                 AS maxStockLevel,
                 round(forecastDaily * 7, 0)                           AS reorderPoint,
-                round(forecastDaily * {int(days)}, 0)                 AS forecastedDemand,
+                round(forecastDaily * {safe_days}, 0)                 AS forecastedDemand,
 
                 stockValue                                            AS stockValue,
                 round(stockLevel / nullIf(forecastDaily, 0), 1)       AS daysOfCoverage,
@@ -3552,13 +3559,13 @@ def get_inventory_items(
                 multiIf(
                     stockLevel = 0, 'Out of Stock',
                     forecastDaily = 0, 'In Stock',
-                    stockLevel < forecastDaily * 3, 'Low Stock',
-                    stockLevel > forecastDaily * {int(days)}, 'Overstock',
+                    stockLevel < forecastDaily * {risk_days}, 'Low Stock',
+                    stockLevel > forecastDaily * {safe_days}, 'Overstock',
                     'In Stock'
                 )                                                     AS status,
 
                 round(
-                    (salesPeriod / {max(int(days), 1)}) / nullIf(stockLevel, 0),
+                    (salesPeriod / {safe_days}) / nullIf(stockLevel, 0),
                     4
                 )                                                     AS turnoverRate,
 
@@ -3571,8 +3578,8 @@ def get_inventory_items(
                 
                 multiIf(
                     salesPeriod = 0, 'none',
-                    (salesPeriod / {max(int(days), 1)}) >= 5 OR ((salesPeriod / {max(int(days), 1)}) / nullIf(stockLevel, 0)) >= 0.15, 'fast',
-                    (salesPeriod / {max(int(days), 1)}) <= 1.5 AND ((salesPeriod / {max(int(days), 1)}) / nullIf(stockLevel, 0)) <= 0.03, 'slow',
+                    (salesPeriod / {safe_days}) >= 5 OR ((salesPeriod / {safe_days}) / nullIf(stockLevel, 0)) >= 0.15, 'fast',
+                    (salesPeriod / {safe_days}) <= 1.5 AND ((salesPeriod / {safe_days}) / nullIf(stockLevel, 0)) <= 0.03, 'slow',
                     'average'
                 )                                                     AS performanceCategory
             FROM (
@@ -3596,10 +3603,10 @@ def get_inventory_items(
                 sku                                                   AS productKey,
 
                 stockLevelSum                                         AS stockLevel,
-                round(fdDailySum * 3, 0)                              AS minStockLevel,
-                round(fdDailySum * {int(days)}, 0)                    AS maxStockLevel,
+                round(fdDailySum * {risk_days}, 0)                    AS minStockLevel,
+                round(fdDailySum * {safe_days}, 0)                    AS maxStockLevel,
                 round(fdDailySum * 7, 0)                              AS reorderPoint,
-                round(fdDailySum * {int(days)}, 0)                    AS forecastedDemand,
+                round(fdDailySum * {safe_days}, 0)                    AS forecastedDemand,
 
                 stockValueSum                                         AS stockValue,
                 round(stockLevelSum / nullIf(fdDailySum, 0), 1)       AS daysOfCoverage,
@@ -3612,7 +3619,7 @@ def get_inventory_items(
                 )                                                     AS status,
 
                 round(
-                    (salesPeriodSum / {max(int(days), 1)}) / nullIf(stockLevelSum, 0),
+                    (salesPeriodSum / {safe_days}) / nullIf(stockLevelSum, 0),
                     4
                 )                                                     AS turnoverRate,
 
@@ -3625,8 +3632,8 @@ def get_inventory_items(
                 
                 multiIf(
                     salesPeriodSum = 0, 'none',
-                    (salesPeriodSum / {max(int(days), 1)}) >= 5 OR ((salesPeriodSum / {max(int(days), 1)}) / nullIf(stockLevelSum, 0)) >= 0.15, 'fast',
-                    (salesPeriodSum / {max(int(days), 1)}) <= 1.5 AND ((salesPeriodSum / {max(int(days), 1)}) / nullIf(stockLevelSum, 0)) <= 0.03, 'slow',
+                    (salesPeriodSum / {safe_days}) >= 5 OR ((salesPeriodSum / {safe_days}) / nullIf(stockLevelSum, 0)) >= 0.15, 'fast',
+                    (salesPeriodSum / {safe_days}) <= 1.5 AND ((salesPeriodSum / {safe_days}) / nullIf(stockLevelSum, 0)) <= 0.03, 'slow',
                     'average'
                 )                                                     AS performanceCategory
             FROM (
@@ -3643,8 +3650,8 @@ def get_inventory_items(
                     sum(toFloat64(forecastDaily))                     AS fdDailySum,
                     count()                                           AS storeCount,
                     countIf(stockLevel = 0)                           AS outStoreCount,
-                    countIf(stockLevel > 0 AND forecastDaily > 0 AND stockLevel < forecastDaily * 3) AS lowStoreCount,
-                    countIf(forecastDaily > 0 AND stockLevel > forecastDaily * {int(days)}) AS overStoreCount
+                    countIf(stockLevel > 0 AND forecastDaily > 0 AND stockLevel < forecastDaily * {risk_days}) AS lowStoreCount,
+                    countIf(forecastDaily > 0 AND stockLevel > forecastDaily * {safe_days}) AS overStoreCount
                 FROM (
                     {base_snapshot}
                 )
