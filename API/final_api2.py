@@ -487,7 +487,7 @@ def predict(req: RequestModel):
     df_sonuc            = prediction_pipeline(df_input_days_hedef)    
     df_sonuc_f          = format_düzenleme(df_sonuc)
     print(df_sonuc_f)
-    return
+    return df_sonuc_f
 
 
 

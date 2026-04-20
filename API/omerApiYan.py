@@ -2862,34 +2862,47 @@ def get_inventory_kpis(
         WHERE {where_sql}
         GROUP BY sku, category, store
     ),
-    product_base AS (
+    store_status AS (
         SELECT
             l.sku                                         AS sku,
+            l.store                                       AS store,
             any(l.product_name)                           AS product_name,
             sum(l.stock_level)                            AS stock_level,
             sum(l.stock_value)                            AS stock_value,
             sum(greatest(l.forecast_daily, 0))            AS forecast_daily,
-            sum(coalesce(s.sales_period, 0))              AS sales_period
+            sum(coalesce(s.sales_period, 0))              AS sales_period,
+            multiIf(
+                sum(l.stock_level) = 0, 'Out of Stock',
+                sum(greatest(l.forecast_daily, 0)) = 0, 'In Stock',
+                sum(l.stock_level) < sum(greatest(l.forecast_daily, 0)) * 3, 'Low Stock',
+                sum(l.stock_level) > sum(greatest(l.forecast_daily, 0)) * {int(days)}, 'Overstock',
+                'In Stock'
+            ) AS store_inventory_status
         FROM latest_store_product l
         LEFT JOIN sales_period s
             ON l.sku = s.sku AND l.category = s.category AND l.store = s.store
-        GROUP BY l.sku
+        GROUP BY l.sku, l.store
     ),
     product_status AS (
         SELECT
             sku,
-            product_name,
-            stock_level,
-            stock_value,
-            forecast_daily,
-            sales_period,
+            any(product_name)                             AS product_name,
+            sum(stock_level)                              AS stock_level,
+            sum(stock_value)                              AS stock_value,
+            sum(forecast_daily)                           AS forecast_daily,
+            sum(sales_period)                             AS sales_period,
+            countIf(store_inventory_status = 'Out of Stock') AS out_of_stock_store_count,
+            countIf(store_inventory_status = 'Low Stock') AS low_stock_store_count,
+            countIf(store_inventory_status = 'Overstock') AS overstock_store_count,
+            count()                                       AS store_count,
             multiIf(
-                stock_level = 0, 'Out of Stock',
-                stock_level < forecast_daily * 3, 'Low Stock',
-                stock_level > forecast_daily * {int(days)}, 'Overstock',
+                countIf(store_inventory_status = 'Out of Stock') = count() AND count() > 0, 'Out of Stock',
+                (countIf(store_inventory_status = 'Out of Stock') > 0 OR countIf(store_inventory_status = 'Low Stock') > 0), 'Low Stock',
+                countIf(store_inventory_status = 'Overstock') > 0, 'Overstock',
                 'In Stock'
             ) AS inventory_status
-        FROM product_base
+        FROM store_status
+        GROUP BY sku
     )
     SELECT
         sum(stock_value)                                                       AS totalStockValue,
@@ -2964,34 +2977,43 @@ def get_inventory_kpis(
         WHERE {where_sql}
         GROUP BY sku, category, store
     ),
-    product_base AS (
+    store_status AS (
         SELECT
             l.sku                                         AS sku,
+            l.store                                       AS store,
             any(l.product_name)                           AS product_name,
             sum(l.stock_level)                            AS stock_level,
             sum(l.stock_value)                            AS stock_value,
             sum(greatest(l.forecast_daily, 0))            AS forecast_daily,
-            sum(coalesce(s.sales_period, 0))              AS sales_period
+            sum(coalesce(s.sales_period, 0))              AS sales_period,
+            multiIf(
+                sum(l.stock_level) = 0, 'Out of Stock',
+                sum(greatest(l.forecast_daily, 0)) = 0, 'In Stock',
+                sum(l.stock_level) < sum(greatest(l.forecast_daily, 0)) * 3, 'Low Stock',
+                sum(l.stock_level) > sum(greatest(l.forecast_daily, 0)) * {int(days)}, 'Overstock',
+                'In Stock'
+            ) AS store_inventory_status
         FROM latest_store_product l
         LEFT JOIN sales_period s
             ON l.sku = s.sku AND l.category = s.category AND l.store = s.store
-        GROUP BY l.sku
+        GROUP BY l.sku, l.store
     ),
     product_status AS (
         SELECT
             sku,
-            product_name,
-            stock_level,
-            stock_value,
-            forecast_daily,
-            sales_period,
+            any(product_name)                             AS product_name,
+            sum(stock_level)                              AS stock_level,
+            sum(stock_value)                              AS stock_value,
+            sum(forecast_daily)                           AS forecast_daily,
+            sum(sales_period)                             AS sales_period,
             multiIf(
-                stock_level = 0, 'Out of Stock',
-                stock_level < forecast_daily * 3, 'Low Stock',
-                stock_level > forecast_daily * {int(days)}, 'Overstock',
+                countIf(store_inventory_status = 'Out of Stock') = count() AND count() > 0, 'Out of Stock',
+                (countIf(store_inventory_status = 'Out of Stock') > 0 OR countIf(store_inventory_status = 'Low Stock') > 0), 'Low Stock',
+                countIf(store_inventory_status = 'Overstock') > 0, 'Overstock',
                 'In Stock'
             ) AS inventory_status
-        FROM product_base
+        FROM store_status
+        GROUP BY sku
     )
     SELECT
         sku,
@@ -3529,6 +3551,7 @@ def get_inventory_items(
 
                 multiIf(
                     stockLevel = 0, 'Out of Stock',
+                    forecastDaily = 0, 'In Stock',
                     stockLevel < forecastDaily * 3, 'Low Stock',
                     stockLevel > forecastDaily * {int(days)}, 'Overstock',
                     'In Stock'
@@ -3581,9 +3604,9 @@ def get_inventory_items(
                 round(stockLevelSum / nullIf(fdDailySum, 0), 1)       AS daysOfCoverage,
 
                 multiIf(
-                    stockLevelSum = 0, 'Out of Stock',
-                    stockLevelSum < fdDailySum * 3, 'Low Stock',
-                    stockLevelSum > fdDailySum * {int(days)}, 'Overstock',
+                    outStoreCount = storeCount AND storeCount > 0, 'Out of Stock',
+                    (outStoreCount > 0 OR lowStoreCount > 0), 'Low Stock',
+                    overStoreCount > 0, 'Overstock',
                     'In Stock'
                 )                                                     AS status,
 
@@ -3615,7 +3638,11 @@ def get_inventory_items(
                     sum(salesPeriod)                                  AS salesPeriodSum,
                     max(lastRestockDate)                              AS lastRestockDateMax,
                     avg(price)                                        AS priceAvg,
-                    sum(toFloat64(forecastDaily))                     AS fdDailySum
+                    sum(toFloat64(forecastDaily))                     AS fdDailySum,
+                    count()                                           AS storeCount,
+                    countIf(stockLevel = 0)                           AS outStoreCount,
+                    countIf(stockLevel > 0 AND forecastDaily > 0 AND stockLevel < forecastDaily * 3) AS lowStoreCount,
+                    countIf(forecastDaily > 0 AND stockLevel > forecastDaily * {int(days)}) AS overStoreCount
                 FROM (
                     {base_snapshot}
                 )
