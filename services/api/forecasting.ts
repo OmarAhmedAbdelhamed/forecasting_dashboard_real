@@ -9,6 +9,7 @@ import type {
   PromotionCalendarEvent,
   ProductPromotionOption,
   PredictDemandRequest,
+  PredictDemandResponse,
   CampaignDetailSeriesResponse,
 } from '../types/api';
 
@@ -78,7 +79,7 @@ export const forecastingApi = {
    * Send demand prediction request to external model via backend proxy
    */
   predictDemand: (payload: PredictDemandRequest) =>
-    apiClient.post<Record<string, unknown>>('/api/forecast/predict-demand', payload),
+    apiClient.post<PredictDemandResponse>('/api/forecast/predict-demand', payload),
 
   /**
    * Get real daily series for selected campaign row popup

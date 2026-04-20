@@ -339,6 +339,48 @@ export interface PredictDemandRequest {
   istenenFiyat: number | null;
 }
 
+export interface PredictDemandWeeklyRow {
+  magazaKodu?: number;
+  urunKodu?: number;
+  haftaBaslangicTarihi?: string;
+  aktifPromosyonKodu?: string | number;
+  promosyonGunSayisi?: number;
+  'AI Tahmin'?: number;
+  tahmin?: number;
+  totalForecast?: number;
+  hedef_satisFiyati?: number;
+  satisFiyati?: number;
+  hedef_indirimYuzdesi?: number;
+  hedef_marj?: number;
+  hamFiyat?: number;
+  ozelGunSayisi?: number;
+  ciro?: number;
+  baseline?: number;
+  targetRevenue?: number;
+  lost_sales?: number;
+  lostSalesUnits?: number;
+  stockOutDays?: number;
+  [key: string]: unknown;
+}
+
+export interface PredictDemandSelectedPeriodSummary {
+  totalForecast?: number;
+  totalSellingForecast?: number;
+  tahmin?: number;
+  'AI Tahmin'?: number;
+  ciro?: number;
+  totalRevenue?: number;
+  baseline?: number;
+  targetRevenue?: number;
+  profit?: number;
+  [key: string]: unknown;
+}
+
+export type PredictDemandResponse =
+  | PredictDemandWeeklyRow[]
+  | { value?: PredictDemandWeeklyRow[]; [key: string]: unknown }
+  | PredictDemandSelectedPeriodSummary;
+
 export interface MarketSearchRequest {
   query: string;
   storeId: string;

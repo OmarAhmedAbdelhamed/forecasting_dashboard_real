@@ -86,7 +86,7 @@ import {
   TooltipContent as UITooltipContent,
   TooltipTrigger as UITooltipTrigger,
 } from '@/components/ui/shared/tooltip';
-import { format, addDays, differenceInDays } from 'date-fns';
+import { format, differenceInDays } from 'date-fns';
 
 // Data type based on user's JSON + Weather
 interface ForecastData {
@@ -109,27 +109,177 @@ interface ForecastData {
   unconstrained_demand: number | null;
 }
 
-type PredictForecastRow = {
-  tarih?: string;
-  tahmin?: number;
-  baseline?: number;
-  roll_mean_7?: number;
-  ciro_adedi?: number;
-  benim_promom?: unknown;
-  benim_promom_yuzde?: number;
-  ciro?: number;
-  stok?: number;
-  satisFiyati?: number;
-  ham_fiyat?: number;
-  birim_kar?: number;
-  birim_marj_yuzde?: number;
-  gunluk_kar?: number;
-  weather?: string;
-  icon?: string;
-  indirimYuzdesi?: number;
-  lost_sales?: number;
-  unconstrained_demand?: number;
-  promosyonVar?: number;
+type PredictionSummary = {
+  totalForecast: number;
+  totalRevenue: number;
+  totalBaselineRevenue: number;
+  totalLostSalesUnits: number;
+  stockOutDays: number;
+  hasData: boolean;
+};
+
+const EMPTY_PREDICTION_SUMMARY: PredictionSummary = {
+  totalForecast: 0,
+  totalRevenue: 0,
+  totalBaselineRevenue: 0,
+  totalLostSalesUnits: 0,
+  stockOutDays: 0,
+  hasData: false,
+};
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value);
+
+const getNumeric = (value: unknown): number | null => {
+  const numeric =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number(value)
+        : NaN;
+  return Number.isFinite(numeric) ? numeric : null;
+};
+
+const getFirstNumeric = (
+  source: Record<string, unknown>,
+  keys: string[],
+): number | null => {
+  for (const key of keys) {
+    const value = getNumeric(source[key]);
+    if (value !== null) {
+      return value;
+    }
+  }
+  return null;
+};
+
+const extractWeeklyRowsFromPredict = (
+  payload: PredictDemandResponse,
+): PredictDemandWeeklyRow[] => {
+  if (Array.isArray(payload)) {
+    return payload.filter((row): row is PredictDemandWeeklyRow =>
+      isPlainObject(row),
+    );
+  }
+  if (isPlainObject(payload) && Array.isArray(payload.value)) {
+    return payload.value.filter((row): row is PredictDemandWeeklyRow =>
+      isPlainObject(row),
+    );
+  }
+  return [];
+};
+
+const summarizePredictPayload = (
+  payload: PredictDemandResponse,
+): PredictionSummary => {
+  const rows = extractWeeklyRowsFromPredict(payload);
+
+  const rowTotals = rows.reduce<{
+    totalForecast: number;
+    totalRevenue: number;
+    totalBaselineRevenue: number;
+    totalLostSalesUnits: number;
+    stockOutDays: number;
+  }>(
+    (acc, row) => {
+      const rowForecast =
+        getNumeric(row['AI Tahmin']) ??
+        getNumeric(row.tahmin) ??
+        getNumeric(row.totalForecast) ??
+        0;
+      const unitPrice =
+        getNumeric(row.hedef_satisFiyati) ??
+        getNumeric((row as Record<string, unknown>).satisFiyati);
+      const rowRevenue =
+        getNumeric(row.ciro) ??
+        (unitPrice !== null ? rowForecast * unitPrice : 0);
+      const rowBaseline =
+        getNumeric(row.baseline) ??
+        getNumeric((row as Record<string, unknown>).targetRevenue) ??
+        0;
+      const rowLost =
+        getNumeric((row as Record<string, unknown>).lost_sales) ??
+        getNumeric((row as Record<string, unknown>).lostSalesUnits) ??
+        0;
+      const rowStockOut =
+        getNumeric((row as Record<string, unknown>).stockOutDays) ??
+        (rowLost > 0 ? 1 : 0);
+
+      return {
+        totalForecast: acc.totalForecast + rowForecast,
+        totalRevenue: acc.totalRevenue + rowRevenue,
+        totalBaselineRevenue: acc.totalBaselineRevenue + rowBaseline,
+        totalLostSalesUnits: acc.totalLostSalesUnits + rowLost,
+        stockOutDays: acc.stockOutDays + Math.max(0, Math.round(rowStockOut)),
+      };
+    },
+    {
+      totalForecast: 0,
+      totalRevenue: 0,
+      totalBaselineRevenue: 0,
+      totalLostSalesUnits: 0,
+      stockOutDays: 0,
+    },
+  );
+
+  const summaryObject = isPlainObject(payload) ? payload : null;
+  const objectTotalForecast = summaryObject
+    ? getFirstNumeric(summaryObject, [
+        'totalForecast',
+        'totalSellingForecast',
+        'selectedPeriodForecast',
+        'forecastTotal',
+        'AI Tahmin',
+        'tahmin',
+      ])
+    : null;
+  const objectRevenue = summaryObject
+    ? getFirstNumeric(summaryObject, ['totalRevenue', 'actualRevenue', 'ciro'])
+    : null;
+  const objectBaselineRevenue = summaryObject
+    ? getFirstNumeric(summaryObject, [
+        'totalBaselineRevenue',
+        'targetRevenue',
+        'baselineRevenue',
+        'baseline',
+      ])
+    : null;
+  const objectLostSales = summaryObject
+    ? getFirstNumeric(summaryObject, ['totalLostSalesUnits', 'lostSalesUnits'])
+    : null;
+  const objectStockOutDays = summaryObject
+    ? getFirstNumeric(summaryObject, ['stockOutDays'])
+    : null;
+
+  const totalForecast =
+    objectTotalForecast !== null ? objectTotalForecast : rowTotals.totalForecast;
+  const totalRevenue =
+    objectRevenue !== null ? objectRevenue : rowTotals.totalRevenue;
+  const totalBaselineRevenue =
+    objectBaselineRevenue !== null
+      ? objectBaselineRevenue
+      : rowTotals.totalBaselineRevenue;
+  const totalLostSalesUnits =
+    objectLostSales !== null ? objectLostSales : rowTotals.totalLostSalesUnits;
+  const stockOutDays =
+    objectStockOutDays !== null
+      ? Math.max(0, Math.round(objectStockOutDays))
+      : rowTotals.stockOutDays;
+
+  const hasData =
+    rows.length > 0 ||
+    objectTotalForecast !== null ||
+    totalForecast > 0 ||
+    totalRevenue > 0;
+
+  return {
+    totalForecast: Math.max(0, totalForecast),
+    totalRevenue: Math.max(0, totalRevenue),
+    totalBaselineRevenue: Math.max(0, totalBaselineRevenue),
+    totalLostSalesUnits: Math.max(0, totalLostSalesUnits),
+    stockOutDays,
+    hasData,
+  };
 };
 
 const toFiniteNumber = (value: unknown, fallback = 0): number => {
@@ -142,29 +292,9 @@ const toFiniteNumber = (value: unknown, fallback = 0): number => {
   return Number.isFinite(numeric) ? numeric : fallback;
 };
 
-const normalizeWeather = (raw: unknown): 'sun' | 'cloud' | 'rain' => {
-  const value = String(raw || '').toLowerCase();
-  if (
-    value.includes('rain') ||
-    value.includes('shower') ||
-    value.includes('storm')
-  ) {
-    return 'rain';
-  }
-  if (
-    value.includes('cloud') ||
-    value.includes('overcast') ||
-    value.includes('mist')
-  ) {
-    return 'cloud';
-  }
-  return 'sun';
-};
-
 import { type SimilarCampaign } from '@/data/mock-data';
 import { ExportPromotionModal } from '@/components/dashboard/modals/export-promotion-modal';
 import { CampaignCreationModal } from '@/components/dashboard/modals/campaign-creation-modal';
-import { PromotionCalendar } from '@/components/dashboard/visualizations/promotion-calendar';
 import { useToast } from '@/components/ui/shared/use-toast';
 import {
   usePromotionHistory,
@@ -174,7 +304,6 @@ import {
   useStores,
   useProducts,
   useCategories,
-  useStockTrends,
   useInventoryItems,
 } from '@/services';
 import { forecastingApi } from '@/services/api/forecasting';
@@ -182,7 +311,8 @@ import type {
   SimilarCampaign as ApiSimilarCampaign,
   PromotionHistory as ApiPromotionHistory,
   ProductPromotionOption,
-  PredictDemandRequest,
+  PredictDemandResponse,
+  PredictDemandWeeklyRow,
   CampaignDetailSeriesResponse,
 } from '@/services/types/api';
 import { cn } from '@/lib/utils';
@@ -481,11 +611,14 @@ export function ForecastingSection() {
   // State
   const [isLoading, setIsLoading] = useState(false);
   const [forecastData, setForecastData] = useState<ForecastData[] | null>(null);
+  const [predictionSummary, setPredictionSummary] = useState<PredictionSummary>(
+    EMPTY_PREDICTION_SUMMARY,
+  );
 
   // Screen size detection for responsive charts
   const [is2xl, setIs2xl] = useState(false);
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
-  const [viewMode, setViewMode] = useState<'chart' | 'calendar'>('chart');
+  const [viewMode] = useState<'chart' | 'calendar'>('calendar');
 
   // Similar Campaign Modal State
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
@@ -653,29 +786,10 @@ export function ForecastingSection() {
     }
   }, [filteredProducts, urunKodu]);
 
-  const stockScopeStoreIds =
-    numericStoreIds.length > 0 ? numericStoreIds : ['1054'];
-  const stockScopeProductIds =
-    numericProductIds.length > 0 ? numericProductIds : ['30389579'];
   const trackingStoreIds =
     numericStoreIds.length > 0 ? numericStoreIds : undefined;
   const trackingProductIds =
     numericProductIds.length > 0 ? numericProductIds : undefined;
-
-  const stockTrendsQuery = useStockTrends({
-    storeIds: stockScopeStoreIds,
-    productIds: stockScopeProductIds,
-    days:
-      startDate && endDate
-        ? Math.max(30, differenceInDays(endDate, startDate) + 14)
-        : 30,
-    includeFuture: true,
-    futureDays:
-      endDate && endDate > new Date()
-        ? Math.max(0, differenceInDays(endDate, new Date()) + 1)
-        : 0,
-    dailyReplenishment: 0,
-  });
 
   // Fetch real sale price (satisFiyati) from the existing inventory/items endpoint
   const productPriceQuery = useInventoryItems(
@@ -1147,13 +1261,10 @@ export function ForecastingSection() {
       products: urunKodu,
     });
 
-    // Only update metrics if we have forecast data
-    if (forecastData && forecastData.length > 0) {
-      const totalF = forecastData.reduce(
-        (acc, curr) => acc + (curr.tahmin || 0),
-        0,
-      );
-      const totalRev = forecastData.reduce((acc, curr) => acc + curr.ciro, 0);
+    // Update metrics when a prediction response is available
+    if (predictionSummary.hasData) {
+      const totalF = predictionSummary.totalForecast;
+      const totalRev = predictionSummary.totalRevenue;
 
       setMetrics({
         'Toplam Tahmin': `${(totalF / 1000).toFixed(1)}K Adet`,
@@ -1168,7 +1279,7 @@ export function ForecastingSection() {
     magazaKodu,
     reyon,
     urunKodu,
-    forecastData,
+    predictionSummary,
     promosyon,
     promosyonIndirimOrani,
     budget,
@@ -1297,153 +1408,34 @@ export function ForecastingSection() {
 
       const successfulPredictions = predictionResults
         .filter(
-          (result): result is PromiseFulfilledResult<Record<string, unknown>> =>
+          (result): result is PromiseFulfilledResult<PredictDemandResponse> =>
             result.status === 'fulfilled',
         )
         .map((result) => result.value);
 
-      const allRows = successfulPredictions.flatMap((result) =>
-        Array.isArray((result as { forecast?: unknown }).forecast)
-          ? ((result as { forecast?: unknown })
-              .forecast as PredictForecastRow[])
-          : [],
-      );
-
-      const aggregatedByDate = new Map<string, PredictForecastRow>();
-      for (const row of allRows) {
-        if (!row?.tarih) continue;
-        const dateKey = String(row.tarih).slice(0, 10);
-        const current = aggregatedByDate.get(dateKey);
-        if (!current) {
-          aggregatedByDate.set(dateKey, { ...row });
-          continue;
-        }
-
-        current.tahmin =
-          toFiniteNumber(current.tahmin, 0) + toFiniteNumber(row.tahmin, 0);
-        current.baseline =
-          toFiniteNumber(current.baseline ?? current.roll_mean_7, 0) +
-          toFiniteNumber(row.baseline ?? row.roll_mean_7, 0);
-        current.ciro_adedi =
-          toFiniteNumber(current.ciro_adedi, 0) +
-          toFiniteNumber(row.ciro_adedi, 0);
-        current.ciro =
-          toFiniteNumber(current.ciro, 0) + toFiniteNumber(row.ciro, 0);
-        current.stok =
-          toFiniteNumber(current.stok, 0) + toFiniteNumber(row.stok, 0);
-        current.gunluk_kar =
-          toFiniteNumber(current.gunluk_kar, 0) +
-          toFiniteNumber(row.gunluk_kar, 0);
-        current.lost_sales =
-          toFiniteNumber(current.lost_sales, 0) +
-          toFiniteNumber(row.lost_sales, 0);
-        current.unconstrained_demand =
-          toFiniteNumber(current.unconstrained_demand, 0) +
-          toFiniteNumber(row.unconstrained_demand, 0);
-      }
-
-      const responseRows = Array.from(aggregatedByDate.values()).sort(
-        (a, b) =>
-          new Date(String(a.tarih || '')).getTime() -
-          new Date(String(b.tarih || '')).getTime(),
-      );
-
-      if (responseRows.length === 0) {
-        throw new Error('Model yanıtında forecast verisi bulunamadı.');
-      }
-
-      const stockByDate = new Map(
-        (stockTrendsQuery.data?.trends || []).map((trend) => [
-          trend.date,
-          trend.actualStock,
-        ]),
-      );
-
-      const mappedData: ForecastData[] = responseRows
-        .map((row, index) => {
-          const fallbackDate = format(
-            addDays(startDate, index),
-            "yyyy-MM-dd'T'00:00:00",
-          );
-          const tarih =
-            typeof row.tarih === 'string' ? row.tarih : fallbackDate;
-          const dateKey = format(new Date(tarih), 'yyyy-MM-dd');
-
-          const tahmin = Math.max(0, Math.round(toFiniteNumber(row.tahmin, 0)));
-          const baseline = Math.max(
-            0,
-            Math.round(toFiniteNumber(row.baseline ?? row.roll_mean_7, tahmin)),
-          );
-          const lostSales = Math.max(
-            0,
-            Math.round(toFiniteNumber(row.lost_sales, 0)),
-          );
-          const unconstrainedDemand =
-            row.unconstrained_demand !== undefined &&
-            row.unconstrained_demand !== null
-              ? Math.max(
-                  0,
-                  Math.round(toFiniteNumber(row.unconstrained_demand, 0)),
-                )
-              : lostSales > 0
-                ? tahmin + lostSales
-                : null;
-
-          const satisFiyati = toFiniteNumber(row.satisFiyati, baseSatisFiyati);
-          const hamFiyat = toFiniteNumber(row.ham_fiyat, baseHamFiyat);
-          const birimKarValue = toFiniteNumber(
-            row.birim_kar,
-            satisFiyati - hamFiyat,
-          );
-          const birimMarjYuzdeValue = toFiniteNumber(
-            row.birim_marj_yuzde,
-            satisFiyati > 0 ? (birimKarValue / satisFiyati) * 100 : 0,
-          );
-
-          const ciro = toFiniteNumber(row.ciro, tahmin * satisFiyati);
-          const gunlukKar = toFiniteNumber(
-            row.gunluk_kar,
-            tahmin * birimKarValue,
-          );
-          const promoArray = Array.isArray(row.benim_promom)
-            ? row.benim_promom.map((item) => String(item))
-            : [];
-
+      const aggregatedSummary = successfulPredictions.reduce<PredictionSummary>(
+        (acc, payload) => {
+          const summary = summarizePredictPayload(payload);
           return {
-            tarih,
-            baseline,
-            tahmin,
-            ciro_adedi: Math.max(
-              0,
-              Math.round(toFiniteNumber(row.ciro_adedi, 0)),
-            ),
-            benim_promom: promoArray.length > 0 ? promoArray : [promosyon],
-            benim_promom_yuzde: toFiniteNumber(
-              row.benim_promom_yuzde ?? row.indirimYuzdesi,
-              0,
-            ),
-            ciro: parseFloat(ciro.toFixed(2)),
-            stok: Math.max(
-              0,
-              Math.round(
-                toFiniteNumber(row.stok, stockByDate.get(dateKey) ?? 0),
-              ),
-            ),
-            satisFiyati: parseFloat(satisFiyati.toFixed(2)),
-            ham_fiyat: parseFloat(hamFiyat.toFixed(2)),
-            birim_kar: parseFloat(birimKarValue.toFixed(2)),
-            birim_marj_yuzde: parseFloat(birimMarjYuzdeValue.toFixed(2)),
-            gunluk_kar: parseFloat(gunlukKar.toFixed(2)),
-            weather: normalizeWeather(row.weather ?? row.icon),
-            lost_sales: lostSales,
-            unconstrained_demand: unconstrainedDemand,
+            totalForecast: acc.totalForecast + summary.totalForecast,
+            totalRevenue: acc.totalRevenue + summary.totalRevenue,
+            totalBaselineRevenue:
+              acc.totalBaselineRevenue + summary.totalBaselineRevenue,
+            totalLostSalesUnits:
+              acc.totalLostSalesUnits + summary.totalLostSalesUnits,
+            stockOutDays: acc.stockOutDays + summary.stockOutDays,
+            hasData: acc.hasData || summary.hasData,
           };
-        })
-        .sort(
-          (a, b) => new Date(a.tarih).getTime() - new Date(b.tarih).getTime(),
-        );
+        },
+        { ...EMPTY_PREDICTION_SUMMARY } as PredictionSummary,
+      );
 
-      setForecastData(mappedData);
+      if (!aggregatedSummary.hasData) {
+        throw new Error('Model yanıtında kullanılabilir tahmin verisi bulunamadı.');
+      }
+
+      setPredictionSummary(aggregatedSummary);
+      setForecastData(null);
       toast({
         title: 'Tahminleme isteği gönderildi',
         description: 'Senaryo model sonucuyla güncellendi.',
@@ -1458,72 +1450,35 @@ export function ForecastingSection() {
         variant: 'destructive',
       });
       setForecastData(null);
+      setPredictionSummary(EMPTY_PREDICTION_SUMMARY);
     } finally {
       setIsLoading(false);
     }
   };
 
-  // FILTER DATA FOR ROI & STOCK CALCULATIONS (Based on Promo Period)
-  const promoPeriodData = useMemo(() => {
-    if (!forecastData || !startPromosyon || !endPromosyon) return [];
-    return forecastData.filter((d) => {
-      const date = new Date(d.tarih);
-      return date >= startPromosyon && date <= endPromosyon;
-    });
-  }, [forecastData, startPromosyon, endPromosyon]);
-
-  const totalForecast =
-    promoPeriodData?.reduce((acc, curr) => acc + (curr.tahmin || 0), 0) || 0;
-
-  // Calculate potential forecast (unconstrained)
-
-  const totalRevenue =
-    promoPeriodData?.reduce((acc, curr) => acc + curr.ciro, 0) || 0;
-
-  // Financial Logic
-  // baseHamFiyat and baseSatisFiyati are now in component scope
-
-  // Calculate directly from unit-based lost_sales property (Filtered by Promo Period)
-  const totalLostSalesUnits =
-    promoPeriodData?.reduce((acc, curr) => acc + (curr.lost_sales || 0), 0) ||
-    0;
-
-  // Calculate Revenue Loss
-  const estimatedRevenueLoss = promoPeriodData
-    ? promoPeriodData.reduce(
-        (acc, curr) =>
-          acc + (curr.lost_sales || 0) * (curr.satisFiyati || baseSatisFiyati),
-        0,
-      )
-    : 0;
-
-  // Calculate Baseline Revenue using per-row prices from the model
-  const totalBaselineUnits = promoPeriodData
-    ? promoPeriodData.reduce((acc, curr) => acc + (curr.baseline || 0), 0)
-    : 0;
-  const totalBaselineRevenue = promoPeriodData
-    ? promoPeriodData.reduce(
-        (acc, curr) =>
-          acc + (curr.baseline || 0) * (curr.satisFiyati || baseSatisFiyati),
-        0,
-      )
-    : 0;
+  const totalForecast = predictionSummary.totalForecast;
+  const totalRevenue = predictionSummary.totalRevenue;
+  const totalLostSalesUnits = predictionSummary.totalLostSalesUnits;
+  const estimatedRevenueLoss = totalLostSalesUnits * baseSatisFiyati;
+  const totalBaselineRevenue = predictionSummary.totalBaselineRevenue;
+  const totalBaselineUnits =
+    baseSatisFiyati > 0 ? totalBaselineRevenue / baseSatisFiyati : 0;
+  const hasPredictionData = predictionSummary.hasData;
 
   // 1. Lift Calculation
   const liftAmount = totalRevenue - totalBaselineRevenue;
   const liftPercentage =
     totalBaselineRevenue > 0 ? (liftAmount / totalBaselineRevenue) * 100 : 0;
   const hasStockOutRisk = totalLostSalesUnits > 0;
-  const stockOutDayCount = promoPeriodData.filter(
-    (day) => (day.lost_sales || 0) > 0,
-  ).length;
+  const stockOutDayCount = predictionSummary.stockOutDays;
   const stockCostEstimate = Math.round(
     totalLostSalesUnits * baseHamFiyat * 0.12,
   );
-  const requiredDailyMinStock = promoPeriodData.reduce((max, day) => {
-    const dailyNeed = day.unconstrained_demand ?? day.tahmin ?? 0;
-    return Math.max(max, dailyNeed);
-  }, 0);
+  const promoDays =
+    startPromosyon && endPromosyon
+      ? Math.max(1, differenceInDays(endPromosyon, startPromosyon) + 1)
+      : 1;
+  const requiredDailyMinStock = promoDays > 0 ? totalForecast / promoDays : 0;
   const selectedPromoLabel = promosyon || 'Promosyonsuz';
   const selectedPeriodLabel =
     startPromosyon && endPromosyon
@@ -1745,8 +1700,8 @@ export function ForecastingSection() {
             </div>
             <div className='flex items-center gap-2'>
               <Button
-                disabled={!forecastData}
-                className={`h-10 rounded-xl px-4 text-sm shadow-sm transition-all ${forecastData ? 'bg-white text-slate-950 hover:bg-slate-100' : 'bg-white/10 text-slate-300 hover:bg-white/10'}`}
+                disabled={!hasPredictionData}
+                className={`h-10 rounded-xl px-4 text-sm shadow-sm transition-all ${hasPredictionData ? 'bg-white text-slate-950 hover:bg-slate-100' : 'bg-white/10 text-slate-300 hover:bg-white/10'}`}
                 onClick={() => setIsPlanningModalOpen(true)}
               >
                 <Plus className='mr-1.5 h-4 w-4' />
@@ -1781,8 +1736,8 @@ export function ForecastingSection() {
 
           <div className='flex items-center gap-2'>
             <Button
-              disabled={!forecastData}
-              className={`h-9 2xl:h-10 text-xs 2xl:text-sm shadow-sm transition-all ${forecastData ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-muted text-muted-foreground'}`}
+              disabled={!hasPredictionData}
+              className={`h-9 2xl:h-10 text-xs 2xl:text-sm shadow-sm transition-all ${hasPredictionData ? 'bg-indigo-600 hover:bg-indigo-700 text-white' : 'bg-muted text-muted-foreground'}`}
               onClick={() => setIsPlanningModalOpen(true)}
             >
               <Plus className='w-4 h-4 mr-1.5' />
@@ -2558,323 +2513,6 @@ export function ForecastingSection() {
           <div className='grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:gap-4'>
             {promoKpiCards}
           </div>
-          {/* Main Chart or Calendar */}
-
-          <div
-            className={cn(plannerSurfaceClass, 'min-h-[400px] rounded-3xl p-2')}
-          >
-            {viewMode === 'chart' ? (
-              <div className='relative'>
-                <div className='px-3 py-2 border-b space-y-2'>
-                  <div className='flex items-start justify-between gap-3'>
-                    <div className='space-y-0.5'>
-                      <div className='flex items-center gap-1'>
-                        <h3 className='text-sm 2xl:text-base font-semibold'>
-                          Tahmin vs Temel Satis
-                        </h3>
-                        <UITooltip>
-                          <UITooltipTrigger>
-                            <Info className='h-3 w-3 text-muted-foreground/60 hover:text-indigo-600 cursor-help' />
-                          </UITooltipTrigger>
-                          <UITooltipContent>
-                            <p>
-                              Promosyonlu satis ile normal satis beklentisinin
-                              karsilastirmasi.
-                            </p>
-                          </UITooltipContent>
-                        </UITooltip>
-                      </div>
-                      <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
-                        Temel satislara kiyasla promosyon etkisi.
-                      </p>
-                    </div>
-                    <div className='flex items-center bg-muted/50 p-1 rounded-lg border shrink-0'>
-                      <Button
-                        variant='secondary'
-                        size='sm'
-                        className='h-7 text-xs gap-2'
-                        onClick={() => {
-                          setViewMode('chart');
-                        }}
-                      >
-                        <LayoutGrid className='h-3.5 w-3.5' /> Grafik
-                      </Button>
-                      <Button
-                        variant='ghost'
-                        size='sm'
-                        className='h-7 text-xs gap-2'
-                        onClick={() => {
-                          setViewMode('calendar');
-                        }}
-                      >
-                        <CalendarIcon className='h-3.5 w-3.5' /> Takvim
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className='flex items-center justify-end gap-3 text-[10px]'>
-                    <div className='flex items-center gap-1.5'>
-                      <span className='w-2 h-2 rounded-full bg-[#0D1E3A]' />
-                      <span className='text-muted-foreground font-medium'>
-                        Temel
-                      </span>
-                    </div>
-
-                    <div className='flex items-center gap-1.5'>
-                      <span className='w-2 h-2 rounded-full bg-[#22c55e]' />
-                      <span className='text-muted-foreground font-medium'>
-                        Simule
-                      </span>
-                    </div>
-                    <div className='flex items-center gap-1.5'>
-                      <span
-                        className='w-2 h-2 rounded-full bg-red-400 opacity-80'
-                        style={{ borderStyle: 'dashed', borderWidth: 1 }}
-                      />
-                      <span className='text-muted-foreground font-medium'>
-                        Kacan
-                      </span>
-                    </div>
-                    <div className='flex items-center gap-1.5'>
-                      <span className='w-2 h-2 rounded-full bg-[#FFB840]' />
-                      <span className='text-muted-foreground font-medium'>
-                        Stok Adedi
-                      </span>
-                    </div>
-
-                    <div className='flex items-center gap-1 ml-2 border-l pl-3'>
-                      <span className='text-[10px] text-muted-foreground mr-1'>
-                        Zoom:
-                      </span>
-                      <Button
-                        variant='outline'
-                        size='icon'
-                        className={`h-6 w-6 ${isZoomed ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : ''}`}
-                        onClick={() => setIsZoomed(true)}
-                        title='Yaklas (Scroll)'
-                      >
-                        <ZoomIn className='h-3 w-3' />
-                      </Button>
-                      <Button
-                        variant='outline'
-                        size='icon'
-                        className={`h-6 w-6 ${!isZoomed ? 'bg-indigo-50 text-indigo-600 border-indigo-200' : ''}`}
-                        onClick={() => setIsZoomed(false)}
-                        title='Sigdir'
-                      >
-                        <ZoomOut className='h-3 w-3' />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-
-                <div className='pl-0 pb-2 px-2 pt-2 2xl:pb-4'>
-                  <div className='w-full overflow-x-auto pb-1'>
-                    <div
-                      className={`transition-all duration-300 ease-in-out ${isZoomed ? 'cursor-grab active:cursor-grabbing' : ''}`}
-                      style={{
-                        width: isZoomed ? '200%' : '100%',
-                        minWidth: isZoomed ? '1200px' : '100%',
-                        height: 320,
-                      }}
-                    >
-                      <ResponsiveContainer width='100%' height='100%'>
-                        <ComposedChart
-                          data={forecastData || []}
-                          margin={{ bottom: 40, top: 10, right: 10, left: -20 }}
-                        >
-                          <defs>
-                            <linearGradient
-                              id='glowGreen'
-                              x1='0'
-                              y1='0'
-                              x2='0'
-                              y2='1'
-                            >
-                              <stop
-                                offset='5%'
-                                stopColor='#22c55e'
-                                stopOpacity={0.2}
-                              />
-                              <stop
-                                offset='95%'
-                                stopColor='#22c55e'
-                                stopOpacity={0}
-                              />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid
-                            strokeDasharray='3 3'
-                            vertical={false}
-                            stroke='var(--border)'
-                            opacity={0.5}
-                          />
-
-                          {/* Highlight Promo Period */}
-                          {startPromosyon && endPromosyon && (
-                            <ReferenceArea
-                              x1={format(
-                                startPromosyon,
-                                "yyyy-MM-dd'T'00:00:00",
-                              )}
-                              x2={format(endPromosyon, "yyyy-MM-dd'T'00:00:00")}
-                              fill='#22c55e'
-                              fillOpacity={0.1}
-                              ifOverflow='extendDomain'
-                            />
-                          )}
-
-                          <XAxis
-                            dataKey='tarih'
-                            stroke='var(--muted-foreground)'
-                            fontSize={is2xl ? 11 : 9}
-                            tickLine={false}
-                            axisLine={false}
-                            interval={0}
-                            tick={
-                              <CustomizedAxisTick
-                                data={forecastData || []}
-                                fontSize={is2xl ? 11 : 9}
-                              />
-                            }
-                            height={is2xl ? 70 : 60}
-                          />
-                          <YAxis
-                            stroke='var(--muted-foreground)'
-                            strokeWidth={0}
-                            fontSize={is2xl ? 11 : 9}
-                            tickLine={false}
-                            axisLine={false}
-                            tickFormatter={(value) => `${value}`}
-                          />
-                          <Tooltip
-                            contentStyle={{
-                              backgroundColor: '#FFFFFF',
-                              borderColor: 'var(--border)',
-                              color: '#0D1E3A',
-                              borderRadius: 'var(--radius)',
-                              boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)',
-                            }}
-                            labelFormatter={(value) =>
-                              format(new Date(value), 'PPP')
-                            }
-                            formatter={(value: number, name: string) => {
-                              if (name === 'tahmin') {
-                                return [value, 'Promosyon Tahmini (Adet)'];
-                              }
-                              if (name === 'baseline')
-                                return [value, 'Temel Satış (Adet)'];
-                              if (name === 'stok' || name === 'Stok Adedi')
-                                return [value, 'Stok Adedi'];
-                              if (name === 'unconstrained_demand')
-                                return [value, 'Potansiyel Talep (Adet)'];
-                              if (name === 'lost_sales' && value > 0) {
-                                return [value, 'Kaçırılan Satış'];
-                              }
-                              return [value, name];
-                            }}
-                            label={
-                              filteredProducts.find((p) =>
-                                urunKodu.includes(p.value),
-                              )?.label || 'Seçili Ürün'
-                            }
-                          />
-
-                          {/* Lines */}
-                          <Line
-                            type='monotone'
-                            dataKey='baseline'
-                            stroke='#0D1E3A'
-                            strokeWidth={2}
-                            dot={false}
-                            name='Temel Tahmin'
-                          />
-                          <Line
-                            type='monotone'
-                            dataKey='tahmin'
-                            stroke='#22c55e'
-                            strokeWidth={4}
-                            dot={{ r: 4, fill: '#22c55e', strokeWidth: 0 }}
-                            activeDot={{ r: 6 }}
-                            name='Gerçekleşen Satış'
-                            connectNulls={false}
-                          />
-                          <Line
-                            type='monotone'
-                            dataKey='unconstrained_demand'
-                            stroke='#ef4444'
-                            strokeWidth={2}
-                            strokeDasharray='5 5'
-                            dot={false}
-                            activeDot={{ r: 4, fill: '#ef4444' }}
-                            name='Lost Demand'
-                          />
-                          <Bar
-                            dataKey='stok'
-                            fill='#FFB840'
-                            opacity={0.5}
-                            name='Stok Adedi'
-                            barSize={30}
-                          />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div>
-                <div className='px-3 py-2 border-b flex items-start justify-between gap-3'>
-                  <div className='space-y-0.5'>
-                    <div className='flex items-center gap-1'>
-                      <h3 className='text-sm 2xl:text-base font-semibold'>
-                        Promosyon Takvimi
-                      </h3>
-                      <UITooltip>
-                        <UITooltipTrigger>
-                          <Info className='h-3 w-3 text-muted-foreground/60 hover:text-indigo-600 cursor-help' />
-                        </UITooltipTrigger>
-                        <UITooltipContent>
-                          <p>Secili donemde planlanan promosyon gunleri.</p>
-                        </UITooltipContent>
-                      </UITooltip>
-                    </div>
-                    <p className='text-[10px] 2xl:text-xs text-muted-foreground'>
-                      Aylik gorunumde kampanya planlarini takip edin.
-                    </p>
-                  </div>
-                  <div className='flex items-center bg-muted/50 p-1 rounded-lg border shrink-0'>
-                    <Button
-                      variant='ghost'
-                      size='sm'
-                      className='h-7 text-xs gap-2'
-                      onClick={() => {
-                        setViewMode('chart');
-                      }}
-                    >
-                      <LayoutGrid className='h-3.5 w-3.5' /> Grafik
-                    </Button>
-                    <Button
-                      variant='secondary'
-                      size='sm'
-                      className='h-7 text-xs gap-2'
-                      onClick={() => {
-                        setViewMode('calendar');
-                      }}
-                    >
-                      <CalendarIcon className='h-3.5 w-3.5' /> Takvim
-                    </Button>
-                  </div>
-                </div>
-                <div className='h-[380px]'>
-                  <PromotionCalendar
-                    events={promotionCalendarQuery.data?.events || []}
-                    isLoading={promotionCalendarQuery.isLoading}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
 
           {/* Advanced Analytics Module (Decision Support) */}
           <div className='flex flex-col gap-4 2xl:gap-5'>
@@ -3465,26 +3103,11 @@ export function ForecastingSection() {
         open={isPlanningModalOpen}
         onOpenChange={setIsPlanningModalOpen}
         simulationMetrics={{
-          targetRevenue: forecastData
-            ? `₺${((forecastData.reduce((acc, curr) => acc + (curr.tahmin || 0), 0) * baseSatisFiyati) / 1000).toFixed(1)}k`
+          targetRevenue: hasPredictionData
+            ? `₺${(totalRevenue / 1000).toFixed(1)}k`
             : '-',
-          lift: forecastData
-            ? '+' +
-              (
-                ((forecastData.reduce((acc, curr) => acc + curr.ciro, 0) -
-                  forecastData.reduce(
-                    (acc, curr) => acc + (curr.baseline || 0),
-                    0,
-                  ) *
-                    baseSatisFiyati) /
-                  (forecastData.reduce(
-                    (acc, curr) => acc + (curr.baseline || 0),
-                    0,
-                  ) *
-                    baseSatisFiyati)) *
-                100
-              ).toFixed(0) +
-              '%'
+          lift: hasPredictionData
+            ? `${liftPercentage >= 0 ? '+' : ''}${liftPercentage.toFixed(0)}%`
             : '-',
           stockStatus: totalLostSalesUnits > 0 ? 'Riskli' : 'Güvenli',
         }}

@@ -240,160 +240,6 @@ def _parse_prediction_date(value: object) -> Optional[date]:
             return None
 
 
-def _normalize_prediction_response(
-    raw_response: object,
-    request_data: dict,
-) -> object:
-    # Helper: fetch real per-day stock and roll_mean_7 from ClickHouse
-    def _fetch_ch_timeseries(rows_to_enrich: list[dict]) -> None:
-        client = request_data.get("_client")
-        table_name = request_data.get("_table_name", "demoVerileri")
-        store_code = request_data.get("magazaKodu")
-        product_code = request_data.get("urunKodu")
-        if client is None or not rows_to_enrich:
-            return
-        dates = sorted({str(r.get("tarih") or "")[:10] for r in rows_to_enrich if r.get("tarih")})
-        if not dates:
-            return
-        min_d, max_d = dates[0], dates[-1]
-        try:
-            ch_q = f"""
-                SELECT
-                    toDate(tarih) AS day,
-                    sum(greatest(toFloat64(acilis_stok), 0)) AS stock,
-                    round(avg(greatest(toFloat64(roll_mean_7), 0)), 2) AS baseline
-                FROM {table_name}
-                WHERE
-                    toString(magazakodu) = '{store_code}'
-                    AND toString(urunkodu) = '{product_code}'
-                    AND toDate(tarih) BETWEEN '{min_d}' AND '{max_d}'
-                GROUP BY day ORDER BY day ASC
-            """
-            ch_rows = client.query(ch_q).result_rows
-            stock_map = {r[0].isoformat(): (max(0, int(r[1] or 0)), round(float(r[2] or 0), 2)) for r in ch_rows}
-            for row in rows_to_enrich:
-                key = str(row.get("tarih") or "")[:10]
-                if key in stock_map:
-                    stk, bl = stock_map[key]
-                    row["stok"] = stk
-                    if row.get("baseline") is None:
-                        row["baseline"] = bl if bl > 0 else row.get("tahmin")
-        except Exception:
-            pass  # best-effort
-
-    if isinstance(raw_response, dict) and isinstance(raw_response.get("forecast"), list):
-        _fetch_ch_timeseries(raw_response["forecast"])
-        return raw_response
-
-    weekly_rows: list[dict] = []
-    if isinstance(raw_response, dict) and isinstance(raw_response.get("value"), list):
-        weekly_rows = [
-            row for row in raw_response["value"] if isinstance(row, dict)
-        ]
-    elif isinstance(raw_response, list):
-        weekly_rows = [row for row in raw_response if isinstance(row, dict)]
-    else:
-        return raw_response
-
-    start_date = _parse_prediction_date(request_data.get("tarihBaslangic"))
-    end_date = _parse_prediction_date(request_data.get("tarihBitis"))
-    if start_date is None or end_date is None or start_date > end_date:
-        return {
-            "forecast": [],
-            "raw": raw_response,
-            "period": "weekly",
-            "normalized": False,
-        }
-
-    desired_price = request_data.get("istenenFiyat")
-    if desired_price is None:
-        desired_price = request_data.get("hedef_satisFiyati")
-
-    forecast_rows: list[dict[str, object]] = []
-    for weekly_row in weekly_rows:
-        week_start = _parse_prediction_date(weekly_row.get("haftaBaslangicTarihi"))
-        if week_start is None:
-            continue
-
-        requested_week_days = int(float(weekly_row.get("promosyonGunSayisi") or 0))
-        week_end = min(week_start + timedelta(days=6), end_date)
-        effective_start = max(week_start, start_date)
-        effective_end = min(week_end, end_date)
-        if effective_start > effective_end:
-            continue
-
-        day_count = (effective_end - effective_start).days + 1
-        divisor = max(requested_week_days, day_count, 1)
-        total_forecast = float(weekly_row.get("AI Tahmin") or 0)
-        daily_forecast = total_forecast / divisor
-        target_price = float(
-            weekly_row.get("hedef_satisFiyati")
-            or desired_price
-            or 0
-        )
-        discount_pct = float(weekly_row.get("hedef_indirimYuzdesi") or 0)
-        ham_fiyat = float(weekly_row.get("hamFiyat") or 0)
-        birim_kar = target_price - ham_fiyat
-        birim_marj = (
-            float(weekly_row.get("hedef_marj"))
-            if weekly_row.get("hedef_marj") is not None
-            else (birim_kar / target_price * 100 if target_price else 0)
-        )
-
-        for offset in range(day_count):
-            current_date = effective_start + timedelta(days=offset)
-            forecast_rows.append(
-                {
-                    "tarih": current_date.isoformat(),
-                    "tahmin": daily_forecast,
-                    "baseline": None,
-                    "ciro_adedi": daily_forecast,
-                    "ciro": daily_forecast * target_price,
-                    "stok": None,
-                    "satisFiyati": target_price,
-                    "ham_fiyat": ham_fiyat,
-                    "birim_kar": birim_kar,
-                    "birim_marj_yuzde": birim_marj,
-                    "gunluk_kar": daily_forecast * birim_kar,
-                    "benim_promom": (
-                        []
-                        if str(weekly_row.get("aktifPromosyonKodu") or "0") == "0"
-                        else [str(weekly_row.get("aktifPromosyonKodu"))]
-                    ),
-                    "benim_promom_yuzde": discount_pct,
-                    "weather": "sun",
-                    "lost_sales": 0,
-                    "unconstrained_demand": None,
-                }
-            )
-
-    forecast_rows.sort(key=lambda row: str(row.get("tarih") or ""))
-
-    # Fill any gaps between the model's last covered date and end_date by
-    # extending the last row's values forward. This prevents the chart from
-    # showing a hard drop to 0 when the model returned fewer weeks than requested.
-    if forecast_rows:
-        covered_dates = {str(r["tarih"])[:10] for r in forecast_rows}
-        last_row = forecast_rows[-1]
-        current = start_date
-        while current <= end_date:
-            key = current.isoformat()
-            if key not in covered_dates:
-                forecast_rows.append({**last_row, "tarih": key})
-            current += timedelta(days=1)
-        forecast_rows.sort(key=lambda row: str(row.get("tarih") or ""))
-
-    # Fetch real per-day stock AND roll_mean_7 baseline from ClickHouse.
-    _fetch_ch_timeseries(forecast_rows)
-
-    return {
-        "forecast": forecast_rows,
-        "raw": weekly_rows,
-        "period": "weekly",
-        "normalized": True,
-    }
-
-
 def get_client():
     """Create and return a ClickHouse Cloud client connection"""
     last_error = None
@@ -886,7 +732,10 @@ def api_get_promotion_history(
 ):
     """Get promotion history rows at campaign-period granularity."""
     client = get_client()
-    where_clauses = ["(toString(aktifPromosyonKodu) NOT IN ('', '0') OR indirimVar = 1)"]
+    where_clauses = [
+        "toString(aktifPromosyonKodu) NOT IN ('', '0')",
+        "abs(toFloat64OrZero(toString(indirimYuzdesi))) > 0",
+    ]
     if productIds:
         where_clauses.append(f"toString(urunkodu) IN ({_quote_sql_list(productIds)})")
     if storeIds:
@@ -917,22 +766,22 @@ def api_get_promotion_history(
                 abs(toFloat64(indirimYuzdesi)) >= 10, 'Indirim Kampanyasi',
                 'Kod Bazli Kampanya'
             ) AS promo_type,
-            toFloat64(satismiktari) AS actual_units,
-            avg(toFloat64(satismiktari)) OVER (
+            toFloat64OrZero(toString(satismiktari)) AS actual_units,
+            avg(toFloat64OrZero(toString(satismiktari))) OVER (
                 PARTITION BY magazakodu, urunkodu
                 ORDER BY toDate(tarih)
                 ROWS BETWEEN 13 PRECEDING AND CURRENT ROW
             ) AS baseline_units,
-            toFloat64(acilis_stok) AS stock_units,
-            toFloat64(satistutarikdvsiz) AS actual_revenue,
+            toFloat64OrZero(toString(acilis_stok)) AS stock_units,
+            toFloat64OrZero(toString(satistutarikdvsiz)) AS actual_revenue,
             if(
-                toFloat64(satismiktari) > 0,
-                toFloat64(satistutarikdvsiz) / toFloat64(satismiktari),
-                toFloat64(satisFiyati)
+                toFloat64OrZero(toString(satismiktari)) > 0,
+                toFloat64OrZero(toString(satistutarikdvsiz)) / toFloat64OrZero(toString(satismiktari)),
+                toFloat64OrZero(toString(satisFiyati))
             ) AS unit_price,
-            toFloat64(maliyetFiyati) AS cost_price,
-            toFloat64(indirimYuzdesi) AS discount_pct,
-            toUInt8(stok_out) AS stock_out_flag
+            toFloat64OrZero(toString(maliyetFiyati)) AS cost_price,
+            toFloat64OrZero(toString(indirimYuzdesi)) AS discount_pct,
+            toUInt8OrZero(toString(stok_out)) AS stock_out_flag
         FROM {TABLE_NAME}
         WHERE {where_sql}
     )
@@ -1059,21 +908,21 @@ def api_get_campaign_detail_series(
     WITH source AS (
         SELECT
             toDate(tarih) AS tarih,
-            toFloat64(satismiktari)                                               AS actual_units,
-            avg(toFloat64(satismiktari)) OVER (
+            toFloat64OrZero(toString(satismiktari))                               AS actual_units,
+            avg(toFloat64OrZero(toString(satismiktari))) OVER (
                 PARTITION BY magazakodu, urunkodu
                 ORDER BY toDate(tarih)
                 ROWS BETWEEN 13 PRECEDING AND CURRENT ROW
             )                                                                     AS baseline_raw,
-            toFloat64(acilis_stok)                                                AS stock_units,
-            toFloat64(satistutarikdvsiz)                                          AS revenue,
+            toFloat64OrZero(toString(acilis_stok))                                AS stock_units,
+            toFloat64OrZero(toString(satistutarikdvsiz))                          AS revenue,
             if(
-                toFloat64(satismiktari) > 0,
-                toFloat64(satistutarikdvsiz) / toFloat64(satismiktari),
-                toFloat64(satisFiyati)
+                toFloat64OrZero(toString(satismiktari)) > 0,
+                toFloat64OrZero(toString(satistutarikdvsiz)) / toFloat64OrZero(toString(satismiktari)),
+                toFloat64OrZero(toString(satisFiyati))
             )                                                                     AS unit_price,
-            toFloat64(maliyetFiyati)                                              AS cost_price,
-            toUInt8(stok_out)                                                     AS stock_out_flag
+            toFloat64OrZero(toString(maliyetFiyati))                              AS cost_price,
+            toUInt8OrZero(toString(stok_out))                                     AS stock_out_flag
         FROM {TABLE_NAME}
         WHERE magazakodu = {int(storeCode)}
           AND urunkodu = {int(productCode)}
@@ -1106,7 +955,7 @@ def api_get_campaign_detail_series(
         round(sum(actual_units), 2)                            AS actualUnits,
         round(avg(stock_units), 2)                             AS stockUnits,
         round(sum(lost_units), 2)                              AS lostSalesUnits,
-        round(sum(revenue), 2)                                 AS revenue,
+        round(sum(revenue), 2)                                 AS actualRevenue,
         round(sum(baseline_revenue), 2)                        AS targetRevenue,
         sum(stock_out_flag)                                    AS stockOutDays,
         round(sum(profit_row), 2)                              AS profitEffect,
@@ -1289,11 +1138,6 @@ def api_predict_demand(payload: PredictDemandRequest):
     """Proxy request to external demand prediction model."""
     request_data = payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
 
-    # Stash client + table for use in _normalize_prediction_response (stock fetch).
-    _ch_client = get_client()
-    request_data["_client"] = _ch_client
-    request_data["_table_name"] = TABLE_NAME
-
     # External model accepts 0 as "not provided"; normalize those placeholders to null.
     for key in ["istenenIndirim", "istenenMarj", "istenenFiyat"]:
         if request_data.get(key) == 0:
@@ -1327,7 +1171,7 @@ def api_predict_demand(payload: PredictDemandRequest):
         with urllib.request.urlopen(req) as response:
             body = response.read().decode("utf-8")
             raw_response = json.loads(body) if body else {"status": "ok"}
-            return _normalize_prediction_response(raw_response, request_data)
+            return raw_response
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="ignore")
         detail = body or str(e)
@@ -1605,3 +1449,4 @@ def health_check():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+
