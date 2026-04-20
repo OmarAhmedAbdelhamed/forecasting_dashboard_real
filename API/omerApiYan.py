@@ -1698,7 +1698,7 @@ def get_inventory_alerts(
         current_stock,
         forecast_daily,
         (forecast_daily * {safe_days}) AS forecast_period,
-        (forecast_daily * 3) AS min_stock,
+        (forecast_daily * {safe_days}) AS min_stock,
         (forecast_daily * 7) AS reorder_point,
         (forecast_daily * {safe_days}) AS max_stock,
         multiIf(
@@ -3435,8 +3435,6 @@ def get_inventory_items(
     table_name = _compat_table(table_name)
     anchor_date = _anchor_date_expr(raw_table_name)
     safe_days = max(1, int(days))
-    # Risk horizon follows selected period instead of fixed 3 days.
-    risk_days = max(1, int(round(safe_days / 4)))
 
     offset = (page - 1) * limit
     sort_order = "ASC" if sort_order.lower() == "asc" else "DESC"
@@ -3548,8 +3546,8 @@ def get_inventory_items(
                 concat(store, '_', category, '_', sku)                AS productKey,
 
                 stockLevel                                            AS stockLevel,
-                round(forecastDaily * {risk_days}, 0)                 AS minStockLevel,
-                round(forecastDaily * {safe_days}, 0)                 AS maxStockLevel,
+                round(forecastDaily * {safe_days}, 0)                 AS minStockLevel,
+                round(forecastDaily * {int(days)}, 0)                 AS maxStockLevel,
                 round(forecastDaily * 7, 0)                           AS reorderPoint,
                 round(forecastDaily * {safe_days}, 0)                 AS forecastedDemand,
 
@@ -3558,9 +3556,8 @@ def get_inventory_items(
 
                 multiIf(
                     stockLevel = 0, 'Out of Stock',
-                    forecastDaily = 0, 'In Stock',
-                    stockLevel < forecastDaily * {risk_days}, 'Low Stock',
-                    stockLevel > forecastDaily * {safe_days}, 'Overstock',
+                    stockLevel < forecastDaily * {safe_days}, 'Low Stock',
+                    stockLevel > forecastDaily * {int(days)}, 'Overstock',
                     'In Stock'
                 )                                                     AS status,
 
@@ -3603,8 +3600,8 @@ def get_inventory_items(
                 sku                                                   AS productKey,
 
                 stockLevelSum                                         AS stockLevel,
-                round(fdDailySum * {risk_days}, 0)                    AS minStockLevel,
-                round(fdDailySum * {safe_days}, 0)                    AS maxStockLevel,
+                round(fdDailySum * {safe_days}, 0)                    AS minStockLevel,
+                round(fdDailySum * {int(days)}, 0)                    AS maxStockLevel,
                 round(fdDailySum * 7, 0)                              AS reorderPoint,
                 round(fdDailySum * {safe_days}, 0)                    AS forecastedDemand,
 
@@ -3612,9 +3609,9 @@ def get_inventory_items(
                 round(stockLevelSum / nullIf(fdDailySum, 0), 1)       AS daysOfCoverage,
 
                 multiIf(
-                    outStoreCount = storeCount AND storeCount > 0, 'Out of Stock',
-                    (outStoreCount > 0 OR lowStoreCount > 0), 'Low Stock',
-                    overStoreCount > 0, 'Overstock',
+                    stockLevelSum = 0, 'Out of Stock',
+                    stockLevelSum < fdDailySum * {safe_days}, 'Low Stock',
+                    stockLevelSum > fdDailySum * {int(days)}, 'Overstock',
                     'In Stock'
                 )                                                     AS status,
 
@@ -3650,7 +3647,7 @@ def get_inventory_items(
                     sum(toFloat64(forecastDaily))                     AS fdDailySum,
                     count()                                           AS storeCount,
                     countIf(stockLevel = 0)                           AS outStoreCount,
-                    countIf(stockLevel > 0 AND forecastDaily > 0 AND stockLevel < forecastDaily * {risk_days}) AS lowStoreCount,
+                    countIf(stockLevel > 0 AND forecastDaily > 0 AND stockLevel < forecastDaily * {safe_days}) AS lowStoreCount,
                     countIf(forecastDaily > 0 AND stockLevel > forecastDaily * {safe_days}) AS overStoreCount
                 FROM (
                     {base_snapshot}
@@ -3766,7 +3763,7 @@ def get_inventory_stock_trends(
             toDate(tarih)                              AS date,
             sum(greatest(toFloat64(stok), 0))          AS actualStock,
             round(sum(greatest(toFloat64(roll_mean_7), 0)), 0)                 AS forecastDemand,
-            round(sum(greatest(toFloat64(roll_mean_7), 0)) * 3, 0)             AS safetyStock
+            round(sum(greatest(toFloat64(roll_mean_7), 0)) * {int(days)}, 0)   AS safetyStock
         FROM {table_name}
         WHERE {where_sql}
         GROUP BY date
@@ -3813,7 +3810,7 @@ def get_inventory_stock_trends(
                     "date": next_date.isoformat(),
                     "actualStock": max(0, int(projected_stock)),
                     "forecastDemand": max(0, int(projected_daily_demand)),
-                    "safetyStock": max(0, int(round(projected_daily_demand * 3))),
+                    "safetyStock": max(0, int(round(projected_daily_demand * int(days)))),
                     "isProjected": True,
                 }
             )
